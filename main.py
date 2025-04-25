@@ -1,11 +1,11 @@
-# SkyHustle - Phase 10 Upgrade
-# Core game + Items + Black Market + Building System
+# SkyHustle - Phase 11 Upgrade
+# Daily Events System with Rewards
 
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
 from telegram.constants import ParseMode
 from datetime import datetime, date, timedelta
-import os, json
+import os, json, random
 
 BOT_TOKEN = os.getenv("BOT_TOKEN") or "YOUR_BOT_TOKEN_HERE"
 
@@ -14,6 +14,7 @@ items = {}
 zones = {z: None for z in ["Alpha", "Beta", "Gamma", "Delta", "Epsilon"]}
 unit_types = ["scout", "drone", "tank"]
 missions = {}
+event_data = {"type": None, "reward": 0, "day": None}
 building_costs = {
     "refinery": {"base_cost": 100},
     "lab": {"base_cost": 150},
@@ -36,7 +37,8 @@ def make_player():
         "wins": 0, "losses": 0, "rank": 0, "daily_streak": 0,
         "last_daily": None, "daily_done": False,
         "faction": None, "achievements": set(), "items": {},
-        "blackmarket_unlocked": False
+        "blackmarket_unlocked": False,
+        "event_claimed": None
     }
 
 def get_player(cid):
@@ -69,44 +71,28 @@ def get_build_cost(building, level):
     base = building_costs[building]["base_cost"]
     return int(base * (1.5 ** (level - 1)))
 
+def new_world_event():
+    today = date.today()
+    if event_data["day"] == today:
+        return
+    event_data["day"] = today
+    event_data["type"] = random.choice(["Ore Boost", "Energy Surge", "Credit Windfall"])
+    event_data["reward"] = random.randint(50, 150)
+
 async def handle_build(update: Update, ctx: ContextTypes.DEFAULT_TYPE, p):
     text = update.message.text.strip()
     parts = text.split()
-
     if len(parts) != 2:
         return await update.message.reply_text("⚙️ Usage: ,build <refinery|lab|defensetower|spycenter>")
-
     building = parts[1].lower()
-
     if building not in building_costs:
         return await update.message.reply_text("⚙️ Invalid building.")
-
-    level = 0
-    if building == "refinery":
-        level = p.get("refinery_level", 0)
-    elif building == "lab":
-        level = p.get("lab_level", 0)
-    elif building == "defensetower":
-        level = p.get("defense_level", 0)
-    elif building == "spycenter":
-        level = p.get("spy_level", 0)
-
+    level = p.get(f"{building}_level", 0)
     cost = get_build_cost(building, level + 1)
-
     if p["credits"] < cost:
         return await update.message.reply_text(f"💳 Need {cost} credits to upgrade {building} (current level: {level}).")
-
-    # Deduct and upgrade
     p["credits"] -= cost
-    if building == "refinery":
-        p["refinery_level"] += 1
-    elif building == "lab":
-        p["lab_level"] += 1
-    elif building == "defensetower":
-        p["defense_level"] += 1
-    elif building == "spycenter":
-        p["spy_level"] += 1
-
+    p[f"{building}_level"] = level + 1
     return await update.message.reply_text(f"🏗️ {building.capitalize()} upgraded to Level {level+1}! (Cost: {cost} credits)")
 
 async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -115,6 +101,7 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     p = get_player(cid)
     now = datetime.now()
     today = date.today()
+    new_world_event()
 
     if text.startswith(",start"):
         return await update.message.reply_text("SkyHustle launched! Use ,name to begin.")
@@ -184,6 +171,17 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         success, msg = use_item(p, parts[1])
         return await update.message.reply_text(msg)
 
+    if text.startswith(",event"):
+        msg = f"🌍 Today's Event: {event_data['type']}\n🎁 Reward: {event_data['reward']} credits\nUse ,claimevent to collect."
+        return await update.message.reply_text(msg)
+
+    if text.startswith(",claimevent"):
+        if p.get("event_claimed") == str(today):
+            return await update.message.reply_text("✅ Already claimed today's event.")
+        p["credits"] += event_data["reward"]
+        p["event_claimed"] = str(today)
+        return await update.message.reply_text(f"🎁 Claimed {event_data['reward']} credits from today's event!")
+
     if text.startswith(",map"):
         out = "Zone Control:\n"
         for z, o in zones.items():
@@ -207,7 +205,7 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     if text.startswith(",help"):
         return await update.message.reply_text(
-            "Commands: ,start ,name ,status ,daily ,mine ,forge ,use <item> ,map ,claim ,build"
+            "Commands: ,start ,name ,status ,daily ,mine ,forge ,use <item> ,event ,claimevent ,map ,claim ,build"
         )
 
     await update.message.reply_text("Unknown command. Use ,help.")
