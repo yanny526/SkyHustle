@@ -30,16 +30,16 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     today = date.today()
 
     if text.startswith(",start"):
-      intro = (
-    "🌌 Welcome to SkyHustle!\n"
-    "Centuries from now, Hyperion’s core pulses with raw energy. "
-    "As a fledgling Commander, you must mine ore, bolster defenses, "
-    "and conquer rivals to claim the stars.\n\n"
-    "🔹 Set your callsign: ,name <alias>\n"
-    "🔹 View stats: ,status\n"
-    "🔹 Begin mining: ,mine ore 1\n\n"
-    "Forge your legend!"
-)
+        intro = (
+            "🌌 Welcome to SkyHustle!\n"
+            "Centuries from now, Hyperion’s core pulses with raw energy. "
+            "As a fledgling Commander, you must mine ore, bolster defenses, "
+            "and conquer rivals to claim the stars.\n\n"
+            "🔹 Set your callsign: ,name <alias>\n"
+            "🔹 View stats: ,status\n"
+            "🔹 Begin mining: ,mine ore 1\n\n"
+            "Forge your legend!"
+        )
         return await update.message.reply_text(intro, parse_mode=ParseMode.MARKDOWN)
 
     if text.startswith(",name"):
@@ -55,20 +55,14 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if text.startswith(",status"):
         shield = p["shield"].strftime("%H:%M:%S") if p["shield"] and now < p["shield"] else "None"
         msg = (
-            f"📊 {p['name'] or 'Commander'} Status:
-"
-            f"🪨 Ore: {p['ore']}  ⚡ Energy: {p['energy']}  💳 Credits: {p['credits']}
-"
-            f"🏭 Blds: Spy{p['spy_level']} Ref{p['refinery_level']} Def{p['defense_level']} Lab{p['lab_level']}
-"
-            f"🎖 Rank: {p['rank']}  🏅 Streak: {p['daily_streak']}d
-"
-            f"🤖 Army: {p['army']}
-"
-            f"🛡 Shield: {shield}
-"
+            f"📊 {p['name'] or 'Commander'} Status:\n"
+            f"🪨 Ore: {p['ore']}  ⚡ Energy: {p['energy']}  💳 Credits: {p['credits']}\n"
+            f"🏭 Blds: Spy{p['spy_level']} Ref{p['refinery_level']} Def{p['defense_level']} Lab{p['lab_level']}\n"
+            f"🎖 Rank: {p['rank']}  🏅 Streak: {p['daily_streak']}d\n"
+            f"🤖 Army: {p['army']}\n"
+            f"🛡 Shield: {shield}\n"
             f"📍 Zone: {p['zone'] or 'None'}"
         )
         return await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN)
 
-    await update.message.reply_text("❓ Unknown command. Type ,help.")
+    await update.message.reply_text("❓ Unknown command. Type ,start or ,status.")
