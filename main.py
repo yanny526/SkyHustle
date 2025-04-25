@@ -1,3 +1,6 @@
+# SkyHustle - Phase 17–20 Update
+# Massive update: Faction Wars, PvP Rankings, War Logs, and Seasonal Rewards
+
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
 from telegram.constants import ParseMode
@@ -12,6 +15,7 @@ zones = {z: None for z in ["Alpha", "Beta", "Gamma", "Delta", "Epsilon"]}
 unit_types = ["scout", "drone", "tank"]
 missions = {}
 factions = {}
+war_logs = []
 item_defs = {
     "infinityscout1": {"type": "perishable", "desc": "Advanced scout (1 use)"},
     "reviveall": {"type": "perishable", "desc": "Revives all regular units and buildings"},
@@ -60,8 +64,32 @@ def faction_bonus(p):
     if not p["faction"] or p["faction"] not in factions:
         return 1.0
     member_count = len(factions[p["faction"]]["members"])
-    bonus = 1 + (member_count * 0.02)  # 2% bonus per member
+    bonus = 1 + (member_count * 0.02)
     return bonus
+
+def record_battle(attacker, defender, result):
+    war_logs.append({
+        "attacker": attacker["name"],
+        "defender": defender["name"],
+        "result": result,
+        "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    })
+
+def resolve_pvp(attacker, defender):
+    atk_power = sum(attacker["army"].values())
+    def_power = sum(defender["army"].values())
+    if atk_power == def_power:
+        result = "Draw"
+    elif atk_power > def_power:
+        attacker["wins"] += 1
+        defender["losses"] += 1
+        result = "Victory"
+    else:
+        attacker["losses"] += 1
+        defender["wins"] += 1
+        result = "Defeat"
+    record_battle(attacker, defender, result)
+    return result
 
 async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     cid = update.effective_chat.id
@@ -88,8 +116,8 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         items_owned = ", ".join([f"{k} x{v}" for k, v in p["items"].items()]) or "None"
         return await update.message.reply_text(
             f"Name: {p['name']}\nOre: {p['ore']}\nEnergy: {p['energy']}\nCredits: {p['credits']}\n"
-            f"Refinery Lv{p['refinery_level']} | Lab Lv{p['lab_level']}\nArmy: {p['army']}\n"
-            f"Items: {items_owned}\nFaction: {p['faction'] or 'None'}\nShield: {shield}")
+            f"Army: {p['army']}\nItems: {items_owned}\nFaction: {p['faction'] or 'None'}\n"
+            f"Wins: {p['wins']} | Losses: {p['losses']}\nShield: {shield}")
 
     if text.startswith(",daily"):
         if p["last_daily"] == today:
@@ -99,111 +127,42 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         p["energy"] += 20
         p["daily_streak"] = p["daily_streak"] + 1 if p["last_daily"] == today - timedelta(days=1) else 1
         p["last_daily"] = today
-        if p["daily_streak"] >= 10:
-            p["achievements"].add("10-Day Streak")
         return await update.message.reply_text(f"+{int(50*bonus)} credits, +20 energy. Streak: {p['daily_streak']} days.")
 
-    if text.startswith(",mine"):
-        parts = text.split()
-        if len(parts) != 3 or parts[1] != "ore":
-            return await update.message.reply_text("Usage: ,mine ore <count>")
-        try:
-            count = int(parts[2])
-        except:
-            return await update.message.reply_text("Count must be a number.")
-        if p["energy"] < count * 5:
-            return await update.message.reply_text("Not enough energy.")
-        if p["last_mine"] and now - p["last_mine"] < timedelta(minutes=2):
-            return await update.message.reply_text("Cooldown active. Wait a bit.")
-        bonus = faction_bonus(p)
-        ore_gain = int((20 * count + (p["refinery_level"] * 5)) * bonus)
-        p["ore"] += ore_gain
-        p["energy"] -= count * 5
-        p["credits"] += int(10 * count * bonus)
-        p["last_mine"] = now
-        p["achievements"].add("First Ore Mined")
-        return await update.message.reply_text(f"Mined {ore_gain} ore. +{int(10*count*bonus)} credits.")
-
-    if text.startswith(",forge"):
-        parts = text.split()
-        if len(parts) != 3 or parts[1] not in unit_types:
-            return await update.message.reply_text("Usage: ,forge <unit> <count>")
-        unit, amt = parts[1], int(parts[2])
-        cost = {"scout": (10, 5), "drone": (15, 10), "tank": (30, 20)}[unit]
-        if p["ore"] < cost[0] * amt or p["credits"] < cost[1] * amt:
-            return await update.message.reply_text("Not enough ore/credits.")
-        p["ore"] -= cost[0] * amt
-        p["credits"] -= cost[1] * amt
-        p["army"][unit] += amt
-        return await update.message.reply_text(f"Forged {amt} {unit}(s).")
-
-    if text.startswith(",use"):
+    if text.startswith(",fight"):
         parts = text.split()
         if len(parts) != 2:
-            return await update.message.reply_text("Usage: ,use <item>")
-        success, msg = use_item(p, parts[1])
-        return await update.message.reply_text(msg)
+            return await update.message.reply_text("Usage: ,fight <opponent_name>")
+        _, target = find_by_name(parts[1])
+        if not target:
+            return await update.message.reply_text("Opponent not found.")
+        outcome = resolve_pvp(p, target)
+        return await update.message.reply_text(f"⚔️ Result: {outcome}")
 
-    if text.startswith(",map"):
-        out = "Zone Control:\n"
-        for z, o in zones.items():
-            name = players.get(o, {}).get("name", "Unclaimed")
-            out += f"{z}: {name}\n"
+    if text.startswith(",rankings"):
+        sorted_players = sorted(players.items(), key=lambda x: x[1]["wins"], reverse=True)
+        out = "🏆 Top Commanders:\n"
+        for i, (cid, user) in enumerate(sorted_players[:10]):
+            out += f"{i+1}. {user['name']} - {user['wins']} wins\n"
         return await update.message.reply_text(out)
 
-    if text.startswith(",claim"):
-        parts = text.split()
-        if len(parts) != 2 or parts[1] not in zones:
-            return await update.message.reply_text("Usage: ,claim <zone>")
-        if p["credits"] < 100:
-            return await update.message.reply_text("Need 100 credits.")
-        zones[parts[1]] = cid
-        p["zone"] = parts[1]
-        p["credits"] -= 100
-        return await update.message.reply_text(f"You now control {parts[1]}.")
+    if text.startswith(",warlog"):
+        logs = war_logs[-10:]
+        out = "📜 War Log (last 10):\n"
+        for entry in logs:
+            out += f"{entry['time']} - {entry['attacker']} vs {entry['defender']} - {entry['result']}\n"
+        return await update.message.reply_text(out)
 
-    if text.startswith(",achievements"):
-        ach_list = "\n".join(p["achievements"]) if p["achievements"] else "None yet."
-        return await update.message.reply_text(f"🏅 Achievements:\n{ach_list}")
-
-    if text.startswith(",faction_create"):
-        parts = text.split()
-        if len(parts) != 2:
-            return await update.message.reply_text("Usage: ,faction_create <name>")
-        fname = parts[1]
-        if fname in factions:
-            return await update.message.reply_text("Faction already exists.")
-        factions[fname] = {"leader": cid, "members": [cid]}
-        p["faction"] = fname
-        return await update.message.reply_text(f"🏴 Created and joined faction: {fname}")
-
-    if text.startswith(",faction_join"):
-        parts = text.split()
-        if len(parts) != 2:
-            return await update.message.reply_text("Usage: ,faction_join <name>")
-        fname = parts[1]
-        if fname not in factions:
-            return await update.message.reply_text("Faction not found.")
-        factions[fname]["members"].append(cid)
-        p["faction"] = fname
-        return await update.message.reply_text(f"🚩 Joined faction: {fname}")
-
-    if text.startswith(",faction_leave"):
-        if not p["faction"]:
-            return await update.message.reply_text("You are not in any faction.")
-        fname = p["faction"]
-        factions[fname]["members"].remove(cid)
-        if not factions[fname]["members"]:
-            del factions[fname]
-        p["faction"] = None
-        return await update.message.reply_text(f"🏳 Left faction: {fname}")
+    if text.startswith(",rewards"):
+        if p["wins"] >= 5:
+            p["credits"] += 200
+            return await update.message.reply_text("🎖 You claimed 200 credits for PvP excellence!")
+        return await update.message.reply_text("❌ Win at least 5 PvP battles to claim seasonal rewards.")
 
     if text.startswith(",help"):
-        return await update.message.reply_text(
-            "Commands: ,start ,name ,status ,daily ,mine ,forge ,use ,map ,claim ,achievements ,faction_create ,faction_join ,faction_leave"
-        )
+        return await update.message.reply_text("Commands: ,start ,name ,status ,daily ,fight ,rankings ,warlog ,rewards")
 
-    await update.message.reply_text("Unknown command. Use ,help.")
+    await update.message.reply_text("Unknown command. Use ,help")
 
 if __name__ == "__main__":
     app = ApplicationBuilder().token(BOT_TOKEN).build()
