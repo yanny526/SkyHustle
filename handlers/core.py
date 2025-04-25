@@ -1,33 +1,60 @@
 from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
-from datetime import date, datetime, timedelta
-from data import players
-from utils import find_by_name
+from datetime import datetime
+from sheet import get_sheet
+import json
 
-def make_player():
-    return {
-        "name": "", "zone": None, "shield": None,
-        "ore": 0, "energy": 100, "credits": 0, "last_mine": None,
-        "spy_level": 0, "refinery_level": 0, "defense_level": 0, "lab_level": 0,
-        "army": {"scout": 0, "tank": 0, "drone": 0},
-        "research": {"speed": 0, "armor": 0},
-        "wins": 0, "losses": 0, "rank": 0,
-        "daily_streak": 0, "last_daily": None, "daily_done": False,
-        "faction": None, "achievements": set()
-    }
+# Connect to the sheet
+players_sheet = get_sheet().worksheet("Sheet1")  # Change to your actual sheet tab name if needed
 
+# Load player or add if not found
 def get_player(cid):
-    if cid not in players:
-        players[cid] = make_player()
-    return players[cid]
+    records = players_sheet.get_all_records()
+    for i, row in enumerate(records):
+        if str(row["ChatID"]) == str(cid):
+            row["_row"] = i + 2  # Google Sheets rows start at 1, headers at row 1
+            return row
 
+    # New player data
+    new_player = {
+        "ChatID": cid,
+        "Name": "",
+        "Ore": 0,
+        "Energy": 100,
+        "Credits": 0,
+        "Army": '{"scout":0,"tank":0,"drone":0}',
+        "Zone": "",
+        "ShieldUntil": "",
+        "DailyStreak": 0,
+        "LastDaily": ""
+    }
+    players_sheet.append_row(list(new_player.values()))
+    new_player["_row"] = len(records) + 2
+    return new_player
+
+# Update a player in the sheet
+def update_player(p):
+    values = [
+        p["ChatID"],
+        p["Name"],
+        p["Ore"],
+        p["Energy"],
+        p["Credits"],
+        p["Army"],
+        p["Zone"],
+        p["ShieldUntil"],
+        p["DailyStreak"],
+        p["LastDaily"]
+    ]
+    players_sheet.update(f"A{p['_row']}:J{p['_row']}", [values])
+
+# Handle Telegram messages
 async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     cid = update.effective_chat.id
     text = update.message.text.strip()
     p = get_player(cid)
     now = datetime.now()
-    today = date.today()
 
     if text.startswith(",start"):
         intro = (
@@ -46,22 +73,17 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         alias = text[6:].strip()
         if not alias:
             return await update.message.reply_text("⚠ Usage: ,name <alias>")
-        ocid, _ = find_by_name(alias, players)
-        if ocid and ocid != cid:
-            return await update.message.reply_text("❌ Alias taken.")
-        p["name"] = alias
+        p["Name"] = alias
+        update_player(p)
         return await update.message.reply_text(f"🚩 Callsign set to {alias}")
 
     if text.startswith(",status"):
-        shield = p["shield"].strftime("%H:%M:%S") if p["shield"] and now < p["shield"] else "None"
+        army = json.loads(p["Army"])
         msg = (
-            f"📊 {p['name'] or 'Commander'} Status:\n"
-            f"🪨 Ore: {p['ore']}  ⚡ Energy: {p['energy']}  💳 Credits: {p['credits']}\n"
-            f"🏭 Blds: Spy{p['spy_level']} Ref{p['refinery_level']} Def{p['defense_level']} Lab{p['lab_level']}\n"
-            f"🎖 Rank: {p['rank']}  🏅 Streak: {p['daily_streak']}d\n"
-            f"🤖 Army: {p['army']}\n"
-            f"🛡 Shield: {shield}\n"
-            f"📍 Zone: {p['zone'] or 'None'}"
+            f"📊 {p['Name'] or 'Commander'} Status:\n"
+            f"🪨 Ore: {p['Ore']}  ⚡ Energy: {p['Energy']}  💳 Credits: {p['Credits']}\n"
+            f"🤖 Army: {army}\n"
+            f"📍 Zone: {p['Zone'] or 'None'}"
         )
         return await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN)
 
