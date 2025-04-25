@@ -1,5 +1,4 @@
-# SkyHustle - Phase 5 Upgrade
-# Adds Black Market, Store, Timed Cooldowns, and Zone Upgrades
+# SkyHustle - Phase 6: Factions, PvP Ranking, and Map Control
 
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
@@ -14,30 +13,22 @@ items = {}
 zones = {z: None for z in ["Alpha", "Beta", "Gamma", "Delta", "Epsilon"]}
 unit_types = ["scout", "drone", "tank"]
 missions = {}
-blackmarket_items = {
-    "infinityscout1": {"price": 20, "type": "perishable", "desc": "One-time advanced scout"},
-    "reviveall": {"price": 500, "type": "perishable", "desc": "Revives all damaged units (excl. premium)"},
-    "hazmat": {"price": 100, "type": "passive", "desc": "Access Radiation Zones"},
-    "emppulse": {"price": 75, "type": "perishable", "desc": "Disable enemy defenses for 1 hour"},
-    "advshield": {"price": 150, "type": "passive", "desc": "Absorb first daily attack"}
-}
-normal_store = {
-    "energyboost": {"price": 10, "desc": "+50 energy now"},
-    "creditpack": {"price": 15, "desc": "+100 credits"},
-    "orecrate": {"price": 15, "desc": "+100 ore"}
+factions = {}
+item_defs = {
+    "infinityscout1": {"type": "perishable", "desc": "Advanced scout (1 use)"},
+    "reviveall": {"type": "perishable", "desc": "Revives all regular units and buildings"},
+    "hazmat": {"type": "passive", "desc": "Access Radiation Zones"},
 }
 
-# ---------------- Core Player Struct ----------------
 def make_player():
     return {
         "name": "", "zone": None, "shield": None,
         "ore": 0, "energy": 100, "credits": 100, "last_mine": None,
         "spy_level": 0, "refinery_level": 0, "defense_level": 0, "lab_level": 0,
         "army": {u: 0 for u in unit_types}, "research": {"speed": 0, "armor": 0},
-        "wins": 0, "losses": 0, "rank": 0, "daily_streak": 0,
+        "wins": 0, "losses": 0, "rank": 1000, "daily_streak": 0,
         "last_daily": None, "daily_done": False,
-        "faction": None, "achievements": set(), "items": {},
-        "blackmarket_level": 0, "cooldowns": {}
+        "faction": None, "achievements": set(), "items": {}
     }
 
 def get_player(cid):
@@ -45,22 +36,27 @@ def get_player(cid):
         players[cid] = make_player()
     return players[cid]
 
+def find_by_name(name):
+    for cid, p in players.items():
+        if p["name"].lower() == name.lower():
+            return cid, p
+    return None, None
+
 def give_item(p, item_id):
     p["items"].setdefault(item_id, 0)
     p["items"][item_id] += 1
 
 def use_item(p, item_id):
-    if item_id not in blackmarket_items:
+    if item_id not in item_defs:
         return False, "❌ Invalid item."
     if p["items"].get(item_id, 0) <= 0:
         return False, "❌ You don't own this item."
-    if blackmarket_items[item_id]["type"] == "perishable":
+    if item_defs[item_id]["type"] == "perishable":
         p["items"][item_id] -= 1
         if p["items"][item_id] == 0:
             del p["items"][item_id]
     return True, f"✅ Used item: {item_id}"
 
-# ---------------- Handler ----------------
 async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     cid = update.effective_chat.id
     text = update.message.text.strip()
@@ -74,6 +70,8 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if text.startswith(",name"):
         alias = text[6:].strip()
         if not alias: return await update.message.reply_text("Usage: ,name <alias>")
+        ocid, _ = find_by_name(alias)
+        if ocid and ocid != cid: return await update.message.reply_text("Alias taken.")
         p["name"] = alias
         return await update.message.reply_text(f"Callsign set to {alias}.")
 
@@ -82,47 +80,44 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         items_owned = ", ".join([f"{k} x{v}" for k,v in p["items"].items()]) or "None"
         return await update.message.reply_text(
             f"Name: {p['name']}\nOre: {p['ore']}\nEnergy: {p['energy']}\nCredits: {p['credits']}\n"
-            f"Refinery Lv{p['refinery_level']} | Lab Lv{p['lab_level']}\nArmy: {p['army']}\n"
-            f"Items: {items_owned}\nShield: {shield}\nBM Level: {p['blackmarket_level']}")
+            f"Rank: {p['rank']} | Faction: {p['faction'] or 'None'}\n"
+            f"Army: {p['army']}\nItems: {items_owned}\nShield: {shield}")
 
-    if text.startswith(",blackmarket"):
+    if text.startswith(",faction"):
         parts = text.split()
-        if len(parts) == 1:
-            bm_level = p["blackmarket_level"]
-            msg = "🛒 Black Market (Lv {bm_level}):\n"
-            for k, v in blackmarket_items.items():
-                msg += f"- {k}: {v['desc']} (R{v['price']})\n"
-            return await update.message.reply_text(msg)
-        if parts[1] == "buy" and len(parts) == 3:
-            item = parts[2]
-            if item not in blackmarket_items:
-                return await update.message.reply_text("❌ Item not found.")
-            give_item(p, item)
-            return await update.message.reply_text(f"✅ Purchased {item} (simulate real payment here)")
-        if parts[1] == "upgrade":
-            p["blackmarket_level"] += 1
-            return await update.message.reply_text(f"⬆️ Black Market upgraded to Lv {p['blackmarket_level']}")
+        if len(parts) < 2:
+            return await update.message.reply_text("Usage: ,faction create/join/leave <name>")
+        cmd = parts[1].lower()
+        if cmd == "create" and len(parts) == 3:
+            name = parts[2]
+            if name in factions:
+                return await update.message.reply_text("❌ Faction already exists.")
+            factions[name] = {"members": set([cid])}
+            p["faction"] = name
+            return await update.message.reply_text(f"🏳️ Created and joined faction {name}.")
+        elif cmd == "join" and len(parts) == 3:
+            name = parts[2]
+            if name not in factions:
+                return await update.message.reply_text("❌ No such faction.")
+            factions[name]["members"].add(cid)
+            p["faction"] = name
+            return await update.message.reply_text(f"🤝 Joined faction {name}.")
+        elif cmd == "leave":
+            f = p["faction"]
+            if f and cid in factions[f]["members"]:
+                factions[f]["members"].remove(cid)
+            p["faction"] = None
+            return await update.message.reply_text("🚪 You left your faction.")
 
-    if text.startswith(",store"):
-        out = "🏪 SkyHustle Store:\n"
-        for k,v in normal_store.items():
-            out += f"- {k}: {v['desc']} (R{v['price']})\n"
+    if text.startswith(",rank"):
+        top = sorted(players.items(), key=lambda x: x[1]["rank"], reverse=True)[:5]
+        out = "🏆 Top 5 Commanders:\n"
+        for i, (_, pl) in enumerate(top, 1):
+            out += f"{i}. {pl['name'] or 'Unnamed'} – {pl['rank']} RP\n"
         return await update.message.reply_text(out)
 
-    if text.startswith(",use"):
-        parts = text.split()
-        if len(parts) != 2:
-            return await update.message.reply_text("Usage: ,use <item>")
-        success, msg = use_item(p, parts[1])
-        return await update.message.reply_text(msg)
+    return await update.message.reply_text("Unknown command. Use ,status ,faction or ,rank")
 
-    if text.startswith(",help"):
-        return await update.message.reply_text(
-            "Commands: ,start ,name ,status ,store ,blackmarket ,blackmarket buy <item> ,use <item>")
-
-    await update.message.reply_text("Unknown command. Use ,help")
-
-# ---------------- Init ----------------
 if __name__ == "__main__":
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
