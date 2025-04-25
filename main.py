@@ -1,206 +1,169 @@
-# SkyHustle - Hyperdrive Code (Phase 1–56)
+# SkyHustle - Final Optimized Engine (Phase 1-56)
+
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
 from telegram.constants import ParseMode
-from datetime import datetime, timedelta
-import os, json
+from datetime import datetime, timedelta, date
+from sheet import get_sheet
+import json
+import os
 
-BOT_TOKEN = os.getenv("BOT_TOKEN") or "YOUR_BOT_TOKEN_HERE"
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+players_sheet = get_sheet().worksheet("SkyHustle")
 
-players = {}
+unit_types = ["scout", "tank", "drone"]
 zones = {z: None for z in ["Alpha", "Beta", "Gamma", "Delta", "Epsilon"]}
-unit_types = ["scout", "drone", "tank", "elite"]
+black_market_unlock_price = 500
 item_defs = {
-    "infinityscout1": {"type": "perishable", "desc": "Advanced scout (1 use)"},
-    "infinityscout2": {"type": "perishable", "desc": "Advanced scout (2x stronger)"},
-    "reviveall": {"type": "perishable", "desc": "Revive all non-premium units and buildings"},
-    "hazmat": {"type": "passive", "desc": "Access Radiation Zones"},
-    "empdevice": {"type": "perishable", "desc": "Disable enemy defenses for 1 raid"},
-    "advancedshield": {"type": "passive", "desc": "Auto-block first daily attack"},
+    "infinityscout1": {"type": "perishable", "desc": "Advanced scout (1 use)", "price": 250},
+    "infinityscout2": {"type": "perishable", "desc": "Elite scout (1 use)", "price": 400},
+    "reviveall": {"type": "perishable", "desc": "Revives all non-Black Market units", "price": 500},
+    "hazmat": {"type": "passive", "desc": "Access Radiation Zones", "price": 300},
+    "emp": {"type": "perishable", "desc": "Disable opponent defenses", "price": 200},
+    "advancedshield": {"type": "passive", "desc": "Auto-absorb 1st attack daily", "price": 350}
 }
-missions = {}
-world_boss = {"hp": 5000, "max_hp": 5000, "rewards": 500}
-seasons = {"season_active": False, "top_players": []}
-
-def make_player():
-    return {
-        "name": "", "zone": None, "shield": None,
-        "ore": 0, "energy": 100, "credits": 100, "last_mine": None,
-        "refinery_level": 0, "lab_level": 0, "spy_level": 0, "defense_level": 0,
-        "army": {u: 0 for u in unit_types}, "items": {},
-        "daily_streak": 0, "last_daily": None, "wins": 0, "losses": 0,
-        "rank": 0, "faction": None, "blackmarket_unlocked": False,
-        "pvp_score": 1000
-    }
 
 def get_player(cid):
-    if cid not in players:
-        players[cid] = make_player()
-    return players[cid]
+    records = players_sheet.get_all_records()
+    for i, row in enumerate(records):
+        if str(row["ChatID"]) == str(cid):
+            row["_row"] = i + 2
+            return row
+    new_player = {
+        "ChatID": cid, "Name": "", "Ore": 0, "Energy": 100, "Credits": 100,
+        "Army": json.dumps({u: 0 for u in unit_types}), "Zone": "",
+        "ShieldUntil": "", "DailyStreak": 0, "LastDaily": "",
+        "Items": json.dumps({}), "BMUnlocked": "False"
+    }
+    players_sheet.append_row(list(new_player.values()))
+    new_player["_row"] = len(records) + 2
+    return new_player
 
-def find_by_name(name):
-    for cid, p in players.items():
-        if p["name"].lower() == name.lower():
-            return cid, p
-    return None, None
-
-def give_item(p, item_id):
-    p["items"].setdefault(item_id, 0)
-    p["items"][item_id] += 1
-
-def use_item(p, item_id):
-    if item_id not in item_defs:
-        return False, "Invalid item."
-    if p["items"].get(item_id, 0) <= 0:
-        return False, "You don't own this item."
-    if item_defs[item_id]["type"] == "perishable":
-        p["items"][item_id] -= 1
-        if p["items"][item_id] == 0:
-            del p["items"][item_id]
-    return True, f"Used {item_id}"
+def update_player(p):
+    players_sheet.update(
+        f"A{p['_row']}:L{p['_row']}",
+        [[p["ChatID"], p["Name"], p["Ore"], p["Energy"], p["Credits"], p["Army"],
+          p["Zone"], p["ShieldUntil"], p["DailyStreak"], p["LastDaily"],
+          p.get("Items", json.dumps({})), p.get("BMUnlocked", "False")]]
+    )
 
 async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     cid = update.effective_chat.id
     text = update.message.text.strip()
     p = get_player(cid)
+    today = date.today()
     now = datetime.now()
-    today = datetime.today().date()
 
     if text.startswith(",start"):
-        return await update.message.reply_text("SkyHustle ready. Use ,name <alias>.")
+        return await update.message.reply_text(
+            "🌌 Welcome to SkyHustle! Use ,name <alias> to begin.", parse_mode=ParseMode.MARKDOWN)
 
     if text.startswith(",name"):
         alias = text[6:].strip()
-        if not alias: return await update.message.reply_text("Usage: ,name <alias>")
-        ocid, _ = find_by_name(alias)
-        if ocid and ocid != cid: return await update.message.reply_text("Alias taken.")
-        p["name"] = alias
-        return await update.message.reply_text(f"Callsign set to {alias}.")
+        if not alias: return await update.message.reply_text("⚠ Usage: ,name <alias>")
+        p["Name"] = alias
+        update_player(p)
+        return await update.message.reply_text(f"🚩 Callsign set to {alias}")
 
     if text.startswith(",status"):
-        shield = p["shield"].strftime("%H:%M:%S") if p["shield"] and now < p["shield"] else "None"
-        items_owned = ", ".join([f"{k} x{v}" for k,v in p["items"].items()]) or "None"
+        army = json.loads(p["Army"])
+        items = json.loads(p.get("Items", "{}"))
+        shield_time = p["ShieldUntil"] if p["ShieldUntil"] else "None"
         return await update.message.reply_text(
-            f"Name: {p['name']}\nOre: {p['ore']} Energy: {p['energy']} Credits: {p['credits']}\n"
-            f"Refinery Lv{p['refinery_level']} | Lab Lv{p['lab_level']}\nArmy: {p['army']}\n"
-            f"Items: {items_owned}\nShield: {shield}")
+            f"📊 {p['Name'] or 'Commander'}\n"
+            f"🪨 Ore: {p['Ore']} | ⚡ Energy: {p['Energy']} | 💳 Credits: {p['Credits']}\n"
+            f"🤖 Army: {army}\n"
+            f"🎒 Items: {items}\n"
+            f"🛡 Shield: {shield_time}\n"
+            f"📍 Zone: {p['Zone'] or 'None'}", parse_mode=ParseMode.MARKDOWN)
 
     if text.startswith(",daily"):
-        if p["last_daily"] == str(today):
-            return await update.message.reply_text("Already claimed today.")
-        p["credits"] += 50
-        p["energy"] += 20
-        p["daily_streak"] = p["daily_streak"] + 1 if p["last_daily"] == str(today - timedelta(days=1)) else 1
-        p["last_daily"] = str(today)
-        return await update.message.reply_text(f"+50 credits, +20 energy. Streak {p['daily_streak']} days.")
+        if p["LastDaily"] == str(today):
+            return await update.message.reply_text("🎁 Already claimed today!")
+        p["Credits"] += 50
+        p["Energy"] += 25
+        p["DailyStreak"] = p["DailyStreak"] + 1 if p["LastDaily"] == str(today - timedelta(days=1)) else 1
+        p["LastDaily"] = str(today)
+        update_player(p)
+        return await update.message.reply_text(f"🎁 +50 credits, +25 energy. Streak: {p['DailyStreak']} days.")
 
     if text.startswith(",mine"):
         parts = text.split()
-        if len(parts) != 3 or parts[1] != "ore":
-            return await update.message.reply_text("Usage: ,mine ore <count>")
+        if len(parts) != 3 or parts[1] != "ore": return await update.message.reply_text("⚠ Usage: ,mine ore <count>")
         try: count = int(parts[2])
-        except: return await update.message.reply_text("Count must be number.")
-        if p["energy"] < count * 5:
-            return await update.message.reply_text("Not enough energy.")
+        except: return await update.message.reply_text("⚠ Count must be a number.")
+        if p["Energy"] < count * 5: return await update.message.reply_text("⚡ Not enough energy!")
         ore_gain = 20 * count
-        p["ore"] += ore_gain
-        p["energy"] -= count * 5
-        p["credits"] += 10 * count
-        p["last_mine"] = now
-        return await update.message.reply_text(f"Mined {ore_gain} ore. +{10*count} credits.")
+        p["Ore"] += ore_gain
+        p["Energy"] -= count * 5
+        p["Credits"] += 10 * count
+        update_player(p)
+        return await update.message.reply_text(f"⛏ Mined {ore_gain} ore and earned {10*count} credits!")
 
     if text.startswith(",forge"):
         parts = text.split()
-        if len(parts) != 3 or parts[1] not in unit_types:
-            return await update.message.reply_text("Usage: ,forge <unit> <count>")
+        if len(parts) != 3 or parts[1] not in unit_types: return await update.message.reply_text("⚠ Usage: ,forge <unit> <count>")
         unit, amt = parts[1], int(parts[2])
-        cost = {"scout": (10, 5), "drone": (15, 10), "tank": (30, 20), "elite": (100, 80)}[unit]
-        if p["ore"] < cost[0]*amt or p["credits"] < cost[1]*amt:
-            return await update.message.reply_text("Not enough ore/credits.")
-        p["ore"] -= cost[0]*amt
-        p["credits"] -= cost[1]*amt
-        p["army"][unit] += amt
-        return await update.message.reply_text(f"Forged {amt} {unit}(s).")
-
-    if text.startswith(",use"):
-        parts = text.split()
-        if len(parts) != 2:
-            return await update.message.reply_text("Usage: ,use <item>")
-        success, msg = use_item(p, parts[1])
-        return await update.message.reply_text(msg)
-
-    if text.startswith(",map"):
-        out = "Zones:\n"
-        for z, o in zones.items():
-            owner = players.get(o, {}).get("name", "Unclaimed")
-            out += f"{z}: {owner}\n"
-        return await update.message.reply_text(out)
-
-    if text.startswith(",claim"):
-        parts = text.split()
-        if len(parts) != 2 or parts[1] not in zones:
-            return await update.message.reply_text("Usage: ,claim <zone>")
-        if p["credits"] < 100:
-            return await update.message.reply_text("Need 100 credits.")
-        zones[parts[1]] = cid
-        p["zone"] = parts[1]
-        p["credits"] -= 100
-        return await update.message.reply_text(f"Zone {parts[1]} claimed.")
-
-    if text.startswith(",raid"):
-        parts = text.split()
-        if len(parts) != 2:
-            return await update.message.reply_text("Usage: ,raid <enemy_name>")
-        enemy_name = parts[1]
-        eid, ep = find_by_name(enemy_name)
-        if not ep:
-            return await update.message.reply_text("Enemy not found.")
-        if ep["shield"] and now < ep["shield"]:
-            return await update.message.reply_text("Target shielded.")
-        steal = min(ep["credits"]//5, 100)
-        p["credits"] += steal
-        ep["credits"] -= steal
-        p["wins"] += 1
-        ep["losses"] += 1
-        return await update.message.reply_text(f"Raided {enemy_name}! Stole {steal} credits!")
-
-    if text.startswith(",bossattack"):
-        dmg = 50
-        world_boss["hp"] -= dmg
-        reward = 10
-        p["credits"] += reward
-        return await update.message.reply_text(f"Dealt {dmg} damage to Boss! +{reward} credits.")
+        army = json.loads(p["Army"])
+        ore_cost = 10 * amt
+        credit_cost = 5 * amt
+        if p["Ore"] < ore_cost or p["Credits"] < credit_cost:
+            return await update.message.reply_text("⚠ Insufficient resources!")
+        p["Ore"] -= ore_cost
+        p["Credits"] -= credit_cost
+        army[unit] += amt
+        p["Army"] = json.dumps(army)
+        update_player(p)
+        return await update.message.reply_text(f"🛡 Forged {amt} {unit}(s)!")
 
     if text.startswith(",blackmarket"):
-        if not p["blackmarket_unlocked"]:
-            return await update.message.reply_text("Black Market locked. Buy access.")
-        return await update.message.reply_text("Black Market items: infinityscout1, reviveall, hazmat, empdevice, advancedshield.")
+        if p.get("BMUnlocked", "False") == "False":
+            return await update.message.reply_text(
+                f"🔒 Black Market locked. Unlock for {black_market_unlock_price} credits using ,unlockbm")
+        items_list = "\n".join([f"{k}: {v['desc']} (Cost: {v['price']})" for k,v in item_defs.items()])
+        return await update.message.reply_text(f"🖤 Black Market Items:\n{items_list}")
 
-    if text.startswith(",buyblackmarket"):
+    if text.startswith(",unlockbm"):
+        if p.get("BMUnlocked", "False") == "True":
+            return await update.message.reply_text("🖤 Already unlocked Black Market.")
+        if p["Credits"] < black_market_unlock_price:
+            return await update.message.reply_text("💳 Not enough credits!")
+        p["Credits"] -= black_market_unlock_price
+        p["BMUnlocked"] = "True"
+        update_player(p)
+        return await update.message.reply_text("🖤 Black Market unlocked! Use ,blackmarket to view items.")
+
+    if text.startswith(",buy"):
         parts = text.split()
-        if len(parts) != 2:
-            return await update.message.reply_text("Usage: ,buyblackmarket <item>")
+        if len(parts) != 2: return await update.message.reply_text("⚠ Usage: ,buy <item>")
         item = parts[1]
-        if not p["blackmarket_unlocked"]:
-            return await update.message.reply_text("Unlock Black Market first.")
-        price = {"infinityscout1": 200, "reviveall": 500, "hazmat": 250, "empdevice": 300, "advancedshield": 400}
-        if p["credits"] < price.get(item, 9999):
-            return await update.message.reply_text("Not enough credits.")
-        p["credits"] -= price[item]
-        give_item(p, item)
-        return await update.message.reply_text(f"Purchased {item}!")
+        if item not in item_defs:
+            return await update.message.reply_text("⚠ Invalid item.")
+        if p.get("BMUnlocked", "False") == "False":
+            return await update.message.reply_text("🔒 Black Market access required!")
+        price = item_defs[item]["price"]
+        if p["Credits"] < price:
+            return await update.message.reply_text("💳 Not enough credits.")
+        p["Credits"] -= price
+        items = json.loads(p.get("Items", "{}"))
+        items[item] = items.get(item, 0) + 1
+        p["Items"] = json.dumps(items)
+        update_player(p)
+        return await update.message.reply_text(f"🖤 Purchased {item}!")
 
-    if text.startswith(",unlockblackmarket"):
-        if p["credits"] < 500:
-            return await update.message.reply_text("500 credits needed to unlock.")
-        p["credits"] -= 500
-        p["blackmarket_unlocked"] = True
-        return await update.message.reply_text("Black Market unlocked!")
+    if text.startswith(",map"):
+        out = "🌍 Zone Control:\n"
+        for z, o in zones.items():
+            out += f"{z}: {o or 'Unclaimed'}\n"
+        return await update.message.reply_text(out)
 
     if text.startswith(",help"):
-        return await update.message.reply_text("Commands: ,start ,name ,status ,daily ,mine ,forge ,use ,map ,claim ,raid ,bossattack ,blackmarket ,buyblackmarket ,unlockblackmarket")
+        return await update.message.reply_text(
+            "📚 Commands:\n"
+            ",start ,name <alias> ,status ,daily ,mine ore <count> ,forge <unit> <count>\n"
+            ",blackmarket ,unlockbm ,buy <item> ,map", parse_mode=ParseMode.MARKDOWN)
 
-    await update.message.reply_text("Unknown command. Use ,help.")
+    await update.message.reply_text("❓ Unknown command. Type ,help")
 
 if __name__ == "__main__":
     app = ApplicationBuilder().token(BOT_TOKEN).build()
