@@ -30,16 +30,16 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     today = date.today()
 
     if text.startswith(",start"):
-        intro = (
-            "🌌 Welcome to SkyHustle!
-"
-            "🔹 Set your callsign: ,name <alias>
-"
-            "🔹 View stats: ,status
-"
-            "🔹 Begin mining: ,mine ore 1
-"
-        )
+      intro = (
+    "🌌 Welcome to SkyHustle!\n"
+    "Centuries from now, Hyperion’s core pulses with raw energy. "
+    "As a fledgling Commander, you must mine ore, bolster defenses, "
+    "and conquer rivals to claim the stars.\n\n"
+    "🔹 Set your callsign: ,name <alias>\n"
+    "🔹 View stats: ,status\n"
+    "🔹 Begin mining: ,mine ore 1\n\n"
+    "Forge your legend!"
+)
         return await update.message.reply_text(intro, parse_mode=ParseMode.MARKDOWN)
 
     if text.startswith(",name"):
