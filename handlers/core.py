@@ -5,17 +5,18 @@ from datetime import datetime, timedelta, date
 from sheet import get_sheet
 import json
 
-# Connect to the sheet
-players_sheet = get_sheet().worksheet("SkyHustle")  # Change to your actual sheet tab name if needed
+# Connect to Google Sheet tab
+players_sheet = get_sheet().worksheet("SkyHustle")  # Match your tab name
 
-# Load player or add if not found
+# Load or create player
 def get_player(cid):
     records = players_sheet.get_all_records()
     for i, row in enumerate(records):
         if str(row["ChatID"]) == str(cid):
-            row["_row"] = i + 2
+            row["_row"] = i + 2  # Row index in sheet
             return row
 
+    # New player structure
     new_player = {
         "ChatID": cid,
         "Name": "",
@@ -32,23 +33,25 @@ def get_player(cid):
     new_player["_row"] = len(records) + 2
     return new_player
 
-# Update a player in the sheet
+# Push player to sheet
 def update_player(p):
-    values = [
-        p["ChatID"],
-        p["Name"],
-        p["Ore"],
-        p["Energy"],
-        p["Credits"],
-        p["Army"],
-        p["Zone"],
-        p["ShieldUntil"],
-        p["DailyStreak"],
-        p["LastDaily"]
-    ]
-    players_sheet.update(f"A{p['_row']}:J{p['_row']}", [values])
+    players_sheet.update(
+        f"A{p['_row']}:J{p['_row']}",
+        [[
+            p["ChatID"],
+            p["Name"],
+            int(p["Ore"]),
+            int(p["Energy"]),
+            int(p["Credits"]),
+            p["Army"],
+            p["Zone"],
+            p["ShieldUntil"],
+            p["DailyStreak"],
+            p["LastDaily"]
+        ]]
+    )
 
-# Handle Telegram messages
+# Handle incoming message
 async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     cid = update.effective_chat.id
     text = update.message.text.strip()
@@ -56,6 +59,7 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     now = datetime.now()
     today = date.today()
 
+    # Intro
     if text.startswith(",start"):
         intro = (
             "🌌 Welcome to SkyHustle!\n"
@@ -69,6 +73,7 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         )
         return await update.message.reply_text(intro, parse_mode=ParseMode.MARKDOWN)
 
+    # Set player name
     if text.startswith(",name"):
         alias = text[6:].strip()
         if not alias:
@@ -77,6 +82,7 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         update_player(p)
         return await update.message.reply_text(f"🚩 Callsign set to {alias}")
 
+    # View player status
     if text.startswith(",status"):
         army = json.loads(p["Army"])
         msg = (
@@ -87,35 +93,46 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         )
         return await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN)
 
+    # Claim daily reward
     if text.startswith(",daily"):
-        if p["LastDaily"] == str(today):
+        last_daily = None
+        try:
+            last_daily = datetime.strptime(p["LastDaily"], "%Y-%m-%d").date() if p["LastDaily"] else None
+        except:
+            last_daily = None
+
+        if str(p["LastDaily"]) == str(today):
             return await update.message.reply_text("🎁 Already claimed today.")
-        last = datetime.strptime(p["LastDaily"], "%Y-%m-%d") if p["LastDaily"] else None
+
         streak = int(p["DailyStreak"])
         p["Credits"] = int(p["Credits"]) + 50
         p["Energy"] = int(p["Energy"]) + 25
-        p["DailyStreak"] = streak + 1 if last and last.date() == today - timedelta(days=1) else 1
+        p["DailyStreak"] = streak + 1 if last_daily == today - timedelta(days=1) else 1
         p["LastDaily"] = str(today)
         update_player(p)
         return await update.message.reply_text(f"🎁 +50 credits, +25 energy. Streak: {p['DailyStreak']} days.")
 
+    # Mine ore
     if text.startswith(",mine"):
         parts = text.split()
-        if len(parts) != 3 or parts[1] != "ore":
+        if len(parts) != 3 or parts[1].lower() != "ore":
             return await update.message.reply_text("⚠ Usage: ,mine ore <count>")
         try:
             count = int(parts[2])
         except:
             return await update.message.reply_text("⚠ Count must be a number.")
+        
         energy = int(p["Energy"])
         if energy < count * 5:
             return await update.message.reply_text("⚠ Not enough energy.")
+        
         ore_gain = 20 * count
         credit_gain = 10 * count
         p["Ore"] = int(p["Ore"]) + ore_gain
-        p["Energy"] = energy - count * 5
+        p["Energy"] = energy - (count * 5)
         p["Credits"] = int(p["Credits"]) + credit_gain
         update_player(p)
         return await update.message.reply_text(f"⛏ Mined {ore_gain} ore. +{credit_gain} credits!")
 
-    await update.message.reply_text("❓ Unknown command. Type ,start or ,status.")
+    # Unknown fallback
+    return await update.message.reply_text("❓ Unknown command. Type ,start or ,status.")
