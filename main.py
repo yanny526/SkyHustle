@@ -11,6 +11,7 @@ items = {}
 zones = {z: None for z in ["Alpha", "Beta", "Gamma", "Delta", "Epsilon"]}
 unit_types = ["scout", "drone", "tank"]
 missions = {}
+factions = {}
 item_defs = {
     "infinityscout1": {"type": "perishable", "desc": "Advanced scout (1 use)"},
     "reviveall": {"type": "perishable", "desc": "Revives all regular units and buildings"},
@@ -81,7 +82,7 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return await update.message.reply_text(
             f"Name: {p['name']}\nOre: {p['ore']}\nEnergy: {p['energy']}\nCredits: {p['credits']}\n"
             f"Refinery Lv{p['refinery_level']} | Lab Lv{p['lab_level']}\nArmy: {p['army']}\n"
-            f"Items: {items_owned}\nShield: {shield}")
+            f"Items: {items_owned}\nFaction: {p['faction'] or 'None'}\nShield: {shield}")
 
     if text.startswith(",daily"):
         if p["last_daily"] == today:
@@ -114,13 +115,83 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         p["achievements"].add("First Ore Mined")
         return await update.message.reply_text(f"Mined {ore_gain} ore. +{10 * count} credits.")
 
+    if text.startswith(",forge"):
+        parts = text.split()
+        if len(parts) != 3 or parts[1] not in unit_types:
+            return await update.message.reply_text("Usage: ,forge <unit> <count>")
+        unit, amt = parts[1], int(parts[2])
+        cost = {"scout": (10, 5), "drone": (15, 10), "tank": (30, 20)}[unit]
+        if p["ore"] < cost[0] * amt or p["credits"] < cost[1] * amt:
+            return await update.message.reply_text("Not enough ore/credits.")
+        p["ore"] -= cost[0] * amt
+        p["credits"] -= cost[1] * amt
+        p["army"][unit] += amt
+        return await update.message.reply_text(f"Forged {amt} {unit}(s).")
+
+    if text.startswith(",use"):
+        parts = text.split()
+        if len(parts) != 2:
+            return await update.message.reply_text("Usage: ,use <item>")
+        success, msg = use_item(p, parts[1])
+        return await update.message.reply_text(msg)
+
+    if text.startswith(",map"):
+        out = "Zone Control:\n"
+        for z, o in zones.items():
+            name = players.get(o, {}).get("name", "Unclaimed")
+            out += f"{z}: {name}\n"
+        return await update.message.reply_text(out)
+
+    if text.startswith(",claim"):
+        parts = text.split()
+        if len(parts) != 2 or parts[1] not in zones:
+            return await update.message.reply_text("Usage: ,claim <zone>")
+        if p["credits"] < 100:
+            return await update.message.reply_text("Need 100 credits.")
+        zones[parts[1]] = cid
+        p["zone"] = parts[1]
+        p["credits"] -= 100
+        return await update.message.reply_text(f"You now control {parts[1]}.")
+
     if text.startswith(",achievements"):
         ach_list = "\n".join(p["achievements"]) if p["achievements"] else "None yet."
         return await update.message.reply_text(f"🏅 Achievements:\n{ach_list}")
 
+    if text.startswith(",faction_create"):
+        parts = text.split()
+        if len(parts) != 2:
+            return await update.message.reply_text("Usage: ,faction_create <name>")
+        fname = parts[1]
+        if fname in factions:
+            return await update.message.reply_text("Faction already exists.")
+        factions[fname] = {"leader": cid, "members": [cid]}
+        p["faction"] = fname
+        return await update.message.reply_text(f"🏴 Created and joined faction: {fname}")
+
+    if text.startswith(",faction_join"):
+        parts = text.split()
+        if len(parts) != 2:
+            return await update.message.reply_text("Usage: ,faction_join <name>")
+        fname = parts[1]
+        if fname not in factions:
+            return await update.message.reply_text("Faction not found.")
+        factions[fname]["members"].append(cid)
+        p["faction"] = fname
+        return await update.message.reply_text(f"🚩 Joined faction: {fname}")
+
+    if text.startswith(",faction_leave"):
+        if not p["faction"]:
+            return await update.message.reply_text("You are not in any faction.")
+        fname = p["faction"]
+        factions[fname]["members"].remove(cid)
+        if not factions[fname]["members"]:
+            del factions[fname]
+        p["faction"] = None
+        return await update.message.reply_text(f"🏳 Left faction: {fname}")
+
     if text.startswith(",help"):
         return await update.message.reply_text(
-            "Commands: ,start ,name ,status ,daily ,mine ,forge ,use ,map ,claim ,achievements"
+            "Commands: ,start ,name ,status ,daily ,mine ,forge ,use ,map ,claim ,achievements ,faction_create ,faction_join ,faction_leave"
         )
 
     await update.message.reply_text("Unknown command. Use ,help.")
