@@ -1,10 +1,9 @@
-# SkyHustle - Phase 11 Upgrade
-# Daily Events System with Rewards
+# SkyHustle - Phase 12: Research System + Tech Tree
 
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
 from telegram.constants import ParseMode
-from datetime import datetime, date, timedelta
+from datetime import datetime, timedelta, date
 import os, json, random
 
 BOT_TOKEN = os.getenv("BOT_TOKEN") or "YOUR_BOT_TOKEN_HERE"
@@ -33,7 +32,9 @@ def make_player():
         "name": "", "zone": None, "shield": None,
         "ore": 0, "energy": 100, "credits": 100, "last_mine": None,
         "spy_level": 0, "refinery_level": 0, "defense_level": 0, "lab_level": 0,
-        "army": {u: 0 for u in unit_types}, "research": {"speed": 0, "armor": 0},
+        "army": {u: 0 for u in unit_types},
+        "research": {"speed": 0, "armor": 0},
+        "researching": None, "research_end": None,
         "wins": 0, "losses": 0, "rank": 0, "daily_streak": 0,
         "last_daily": None, "daily_done": False,
         "faction": None, "achievements": set(), "items": {},
@@ -45,12 +46,6 @@ def get_player(cid):
     if cid not in players:
         players[cid] = make_player()
     return players[cid]
-
-def find_by_name(name):
-    for cid, p in players.items():
-        if p["name"].lower() == name.lower():
-            return cid, p
-    return None, None
 
 def give_item(p, item_id):
     p["items"].setdefault(item_id, 0)
@@ -79,9 +74,9 @@ def new_world_event():
     event_data["type"] = random.choice(["Ore Boost", "Energy Surge", "Credit Windfall"])
     event_data["reward"] = random.randint(50, 150)
 
+# --------- Commands ---------
 async def handle_build(update: Update, ctx: ContextTypes.DEFAULT_TYPE, p):
-    text = update.message.text.strip()
-    parts = text.split()
+    parts = update.message.text.strip().split()
     if len(parts) != 2:
         return await update.message.reply_text("⚙️ Usage: ,build <refinery|lab|defensetower|spycenter>")
     building = parts[1].lower()
@@ -90,10 +85,10 @@ async def handle_build(update: Update, ctx: ContextTypes.DEFAULT_TYPE, p):
     level = p.get(f"{building}_level", 0)
     cost = get_build_cost(building, level + 1)
     if p["credits"] < cost:
-        return await update.message.reply_text(f"💳 Need {cost} credits to upgrade {building} (current level: {level}).")
+        return await update.message.reply_text(f"💳 Need {cost} credits to upgrade {building}.")
     p["credits"] -= cost
     p[f"{building}_level"] = level + 1
-    return await update.message.reply_text(f"🏗️ {building.capitalize()} upgraded to Level {level+1}! (Cost: {cost} credits)")
+    return await update.message.reply_text(f"🏗️ {building.capitalize()} upgraded to Level {level+1}!")
 
 async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     cid = update.effective_chat.id
@@ -109,60 +104,64 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if text.startswith(",name"):
         alias = text[6:].strip()
         if not alias: return await update.message.reply_text("Usage: ,name <alias>")
-        ocid, _ = find_by_name(alias)
-        if ocid and ocid != cid: return await update.message.reply_text("Alias taken.")
         p["name"] = alias
         return await update.message.reply_text(f"Callsign set to {alias}.")
 
     if text.startswith(",status"):
-        shield = p["shield"].strftime("%H:%M:%S") if p["shield"] and now < p["shield"] else "None"
-        items_owned = ", ".join([f"{k} x{v}" for k,v in p["items"].items()]) or "None"
+        research = p.get("research", {})
+        researching = p.get("researching")
+        remaining = ""
+        if researching and p.get("research_end"):
+            end = datetime.fromisoformat(p["research_end"])
+            remaining = f"\n🔬 Researching {researching} (ends in {(end - now).seconds // 60}m)"
         return await update.message.reply_text(
-            f"Name: {p['name']}\nOre: {p['ore']}\nEnergy: {p['energy']}\nCredits: {p['credits']}\n"
-            f"Refinery Lv{p['refinery_level']} | Lab Lv{p['lab_level']} | Defense Lv{p['defense_level']}\n"
-            f"Spy Lv{p['spy_level']}\nArmy: {p['army']}\nItems: {items_owned}\nShield: {shield}"
+            f"👤 {p['name']}\nOre: {p['ore']} | Energy: {p['energy']} | Credits: {p['credits']}\n"
+            f"Research: {research}\n{remaining or ''}"
         )
 
-    if text.startswith(",daily"):
-        if p["last_daily"] == today:
-            return await update.message.reply_text("Already claimed today.")
-        p["credits"] += 50
-        p["energy"] += 20
-        p["daily_streak"] = p["daily_streak"] + 1 if p["last_daily"] == today - timedelta(days=1) else 1
-        p["last_daily"] = today
-        return await update.message.reply_text(f"+50 credits, +20 energy. Streak: {p['daily_streak']} days.")
+    if text.startswith(",tech"):
+        techs = p.get("research", {})
+        lines = [f"🔬 {k}: Lv{v}" for k, v in techs.items()]
+        return await update.message.reply_text("\n".join(lines) or "You have no research yet.")
+
+    if text.startswith(",research"):
+        parts = text.split()
+        if len(parts) != 2:
+            return await update.message.reply_text("Usage: ,research <speed|armor>")
+        if p.get("researching"):
+            return await update.message.reply_text("⏳ You're already researching!")
+        tech = parts[1].lower()
+        if tech not in ["speed", "armor"]:
+            return await update.message.reply_text("Invalid tech. Use: speed or armor")
+        cost = 100 + p["research"].get(tech, 0) * 75
+        duration = timedelta(minutes=5)
+        if p["credits"] < cost:
+            return await update.message.reply_text(f"Not enough credits ({cost} required).")
+        p["credits"] -= cost
+        p["researching"] = tech
+        p["research_end"] = (now + duration).isoformat()
+        return await update.message.reply_text(f"🔬 Researching {tech}! Will complete in {duration.seconds//60} minutes.")
+
+    # Check for completed research
+    if p.get("researching") and p.get("research_end"):
+        end_time = datetime.fromisoformat(p["research_end"])
+        if now >= end_time:
+            tech = p["researching"]
+            p["research"][tech] = p["research"].get(tech, 0) + 1
+            p["researching"] = None
+            p["research_end"] = None
+            await update.message.reply_text(f"✅ {tech.capitalize()} research completed!")
 
     if text.startswith(",mine"):
         parts = text.split()
-        if len(parts) != 3 or parts[1] != "ore":
-            return await update.message.reply_text("Usage: ,mine ore <count>")
-        try:
-            count = int(parts[2])
-        except:
-            return await update.message.reply_text("Count must be a number.")
-        if p["energy"] < count * 5:
-            return await update.message.reply_text("Not enough energy.")
-        if p["last_mine"] and now - p["last_mine"] < timedelta(minutes=2):
-            return await update.message.reply_text("Cooldown active. Wait a bit.")
-        ore_gain = 20 * count + (p["refinery_level"] * 5)
+        if len(parts) != 3: return await update.message.reply_text("Usage: ,mine ore <count>")
+        try: count = int(parts[2])
+        except: return await update.message.reply_text("Count must be number.")
+        if p["energy"] < count * 5: return await update.message.reply_text("Not enough energy.")
+        ore_gain = 20 * count + (p["refinery_level"] * 5) + p["research"].get("speed", 0) * 2
         p["ore"] += ore_gain
         p["energy"] -= count * 5
-        p["credits"] += 10 * count
-        p["last_mine"] = now
-        return await update.message.reply_text(f"Mined {ore_gain} ore. +{10*count} credits.")
-
-    if text.startswith(",forge"):
-        parts = text.split()
-        if len(parts) != 3 or parts[1] not in unit_types:
-            return await update.message.reply_text("Usage: ,forge <unit> <count>")
-        unit, amt = parts[1], int(parts[2])
-        cost = {"scout": (10, 5), "drone": (15, 10), "tank": (30, 20)}[unit]
-        if p["ore"] < cost[0]*amt or p["credits"] < cost[1]*amt:
-            return await update.message.reply_text("Not enough ore/credits.")
-        p["ore"] -= cost[0]*amt
-        p["credits"] -= cost[1]*amt
-        p["army"][unit] += amt
-        return await update.message.reply_text(f"Forged {amt} {unit}(s).")
+        return await update.message.reply_text(f"⛏️ Mined {ore_gain} ore.")
 
     if text.startswith(",use"):
         parts = text.split()
@@ -172,43 +171,26 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return await update.message.reply_text(msg)
 
     if text.startswith(",event"):
-        msg = f"🌍 Today's Event: {event_data['type']}\n🎁 Reward: {event_data['reward']} credits\nUse ,claimevent to collect."
-        return await update.message.reply_text(msg)
+        return await update.message.reply_text(
+            f"🌍 Today's Event: {event_data['type']}\n🎁 Reward: {event_data['reward']} credits"
+        )
 
     if text.startswith(",claimevent"):
         if p.get("event_claimed") == str(today):
             return await update.message.reply_text("✅ Already claimed today's event.")
         p["credits"] += event_data["reward"]
         p["event_claimed"] = str(today)
-        return await update.message.reply_text(f"🎁 Claimed {event_data['reward']} credits from today's event!")
-
-    if text.startswith(",map"):
-        out = "Zone Control:\n"
-        for z, o in zones.items():
-            name = players.get(o, {}).get("name", "Unclaimed")
-            out += f"{z}: {name}\n"
-        return await update.message.reply_text(out)
-
-    if text.startswith(",claim"):
-        parts = text.split()
-        if len(parts) != 2 or parts[1] not in zones:
-            return await update.message.reply_text("Usage: ,claim <zone>")
-        if p["credits"] < 100:
-            return await update.message.reply_text("Need 100 credits.")
-        zones[parts[1]] = cid
-        p["zone"] = parts[1]
-        p["credits"] -= 100
-        return await update.message.reply_text(f"You now control {parts[1]}.")
+        return await update.message.reply_text(f"🎁 You claimed {event_data['reward']} credits.")
 
     if text.startswith(",build"):
         return await handle_build(update, ctx, p)
 
     if text.startswith(",help"):
         return await update.message.reply_text(
-            "Commands: ,start ,name ,status ,daily ,mine ,forge ,use <item> ,event ,claimevent ,map ,claim ,build"
+            "🛠️ Commands: ,start ,name ,status ,mine ,tech ,research ,event ,claimevent ,build ,use"
         )
 
-    await update.message.reply_text("Unknown command. Use ,help.")
+    await update.message.reply_text("❓ Unknown command. Use ,help.")
 
 if __name__ == "__main__":
     app = ApplicationBuilder().token(BOT_TOKEN).build()
