@@ -1,29 +1,28 @@
 from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
-from datetime import datetime
+from datetime import datetime, timedelta, date
 from sheet import get_sheet
 import json
 
 # Connect to the sheet
-players_sheet = get_sheet().worksheet("Sheet1")  # Change to your actual sheet tab name if needed
+players_sheet = get_sheet().worksheet("SkyHustle")  # Change to your actual sheet tab name if needed
 
 # Load player or add if not found
 def get_player(cid):
     records = players_sheet.get_all_records()
     for i, row in enumerate(records):
         if str(row["ChatID"]) == str(cid):
-            row["_row"] = i + 2  # Google Sheets rows start at 1, headers at row 1
+            row["_row"] = i + 2
             return row
 
-    # New player data
     new_player = {
         "ChatID": cid,
         "Name": "",
         "Ore": 0,
         "Energy": 100,
-        "Credits": 0,
-        "Army": '{"scout":0,"tank":0,"drone":0}',
+        "Credits": 100,
+        "Army": json.dumps({"scout": 0, "tank": 0, "drone": 0}),
         "Zone": "",
         "ShieldUntil": "",
         "DailyStreak": 0,
@@ -55,6 +54,7 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
     p = get_player(cid)
     now = datetime.now()
+    today = date.today()
 
     if text.startswith(",start"):
         intro = (
@@ -86,5 +86,36 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             f"📍 Zone: {p['Zone'] or 'None'}"
         )
         return await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN)
+
+    if text.startswith(",daily"):
+        if p["LastDaily"] == str(today):
+            return await update.message.reply_text("🎁 Already claimed today.")
+        last = datetime.strptime(p["LastDaily"], "%Y-%m-%d") if p["LastDaily"] else None
+        streak = int(p["DailyStreak"])
+        p["Credits"] = int(p["Credits"]) + 50
+        p["Energy"] = int(p["Energy"]) + 25
+        p["DailyStreak"] = streak + 1 if last and last.date() == today - timedelta(days=1) else 1
+        p["LastDaily"] = str(today)
+        update_player(p)
+        return await update.message.reply_text(f"🎁 +50 credits, +25 energy. Streak: {p['DailyStreak']} days.")
+
+    if text.startswith(",mine"):
+        parts = text.split()
+        if len(parts) != 3 or parts[1] != "ore":
+            return await update.message.reply_text("⚠ Usage: ,mine ore <count>")
+        try:
+            count = int(parts[2])
+        except:
+            return await update.message.reply_text("⚠ Count must be a number.")
+        energy = int(p["Energy"])
+        if energy < count * 5:
+            return await update.message.reply_text("⚠ Not enough energy.")
+        ore_gain = 20 * count
+        credit_gain = 10 * count
+        p["Ore"] = int(p["Ore"]) + ore_gain
+        p["Energy"] = energy - count * 5
+        p["Credits"] = int(p["Credits"]) + credit_gain
+        update_player(p)
+        return await update.message.reply_text(f"⛏ Mined {ore_gain} ore. +{credit_gain} credits!")
 
     await update.message.reply_text("❓ Unknown command. Type ,start or ,status.")
