@@ -56,6 +56,13 @@ def use_item(p, item_id):
             del p["items"][item_id]
     return True, f"✅ Used item: {item_id}"
 
+def faction_bonus(p):
+    if not p["faction"] or p["faction"] not in factions:
+        return 1.0
+    member_count = len(factions[p["faction"]]["members"])
+    bonus = 1 + (member_count * 0.02)  # 2% bonus per member
+    return bonus
+
 async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     cid = update.effective_chat.id
     text = update.message.text.strip()
@@ -87,13 +94,14 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if text.startswith(",daily"):
         if p["last_daily"] == today:
             return await update.message.reply_text("Already claimed today.")
-        p["credits"] += 50
+        bonus = faction_bonus(p)
+        p["credits"] += int(50 * bonus)
         p["energy"] += 20
         p["daily_streak"] = p["daily_streak"] + 1 if p["last_daily"] == today - timedelta(days=1) else 1
         p["last_daily"] = today
         if p["daily_streak"] >= 10:
             p["achievements"].add("10-Day Streak")
-        return await update.message.reply_text(f"+50 credits, +20 energy. Streak: {p['daily_streak']} days.")
+        return await update.message.reply_text(f"+{int(50*bonus)} credits, +20 energy. Streak: {p['daily_streak']} days.")
 
     if text.startswith(",mine"):
         parts = text.split()
@@ -107,13 +115,14 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             return await update.message.reply_text("Not enough energy.")
         if p["last_mine"] and now - p["last_mine"] < timedelta(minutes=2):
             return await update.message.reply_text("Cooldown active. Wait a bit.")
-        ore_gain = 20 * count + (p["refinery_level"] * 5)
+        bonus = faction_bonus(p)
+        ore_gain = int((20 * count + (p["refinery_level"] * 5)) * bonus)
         p["ore"] += ore_gain
         p["energy"] -= count * 5
-        p["credits"] += 10 * count
+        p["credits"] += int(10 * count * bonus)
         p["last_mine"] = now
         p["achievements"].add("First Ore Mined")
-        return await update.message.reply_text(f"Mined {ore_gain} ore. +{10 * count} credits.")
+        return await update.message.reply_text(f"Mined {ore_gain} ore. +{int(10*count*bonus)} credits.")
 
     if text.startswith(",forge"):
         parts = text.split()
