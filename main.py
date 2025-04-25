@@ -1,4 +1,5 @@
-# SkyHustle - Phase 6: Factions, PvP Ranking, and Map Control
+# SkyHustle - Phase 6 (Polished)
+# Adds Factions, PvP Rank, and Faction Stats
 
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
@@ -9,26 +10,20 @@ import os, json
 BOT_TOKEN = os.getenv("BOT_TOKEN") or "YOUR_BOT_TOKEN_HERE"
 
 players = {}
-items = {}
 zones = {z: None for z in ["Alpha", "Beta", "Gamma", "Delta", "Epsilon"]}
 unit_types = ["scout", "drone", "tank"]
-missions = {}
 factions = {}
-item_defs = {
-    "infinityscout1": {"type": "perishable", "desc": "Advanced scout (1 use)"},
-    "reviveall": {"type": "perishable", "desc": "Revives all regular units and buildings"},
-    "hazmat": {"type": "passive", "desc": "Access Radiation Zones"},
-}
 
+# ------------------- PLAYER SYSTEM -------------------
 def make_player():
     return {
         "name": "", "zone": None, "shield": None,
         "ore": 0, "energy": 100, "credits": 100, "last_mine": None,
-        "spy_level": 0, "refinery_level": 0, "defense_level": 0, "lab_level": 0,
-        "army": {u: 0 for u in unit_types}, "research": {"speed": 0, "armor": 0},
-        "wins": 0, "losses": 0, "rank": 1000, "daily_streak": 0,
-        "last_daily": None, "daily_done": False,
-        "faction": None, "achievements": set(), "items": {}
+        "refinery_level": 0, "lab_level": 0,
+        "army": {u: 0 for u in unit_types},
+        "wins": 0, "losses": 0, "rank": 0,
+        "last_daily": None, "daily_streak": 0,
+        "faction": None, "items": {}
     }
 
 def get_player(cid):
@@ -42,21 +37,29 @@ def find_by_name(name):
             return cid, p
     return None, None
 
-def give_item(p, item_id):
-    p["items"].setdefault(item_id, 0)
-    p["items"][item_id] += 1
+# ------------------- FACTIONS -------------------
+def create_faction(name):
+    if name in factions:
+        return False
+    factions[name] = {"members": [], "bank": 0, "wins": 0, "banner": ""}
+    return True
 
-def use_item(p, item_id):
-    if item_id not in item_defs:
-        return False, "❌ Invalid item."
-    if p["items"].get(item_id, 0) <= 0:
-        return False, "❌ You don't own this item."
-    if item_defs[item_id]["type"] == "perishable":
-        p["items"][item_id] -= 1
-        if p["items"][item_id] == 0:
-            del p["items"][item_id]
-    return True, f"✅ Used item: {item_id}"
+def join_faction(player, name):
+    if name not in factions:
+        return False, "Faction does not exist."
+    if player["faction"]:
+        return False, "You are already in a faction."
+    player["faction"] = name
+    factions[name]["members"].append(player["name"])
+    return True, f"Joined faction {name}."
 
+def leave_faction(player):
+    f = player["faction"]
+    if f and player["name"] in factions[f]["members"]:
+        factions[f]["members"].remove(player["name"])
+    player["faction"] = None
+
+# ------------------- COMMANDS -------------------
 async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     cid = update.effective_chat.id
     text = update.message.text.strip()
@@ -65,59 +68,69 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     today = date.today()
 
     if text.startswith(",start"):
-        return await update.message.reply_text("SkyHustle launched! Use ,name to begin.")
+        return await update.message.reply_text("Welcome to SkyHustle! Use ,name <alias> to get started.")
 
     if text.startswith(",name"):
         alias = text[6:].strip()
-        if not alias: return await update.message.reply_text("Usage: ,name <alias>")
+        if not alias:
+            return await update.message.reply_text("Usage: ,name <alias>")
         ocid, _ = find_by_name(alias)
-        if ocid and ocid != cid: return await update.message.reply_text("Alias taken.")
+        if ocid and ocid != cid:
+            return await update.message.reply_text("❌ Alias taken.")
         p["name"] = alias
         return await update.message.reply_text(f"Callsign set to {alias}.")
 
     if text.startswith(",status"):
-        shield = p["shield"].strftime("%H:%M:%S") if p["shield"] and now < p["shield"] else "None"
-        items_owned = ", ".join([f"{k} x{v}" for k,v in p["items"].items()]) or "None"
         return await update.message.reply_text(
-            f"Name: {p['name']}\nOre: {p['ore']}\nEnergy: {p['energy']}\nCredits: {p['credits']}\n"
-            f"Rank: {p['rank']} | Faction: {p['faction'] or 'None'}\n"
-            f"Army: {p['army']}\nItems: {items_owned}\nShield: {shield}")
+            f"📊 Name: {p['name'] or 'Commander'}\nFaction: {p['faction'] or 'None'}\n"
+            f"Ore: {p['ore']}  Energy: {p['energy']}  Credits: {p['credits']}\n"
+            f"Refinery Lv{p['refinery_level']} | Lab Lv{p['lab_level']}\n"
+            f"Rank: {p['rank']} (W: {p['wins']} / L: {p['losses']})\n"
+            f"Army: {p['army']}"
+        )
+
+    if text.startswith(",daily"):
+        if p["last_daily"] == today:
+            return await update.message.reply_text("🎁 Already claimed today.")
+        p["credits"] += 50
+        p["energy"] += 25
+        p["daily_streak"] = p["daily_streak"] + 1 if p["last_daily"] == today - timedelta(days=1) else 1
+        p["last_daily"] = today
+        return await update.message.reply_text(f"🎁 +50 credits, +25 energy. Streak: {p['daily_streak']} days.")
 
     if text.startswith(",faction"):
         parts = text.split()
         if len(parts) < 2:
             return await update.message.reply_text("Usage: ,faction create/join/leave <name>")
-        cmd = parts[1].lower()
+        cmd = parts[1]
         if cmd == "create" and len(parts) == 3:
-            name = parts[2]
-            if name in factions:
-                return await update.message.reply_text("❌ Faction already exists.")
-            factions[name] = {"members": set([cid])}
-            p["faction"] = name
-            return await update.message.reply_text(f"🏳️ Created and joined faction {name}.")
+            if create_faction(parts[2]):
+                p["faction"] = parts[2]
+                factions[parts[2]]["members"].append(p["name"])
+                return await update.message.reply_text(f"✅ Faction {parts[2]} created.")
+            return await update.message.reply_text("❌ Faction name already exists.")
         elif cmd == "join" and len(parts) == 3:
-            name = parts[2]
-            if name not in factions:
-                return await update.message.reply_text("❌ No such faction.")
-            factions[name]["members"].add(cid)
-            p["faction"] = name
-            return await update.message.reply_text(f"🤝 Joined faction {name}.")
+            success, msg = join_faction(p, parts[2])
+            return await update.message.reply_text(("✅ " if success else "❌ ") + msg)
         elif cmd == "leave":
-            f = p["faction"]
-            if f and cid in factions[f]["members"]:
-                factions[f]["members"].remove(cid)
-            p["faction"] = None
-            return await update.message.reply_text("🚪 You left your faction.")
+            leave_faction(p)
+            return await update.message.reply_text("👋 You left your faction.")
+        return await update.message.reply_text("❌ Invalid faction command.")
 
     if text.startswith(",rank"):
-        top = sorted(players.items(), key=lambda x: x[1]["rank"], reverse=True)[:5]
-        out = "🏆 Top 5 Commanders:\n"
-        for i, (_, pl) in enumerate(top, 1):
-            out += f"{i}. {pl['name'] or 'Unnamed'} – {pl['rank']} RP\n"
-        return await update.message.reply_text(out)
+        top = sorted(players.values(), key=lambda x: x["rank"], reverse=True)[:5]
+        board = "🏆 Top Commanders:\n" + "\n".join([
+            f"{i+1}. {pl['name']} - {pl['rank']} RP" for i, pl in enumerate(top)
+        ])
+        return await update.message.reply_text(board)
 
-    return await update.message.reply_text("Unknown command. Use ,status ,faction or ,rank")
+    if text.startswith(",help"):
+        return await update.message.reply_text(
+            "Commands: ,start ,name ,status ,daily ,faction create/join/leave <name> ,rank")
 
+    await update.message.reply_text("❓ Unknown command. Use ,help")
+
+# ------------------- START BOT -------------------
 if __name__ == "__main__":
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
