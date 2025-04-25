@@ -1,10 +1,8 @@
-# SkyHustle - Phase 13: Combat Modifiers from Tech
-
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
 from telegram.constants import ParseMode
-from datetime import datetime, timedelta, date
-import os, json, random
+from datetime import datetime, date, timedelta
+import os, json
 
 BOT_TOKEN = os.getenv("BOT_TOKEN") or "YOUR_BOT_TOKEN_HERE"
 
@@ -13,16 +11,8 @@ items = {}
 zones = {z: None for z in ["Alpha", "Beta", "Gamma", "Delta", "Epsilon"]}
 unit_types = ["scout", "drone", "tank"]
 missions = {}
-event_data = {"type": None, "reward": 0, "day": None}
-building_costs = {
-    "refinery": {"base_cost": 100},
-    "lab": {"base_cost": 150},
-    "defensetower": {"base_cost": 120},
-    "spycenter": {"base_cost": 130},
-}
 item_defs = {
     "infinityscout1": {"type": "perishable", "desc": "Advanced scout (1 use)"},
-    "infinityscout2": {"type": "perishable", "desc": "Super scout (better detection)"},
     "reviveall": {"type": "perishable", "desc": "Revives all regular units and buildings"},
     "hazmat": {"type": "passive", "desc": "Access Radiation Zones"},
 }
@@ -32,20 +22,23 @@ def make_player():
         "name": "", "zone": None, "shield": None,
         "ore": 0, "energy": 100, "credits": 100, "last_mine": None,
         "spy_level": 0, "refinery_level": 0, "defense_level": 0, "lab_level": 0,
-        "army": {u: 0 for u in unit_types},
-        "research": {"speed": 0, "armor": 0},
-        "researching": None, "research_end": None,
+        "army": {u: 0 for u in unit_types}, "research": {"speed": 0, "armor": 0},
         "wins": 0, "losses": 0, "rank": 0, "daily_streak": 0,
         "last_daily": None, "daily_done": False,
         "faction": None, "achievements": set(), "items": {},
-        "blackmarket_unlocked": False,
-        "event_claimed": None
+        "blackmarket_unlocked": False
     }
 
 def get_player(cid):
     if cid not in players:
         players[cid] = make_player()
     return players[cid]
+
+def find_by_name(name):
+    for cid, p in players.items():
+        if p["name"].lower() == name.lower():
+            return cid, p
+    return None, None
 
 def give_item(p, item_id):
     p["items"].setdefault(item_id, 0)
@@ -62,93 +55,75 @@ def use_item(p, item_id):
             del p["items"][item_id]
     return True, f"✅ Used item: {item_id}"
 
-def get_build_cost(building, level):
-    base = building_costs[building]["base_cost"]
-    return int(base * (1.5 ** (level - 1)))
-
-def new_world_event():
-    today = date.today()
-    if event_data["day"] == today:
-        return
-    event_data["day"] = today
-    event_data["type"] = random.choice(["Ore Boost", "Energy Surge", "Credit Windfall"])
-    event_data["reward"] = random.randint(50, 150)
-
-def calculate_power(player):
-    army = player["army"]
-    base = army["scout"] * 5 + army["drone"] * 10 + army["tank"] * 20
-    armor_bonus = player["research"].get("armor", 0) * 0.1
-    return int(base * (1 + armor_bonus))
-
-async def handle_build(update: Update, ctx: ContextTypes.DEFAULT_TYPE, p):
-    parts = update.message.text.strip().split()
-    if len(parts) != 2:
-        return await update.message.reply_text("⚙️ Usage: ,build <refinery|lab|defensetower|spycenter>")
-    building = parts[1].lower()
-    if building not in building_costs:
-        return await update.message.reply_text("⚙️ Invalid building.")
-    level = p.get(f"{building}_level", 0)
-    cost = get_build_cost(building, level + 1)
-    if p["credits"] < cost:
-        return await update.message.reply_text(f"💳 Need {cost} credits to upgrade {building}.")
-    p["credits"] -= cost
-    p[f"{building}_level"] = level + 1
-    return await update.message.reply_text(f"🏗️ {building.capitalize()} upgraded to Level {level+1}!")
-
 async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     cid = update.effective_chat.id
     text = update.message.text.strip()
     p = get_player(cid)
     now = datetime.now()
     today = date.today()
-    new_world_event()
 
     if text.startswith(",start"):
         return await update.message.reply_text("SkyHustle launched! Use ,name to begin.")
 
     if text.startswith(",name"):
         alias = text[6:].strip()
-        if not alias: return await update.message.reply_text("Usage: ,name <alias>")
+        if not alias:
+            return await update.message.reply_text("Usage: ,name <alias>")
+        ocid, _ = find_by_name(alias)
+        if ocid and ocid != cid:
+            return await update.message.reply_text("Alias taken.")
         p["name"] = alias
         return await update.message.reply_text(f"Callsign set to {alias}.")
 
     if text.startswith(",status"):
-        power = calculate_power(p)
+        shield = p["shield"].strftime("%H:%M:%S") if p["shield"] and now < p["shield"] else "None"
+        items_owned = ", ".join([f"{k} x{v}" for k, v in p["items"].items()]) or "None"
         return await update.message.reply_text(
-            f"👤 {p['name']}
-Ore: {p['ore']} | Energy: {p['energy']} | Credits: {p['credits']}
-"
-            f"Research: {p['research']}\n🛡 Power: {power}"
-        )
+            f"Name: {p['name']}\nOre: {p['ore']}\nEnergy: {p['energy']}\nCredits: {p['credits']}\n"
+            f"Refinery Lv{p['refinery_level']} | Lab Lv{p['lab_level']}\nArmy: {p['army']}\n"
+            f"Items: {items_owned}\nShield: {shield}")
 
-    if text.startswith(",fight"):
+    if text.startswith(",daily"):
+        if p["last_daily"] == today:
+            return await update.message.reply_text("Already claimed today.")
+        p["credits"] += 50
+        p["energy"] += 20
+        p["daily_streak"] = p["daily_streak"] + 1 if p["last_daily"] == today - timedelta(days=1) else 1
+        p["last_daily"] = today
+        if p["daily_streak"] >= 10:
+            p["achievements"].add("10-Day Streak")
+        return await update.message.reply_text(f"+50 credits, +20 energy. Streak: {p['daily_streak']} days.")
+
+    if text.startswith(",mine"):
         parts = text.split()
-        if len(parts) != 2:
-            return await update.message.reply_text("Usage: ,fight <opponent_name>")
-        opponent_name = parts[1].lower()
-        opponent = None
-        for other in players.values():
-            if other["name"].lower() == opponent_name:
-                opponent = other
-                break
-        if not opponent:
-            return await update.message.reply_text("❌ Opponent not found.")
-        my_power = calculate_power(p)
-        opp_power = calculate_power(opponent)
-        result = "won" if my_power >= opp_power else "lost"
-        return await update.message.reply_text(
-            f"⚔️ You {result}!
-Your Power: {my_power} vs {opponent['name']}'s Power: {opp_power}")
+        if len(parts) != 3 or parts[1] != "ore":
+            return await update.message.reply_text("Usage: ,mine ore <count>")
+        try:
+            count = int(parts[2])
+        except:
+            return await update.message.reply_text("Count must be a number.")
+        if p["energy"] < count * 5:
+            return await update.message.reply_text("Not enough energy.")
+        if p["last_mine"] and now - p["last_mine"] < timedelta(minutes=2):
+            return await update.message.reply_text("Cooldown active. Wait a bit.")
+        ore_gain = 20 * count + (p["refinery_level"] * 5)
+        p["ore"] += ore_gain
+        p["energy"] -= count * 5
+        p["credits"] += 10 * count
+        p["last_mine"] = now
+        p["achievements"].add("First Ore Mined")
+        return await update.message.reply_text(f"Mined {ore_gain} ore. +{10 * count} credits.")
 
-    if text.startswith(",tech"):
-        return await update.message.reply_text(
-            f"🔬 Tech: {p['research']}\nCurrently Researching: {p.get('researching') or 'None'}")
+    if text.startswith(",achievements"):
+        ach_list = "\n".join(p["achievements"]) if p["achievements"] else "None yet."
+        return await update.message.reply_text(f"🏅 Achievements:\n{ach_list}")
 
     if text.startswith(",help"):
         return await update.message.reply_text(
-            "Commands: ,start ,name ,status ,mine ,research ,tech ,build ,fight")
+            "Commands: ,start ,name ,status ,daily ,mine ,forge ,use ,map ,claim ,achievements"
+        )
 
-    await update.message.reply_text("❓ Unknown command. Use ,help.")
+    await update.message.reply_text("Unknown command. Use ,help.")
 
 if __name__ == "__main__":
     app = ApplicationBuilder().token(BOT_TOKEN).build()
