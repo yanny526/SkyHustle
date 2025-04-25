@@ -1,4 +1,4 @@
-# SkyHustle - Phase 12: Research System + Tech Tree
+# SkyHustle - Phase 13: Combat Modifiers from Tech
 
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
@@ -74,7 +74,12 @@ def new_world_event():
     event_data["type"] = random.choice(["Ore Boost", "Energy Surge", "Credit Windfall"])
     event_data["reward"] = random.randint(50, 150)
 
-# --------- Commands ---------
+def calculate_power(player):
+    army = player["army"]
+    base = army["scout"] * 5 + army["drone"] * 10 + army["tank"] * 20
+    armor_bonus = player["research"].get("armor", 0) * 0.1
+    return int(base * (1 + armor_bonus))
+
 async def handle_build(update: Update, ctx: ContextTypes.DEFAULT_TYPE, p):
     parts = update.message.text.strip().split()
     if len(parts) != 2:
@@ -108,87 +113,40 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return await update.message.reply_text(f"Callsign set to {alias}.")
 
     if text.startswith(",status"):
-        research = p.get("research", {})
-        researching = p.get("researching")
-        remaining = ""
-        if researching and p.get("research_end"):
-            end = datetime.fromisoformat(p["research_end"])
-            remaining = f"\n🔬 Researching {researching} (ends in {(end - now).seconds // 60}m)"
+        power = calculate_power(p)
         return await update.message.reply_text(
-            f"👤 {p['name']}\nOre: {p['ore']} | Energy: {p['energy']} | Credits: {p['credits']}\n"
-            f"Research: {research}\n{remaining or ''}"
+            f"👤 {p['name']}
+Ore: {p['ore']} | Energy: {p['energy']} | Credits: {p['credits']}
+"
+            f"Research: {p['research']}\n🛡 Power: {power}"
         )
+
+    if text.startswith(",fight"):
+        parts = text.split()
+        if len(parts) != 2:
+            return await update.message.reply_text("Usage: ,fight <opponent_name>")
+        opponent_name = parts[1].lower()
+        opponent = None
+        for other in players.values():
+            if other["name"].lower() == opponent_name:
+                opponent = other
+                break
+        if not opponent:
+            return await update.message.reply_text("❌ Opponent not found.")
+        my_power = calculate_power(p)
+        opp_power = calculate_power(opponent)
+        result = "won" if my_power >= opp_power else "lost"
+        return await update.message.reply_text(
+            f"⚔️ You {result}!
+Your Power: {my_power} vs {opponent['name']}'s Power: {opp_power}")
 
     if text.startswith(",tech"):
-        techs = p.get("research", {})
-        lines = [f"🔬 {k}: Lv{v}" for k, v in techs.items()]
-        return await update.message.reply_text("\n".join(lines) or "You have no research yet.")
-
-    if text.startswith(",research"):
-        parts = text.split()
-        if len(parts) != 2:
-            return await update.message.reply_text("Usage: ,research <speed|armor>")
-        if p.get("researching"):
-            return await update.message.reply_text("⏳ You're already researching!")
-        tech = parts[1].lower()
-        if tech not in ["speed", "armor"]:
-            return await update.message.reply_text("Invalid tech. Use: speed or armor")
-        cost = 100 + p["research"].get(tech, 0) * 75
-        duration = timedelta(minutes=5)
-        if p["credits"] < cost:
-            return await update.message.reply_text(f"Not enough credits ({cost} required).")
-        p["credits"] -= cost
-        p["researching"] = tech
-        p["research_end"] = (now + duration).isoformat()
-        return await update.message.reply_text(f"🔬 Researching {tech}! Will complete in {duration.seconds//60} minutes.")
-
-    # Check for completed research
-    if p.get("researching") and p.get("research_end"):
-        end_time = datetime.fromisoformat(p["research_end"])
-        if now >= end_time:
-            tech = p["researching"]
-            p["research"][tech] = p["research"].get(tech, 0) + 1
-            p["researching"] = None
-            p["research_end"] = None
-            await update.message.reply_text(f"✅ {tech.capitalize()} research completed!")
-
-    if text.startswith(",mine"):
-        parts = text.split()
-        if len(parts) != 3: return await update.message.reply_text("Usage: ,mine ore <count>")
-        try: count = int(parts[2])
-        except: return await update.message.reply_text("Count must be number.")
-        if p["energy"] < count * 5: return await update.message.reply_text("Not enough energy.")
-        ore_gain = 20 * count + (p["refinery_level"] * 5) + p["research"].get("speed", 0) * 2
-        p["ore"] += ore_gain
-        p["energy"] -= count * 5
-        return await update.message.reply_text(f"⛏️ Mined {ore_gain} ore.")
-
-    if text.startswith(",use"):
-        parts = text.split()
-        if len(parts) != 2:
-            return await update.message.reply_text("Usage: ,use <item>")
-        success, msg = use_item(p, parts[1])
-        return await update.message.reply_text(msg)
-
-    if text.startswith(",event"):
         return await update.message.reply_text(
-            f"🌍 Today's Event: {event_data['type']}\n🎁 Reward: {event_data['reward']} credits"
-        )
-
-    if text.startswith(",claimevent"):
-        if p.get("event_claimed") == str(today):
-            return await update.message.reply_text("✅ Already claimed today's event.")
-        p["credits"] += event_data["reward"]
-        p["event_claimed"] = str(today)
-        return await update.message.reply_text(f"🎁 You claimed {event_data['reward']} credits.")
-
-    if text.startswith(",build"):
-        return await handle_build(update, ctx, p)
+            f"🔬 Tech: {p['research']}\nCurrently Researching: {p.get('researching') or 'None'}")
 
     if text.startswith(",help"):
         return await update.message.reply_text(
-            "🛠️ Commands: ,start ,name ,status ,mine ,tech ,research ,event ,claimevent ,build ,use"
-        )
+            "Commands: ,start ,name ,status ,mine ,research ,tech ,build ,fight")
 
     await update.message.reply_text("❓ Unknown command. Use ,help.")
 
