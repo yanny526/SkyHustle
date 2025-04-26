@@ -314,6 +314,45 @@ if text.startswith(",rankings"):
         ranking_msg += f"{idx}. {name} — {wins}W/{losses}L\n"
 
     return await update.message.reply_text(ranking_msg, parse_mode=ParseMode.MARKDOWN)
+if text.startswith(",achievements"):
+    # Achievements based on total Wins
+    wins = p.get("Wins", 0)
+    if wins >= 100:
+        badge = "🌟 *Galactic Hero* (100+ Wins)"
+    elif wins >= 50:
+        badge = "🔥 *Battle Commander* (50+ Wins)"
+    elif wins >= 20:
+        badge = "⚔️ *Skirmisher* (20+ Wins)"
+    elif wins >= 10:
+        badge = "🛡 *Survivor* (10+ Wins)"
+    else:
+        badge = "🧱 *Recruit* (<10 Wins)"
+
+    return await update.message.reply_text(
+        f"🏅 Your Achievement Badge:\n{badge}",
+        parse_mode=ParseMode.MARKDOWN
+    )
+
+if text.startswith(",prestige"):
+    if p.get("Wins", 0) < 100:
+        return await update.message.reply_text("🔒 You need 100+ Wins to Prestige!")
+
+    # Reset major stats but give Prestige Title
+    p["Ore"] = 0
+    p["Energy"] = 100
+    p["Credits"] = 500
+    p["Army"] = {"scout": 0, "drone": 0, "tank": 0}
+    p["Zone"] = ""
+    p["ShieldUntil"] = ""
+    p["Wins"] = 0
+    p["Losses"] = 0
+    p["Prestige"] = p.get("Prestige", 0) + 1
+    save_player(p)
+
+    return await update.message.reply_text(
+        f"🌌 Prestige complete! You are now Prestige Level {p['Prestige']}!",
+        parse_mode=ParseMode.MARKDOWN
+    )
 
    if text.startswith(",use"):
     parts = text.split()
