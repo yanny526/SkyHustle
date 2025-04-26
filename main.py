@@ -361,6 +361,29 @@ if text.startswith(",missions"):
     )
     await update.message.reply_text(daily_missions + "\n\n" + weekly_missions, parse_mode=ParseMode.MARKDOWN)
     return
+if text.startswith(",rank"):
+    players = players_sheet.get_all_records()
+    player_list = sorted(players, key=lambda x: int(x.get("Wins", 0)) - int(x.get("Losses", 0)), reverse=True)
+
+    rank_position = 1
+    for pl in player_list:
+        if str(pl["ChatID"]) == str(cid):
+            break
+        rank_position += 1
+
+    await update.message.reply_text(f"🏅 Your rank: {rank_position} / {len(player_list)} players.")
+    return
+
+if text.startswith(",leaderboard"):
+    players = players_sheet.get_all_records()
+    player_list = sorted(players, key=lambda x: int(x.get("Wins", 0)) - int(x.get("Losses", 0)), reverse=True)
+
+    board = "🏆 *Top 5 Commanders:*\n"
+    for i, pl in enumerate(player_list[:5], start=1):
+        board += f"{i}. {pl['Name'] or 'Unknown'} (Wins: {pl.get('Wins',0)}, Losses: {pl.get('Losses',0)})\n"
+
+    await update.message.reply_text(board, parse_mode=ParseMode.MARKDOWN)
+    return
 
     await update.message.reply_text("❓ Unknown command. Type ,help for available actions.")
     ### BEGIN PART 3: Buildings, Research, Zones
