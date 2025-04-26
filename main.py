@@ -126,6 +126,19 @@ def start_new_season():
     records = players_sheet.get_all_records()
     for row_idx, record in enumerate(records, start=2):
         players_sheet.update(f"N{row_idx}:O{row_idx}", [[0, 0]])  # N: Wins, O: Losses
+async def use_item(p, item, update):
+    if item == "reviveall":
+        # Revive all non-BlackMarket units
+        revived = 0
+        for unit in p["Army"]:
+            p["Army"][unit] += 5  # Revive 5 units each
+            revived += 5
+        save_player(p)
+        return await update.message.reply_text(f"🧬 Revived {revived} units!")
+    elif item == "infinityscout1":
+        return await update.message.reply_text("🛰 InfinityScout launched! Enemy scan complete (RP only).")
+    else:
+        return await update.message.reply_text("❓ Unknown or unusable item.")
 
 async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     cid = update.effective_chat.id
@@ -255,10 +268,14 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         save_player(p)
         return await update.message.reply_text(f"✅ Bought {item}!")
 
-    if text.startswith(",use"):
-        parts = text.split()
-        if len(parts) != 2:
-            return await update.message.reply_text("Usage: ,use <item>")
+   if text.startswith(",use"):
+    parts = text.split()
+    if len(parts) != 2:
+        return await update.message.reply_text("🧪 Usage: ,use <item>")
+    item_id = parts[1]
+    await use_item(p, item_id, update)
+    return
+
         item = parts[1]
         items_owned = json.loads(p["Items"])
         if items_owned.get(item, 0) <= 0:
