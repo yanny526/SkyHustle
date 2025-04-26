@@ -44,8 +44,8 @@ def update_player(p):
         p["LastDaily"], p["BlackMarketUnlocked"], p["Items"]
     ]])
 async def attack_player(attacker, defender, update):
-    attacker_power = sum(attacker["Army"].values()) + attacker["RefineryLevel"] * 5
-    defender_power = sum(defender["Army"].values()) + defender["RefineryLevel"] * 5
+    attacker_power = sum(attacker["Army"].values()) + (attacker.get("RefineryLevel", 0) * 5)
+    defender_power = sum(defender["Army"].values()) + (defender.get("RefineryLevel", 0) * 5)
 
     if attacker_power == 0:
         return await update.message.reply_text("⚠️ You have no units to attack with!")
@@ -53,20 +53,26 @@ async def attack_player(attacker, defender, update):
     if defender_power == 0:
         return await update.message.reply_text("🎯 Enemy has no defenses! Easy win!")
 
+    battle_summary = f"⚔️ *Battle Summary:*\n"
+    battle_summary += f"👨‍🚀 {attacker['Name']} Power: {attacker_power}\n"
+    battle_summary += f"🛡 {defender['Name']} Power: {defender_power}\n"
+
     if attacker_power > defender_power:
         reward_credits = 50
         attacker["Credits"] += reward_credits
         attacker["Wins"] += 1
         defender["Losses"] += 1
-        await update.message.reply_text(f"🏆 Victory! You plundered {reward_credits} credits!")
+        outcome = f"🏆 *Victory!* You plundered +{reward_credits} credits!"
     else:
         loss_credits = 20
         attacker["Credits"] = max(0, attacker["Credits"] - loss_credits)
         attacker["Losses"] += 1
         defender["Wins"] += 1
-        await update.message.reply_text(f"❌ Defeat... you lost {loss_credits} credits.")
+        outcome = f"❌ *Defeat!* You lost {loss_credits} credits."
 
-    # Minor troop losses after battle (simulate real damage)
+    battle_summary += f"\n\n{outcome}"
+
+    # Minor troop losses for both
     for unit in attacker["Army"]:
         attacker["Army"][unit] = max(0, attacker["Army"][unit] - 1)
     for unit in defender["Army"]:
@@ -74,6 +80,9 @@ async def attack_player(attacker, defender, update):
 
     save_player(attacker)
     save_player(defender)
+
+    return await update.message.reply_text(battle_summary, parse_mode=ParseMode.MARKDOWN)
+
 
 # Add command inside handle_message
 if text.startswith(",attack"):
@@ -292,6 +301,19 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         p["Items"] = json.dumps(items_owned)
         save_player(p)
         return await update.message.reply_text(f"✅ Bought {item}!")
+        
+if text.startswith(",rankings"):
+    records = players_sheet.get_all_records()
+    ranked = sorted(records, key=lambda x: (x.get("Wins", 0) - x.get("Losses", 0)), reverse=True)
+    
+    ranking_msg = "🏆 *SkyHustle Global Rankings:*\n\n"
+    for idx, player in enumerate(ranked[:10], start=1):
+        name = player.get("Name", "Unknown")
+        wins = player.get("Wins", 0)
+        losses = player.get("Losses", 0)
+        ranking_msg += f"{idx}. {name} — {wins}W/{losses}L\n"
+
+    return await update.message.reply_text(ranking_msg, parse_mode=ParseMode.MARKDOWN)
 
    if text.startswith(",use"):
     parts = text.split()
@@ -631,6 +653,29 @@ if text.startswith(",leaderboard"):
                 owner_name = "Unclaimed"
             output += f"▫️ {zone}: {owner_name}\n"
         return await update.message.reply_text(output, parse_mode=ParseMode.MARKDOWN)
+if text.startswith(",claimzone"):
+    parts = text.split()
+    if len(parts) != 2:
+        return await update.message.reply_text("🗺 Usage: ,claimzone <zone>")
+    zone = parts[1].capitalize()
+
+    if zone not in zones:
+        return await update.message.reply_text("🚫 Zone not found.")
+
+    # Check ownership
+    current_owner = zones.get(zone)
+    if current_owner and current_owner != p["ChatID"]:
+        return await update.message.reply_text("🛡 Zone already occupied!")
+
+    if p["Credits"] < 500:
+        return await update.message.reply_text("💳 Need 500 credits to claim.")
+
+    p["Credits"] -= 500
+    p["Zone"] = zone
+    zones[zone] = p["ChatID"]
+
+    save_player(p)
+    return await update.message.reply_text(f"✅ You now control {zone} zone!")
 
     if text.startswith(",claim"):
         parts = text.split()
