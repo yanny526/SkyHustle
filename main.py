@@ -43,6 +43,89 @@ def update_player(p):
         p["Army"], p["Zone"], p["ShieldUntil"], p["DailyStreak"],
         p["LastDaily"], p["BlackMarketUnlocked"], p["Items"]
     ]])
+async def attack_player(attacker, defender, update):
+    attacker_power = sum(attacker["Army"].values()) + attacker["RefineryLevel"] * 5
+    defender_power = sum(defender["Army"].values()) + defender["RefineryLevel"] * 5
+
+    if attacker_power == 0:
+        return await update.message.reply_text("⚠️ You have no units to attack with!")
+
+    if defender_power == 0:
+        return await update.message.reply_text("🎯 Enemy has no defenses! Easy win!")
+
+    if attacker_power > defender_power:
+        reward_credits = 50
+        attacker["Credits"] += reward_credits
+        attacker["Wins"] += 1
+        defender["Losses"] += 1
+        await update.message.reply_text(f"🏆 Victory! You plundered {reward_credits} credits!")
+    else:
+        loss_credits = 20
+        attacker["Credits"] = max(0, attacker["Credits"] - loss_credits)
+        attacker["Losses"] += 1
+        defender["Wins"] += 1
+        await update.message.reply_text(f"❌ Defeat... you lost {loss_credits} credits.")
+
+    # Minor troop losses after battle (simulate real damage)
+    for unit in attacker["Army"]:
+        attacker["Army"][unit] = max(0, attacker["Army"][unit] - 1)
+    for unit in defender["Army"]:
+        defender["Army"][unit] = max(0, defender["Army"][unit] - 1)
+
+    save_player(attacker)
+    save_player(defender)
+
+# Add command inside handle_message
+if text.startswith(",attack"):
+    parts = text.split()
+    if len(parts) != 2:
+        return await update.message.reply_text("⚔️ Usage: ,attack <enemy alias>")
+    enemy_alias = parts[1]
+    target_row = find_player_by_name(enemy_alias)
+    if not target_row:
+        return await update.message.reply_text("🎯 Target not found!")
+    if target_row["ChatID"] == p["ChatID"]:
+        return await update.message.reply_text("🤔 You can't attack yourself!")
+
+    await attack_player(p, target_row, update)
+    return
+def get_faction_bonus(p):
+    if p["Faction"] == "Solaris":
+        return {"attack": 5, "defense": 0}
+    if p["Faction"] == "Eclipse":
+        return {"attack": 0, "defense": 5}
+    if p["Faction"] == "Voidborn":
+        return {"attack": 2, "defense": 2}
+    return {"attack": 0, "defense": 0}
+ def black_market_price(item_id, level=1):
+    # Dynamic pricing model
+    base_prices = {
+        "infinityscout": 100,
+        "reviveall": 500,
+        "hazmat": 250
+    }
+    return base_prices.get(item_id, 100) * level
+
+def upgrade_black_market_item(p, item_id):
+    # Upgrade perishable items (example for scouts)
+    current = p["Items"].get(item_id+"1", 0)
+    if current == 0:
+        return False, "❌ You don't own the base version yet."
+
+    upgrade_cost = black_market_price(item_id, 2)
+    if p["Credits"] < upgrade_cost:
+        return False, "💳 Not enough credits to upgrade."
+
+    p["Credits"] -= upgrade_cost
+    p["Items"].pop(item_id+"1")
+    p["Items"][item_id+"2"] = 1
+    return True, "🛠️ Successfully upgraded to level 2!"
+   
+def start_new_season():
+    # Reset all player win/loss for fresh rankings
+    records = players_sheet.get_all_records()
+    for row_idx, record in enumerate(records, start=2):
+        players_sheet.update(f"N{row_idx}:O{row_idx}", [[0, 0]])  # N: Wins, O: Losses
 
 async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     cid = update.effective_chat.id
@@ -85,16 +168,16 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN)
 
     if text.startswith(",daily"):
-        if p["LastDaily"] == str(today):
-            return await update.message.reply_text("🎁 Already claimed today.")
-        last = datetime.strptime(p["LastDaily"], "%Y-%m-%d") if p["LastDaily"] else None
-        streak = int(p["DailyStreak"])
-        p["Credits"] = int(p["Credits"]) + 50
-        p["Energy"] = int(p["Energy"]) + 30
-        p["DailyStreak"] = streak + 1 if last and last.date() == today - timedelta(days=1) else 1
-        p["LastDaily"] = str(today)
-        update_player(p)
-        return await update.message.reply_text(f"🎁 Claimed +50 Credits, +30 Energy! Streak: {p['DailyStreak']} days.")
+    if p["LastDaily"] == str(date.today()):
+        return await update.message.reply_text("🎁 Already claimed today.")
+    reward = 50 + (p["DailyStreak"] * 5)  # Increase reward over streak
+    p["Credits"] += reward
+    p["Energy"] = min(100, p["Energy"] + 20)
+    p["DailyStreak"] += 1
+    p["LastDaily"] = str(date.today())
+    save_player(p)
+    return await update.message.reply_text(f"🎁 Daily reward: +{reward} credits, +20 energy! (Streak: {p['DailyStreak']} days)")
+
 
     if text.startswith(",mine"):
         parts = text.split()
@@ -221,6 +304,47 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             "`,help` - Show this help list",
             parse_mode=ParseMode.MARKDOWN
         )
+if text.startswith(",blackmarket"):
+    if not p.get("BlackMarketUnlocked"):
+        return await update.message.reply_text("🔒 Black Market locked. Unlock it first.")
+    shop = (
+        "🖤 *Black Market Deals:*\n"
+        "`buy infinityscout1` - 100 credits\n"
+        "`buy reviveall` - 500 credits\n"
+        "`buy hazmat` - 250 credits\n"
+        "\nUse `,buy <item>` to purchase."
+    )
+    return await update.message.reply_text(shop, parse_mode=ParseMode.MARKDOWN)
+
+if text.startswith(",buy"):
+    parts = text.split()
+    if len(parts) != 2:
+        return await update.message.reply_text("🛒 Usage: ,buy <item>")
+    item = parts[1]
+    if not p.get("BlackMarketUnlocked"):
+        return await update.message.reply_text("🔒 Unlock Black Market access first.")
+
+    price = black_market_price(item.replace("1", ""))
+    if p["Credits"] < price:
+        return await update.message.reply_text("💳 Not enough credits.")
+
+    p["Credits"] -= price
+    p["Items"].setdefault(item, 0)
+    p["Items"][item] += 1
+    save_player(p)
+    return await update.message.reply_text(f"🛒 Purchased {item}!")
+
+if text.startswith(",unlockbm"):
+    # Unlock Black Market access (costs real money in full version!)
+    if p.get("BlackMarketUnlocked"):
+        return await update.message.reply_text("✅ Black Market already unlocked.")
+    # For now, simulate unlocking with credits (cost: 1000)
+    if p["Credits"] < 1000:
+        return await update.message.reply_text("💳 Need 1000 credits to unlock.")
+    p["Credits"] -= 1000
+    p["BlackMarketUnlocked"] = True
+    save_player(p)
+    return await update.message.reply_text("🖤 Black Market access unlocked!")
 
     await update.message.reply_text("❓ Unknown command. Type ,help for available actions.")
     ### BEGIN PART 3: Buildings, Research, Zones
