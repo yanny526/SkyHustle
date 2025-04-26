@@ -672,6 +672,46 @@ if text.startswith(",leaderboard"):
         p["Zone"] = zone
         save_player(p)
         return await update.message.reply_text(f"🚩 You now control {zone}!")
+# -- Zone Control --
+
+zones = {z: None for z in ["Alpha", "Beta", "Gamma", "Delta", "Epsilon"]}
+
+async def claim_zone(p, zone_name, update):
+    if p["Credits"] < 200:
+        return await update.message.reply_text("💳 Need 200 credits to claim a zone.")
+    if zones.get(zone_name) and zones[zone_name] != p["ChatID"]:
+        return await update.message.reply_text("❌ Zone already occupied.")
+    zones[zone_name] = p["ChatID"]
+    p["Zone"] = zone_name
+    p["Credits"] -= 200
+    save_player(p)
+    await update.message.reply_text(f"🌍 You now control {zone_name}!")
+
+async def show_map(update):
+    out = "🗺️ *Zone Map:*\n"
+    for z, cid in zones.items():
+        owner = "None"
+        if cid:
+            owner_row = find_player_by_chatid(cid)
+            if owner_row:
+                owner = owner_row["Name"]
+        out += f"🔹 {z}: {owner}\n"
+    await update.message.reply_text(out, parse_mode=ParseMode.MARKDOWN)
+
+# -- Commands --
+
+if text.startswith(",map"):
+    return await show_map(update)
+
+if text.startswith(",claim"):
+    parts = text.split()
+    if len(parts) != 2:
+        return await update.message.reply_text("⚠️ Usage: ,claim <zone>")
+    zone = parts[1]
+    if zone not in zones:
+        return await update.message.reply_text("❌ Zone doesn't exist.")
+    await claim_zone(p, zone, update)
+    return
 
     ### END PART 3
     ### BEGIN PART 4: Missions and PvE Battles
