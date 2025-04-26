@@ -692,6 +692,287 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await attack_enemy(p, target_row, update)
 
     ### END PART 12
+    ### BEGIN PART 13: Shields and Defense Mechanics
+
+    async def activate_shield(p, hours):
+        shield_time = datetime.now() + timedelta(hours=hours)
+        p["ShieldUntil"] = shield_time.strftime("%Y-%m-%d %H:%M:%S")
+        save_player(p)
+
+    if text.startswith(",shield"):
+        parts = text.split()
+        if len(parts) != 2:
+            return await update.message.reply_text("⚠ Usage: ,shield <hours> (e.g., ,shield 12)")
+
+        try:
+            hours = int(parts[1])
+            if hours <= 0 or hours > 72:
+                return await update.message.reply_text("⚠ Choose between 1 and 72 hours.")
+        except ValueError:
+            return await update.message.reply_text("⚠ Hours must be a number.")
+
+        if int(p["Credits"]) < hours * 20:
+            return await update.message.reply_text("❌ Not enough credits for shield. 20 credits per hour!")
+
+        p["Credits"] = int(p["Credits"]) - (hours * 20)
+        await activate_shield(p, hours)
+        await update.message.reply_text(f"🛡 Shield activated for {hours} hours!")
+
+    if text.startswith(",refinery"):
+        if int(p["Credits"]) < 100:
+            return await update.message.reply_text("❌ Need 100 credits to upgrade Refinery!")
+
+        p["Credits"] = int(p["Credits"]) - 100
+        p["RefineryLevel"] = int(p.get("RefineryLevel", 0)) + 1
+        save_player(p)
+        await update.message.reply_text(f"🏭 Refinery upgraded to level {p['RefineryLevel']}!")
+
+    ### END PART 13
+    ### BEGIN PART 14: Trading Mechanics (Player-to-Player Economy)
+
+    offers = {}
+    offer_counter = 1
+
+    if text.startswith(",offer"):
+        parts = text.split()
+        if len(parts) != 5:
+            return await update.message.reply_text(
+                "⚠ Usage: ,offer <type> <amount> <price> <item> (example: ,offer sell 50 100 ore)"
+            )
+
+        _, offer_type, amount, price, item = parts
+        try:
+            amount = int(amount)
+            price = int(price)
+        except ValueError:
+            return await update.message.reply_text("⚠ Amount and price must be numbers.")
+
+        if offer_type not in ["sell", "buy"]:
+            return await update.message.reply_text("⚠ Type must be 'sell' or 'buy'.")
+
+        if item not in ["ore", "energy", "credits"]:
+            return await update.message.reply_text("⚠ Item must be ore, energy, or credits.")
+
+        # Validate player's balance for sell offers
+        if offer_type == "sell":
+            if item == "ore" and int(p["Ore"]) < amount:
+                return await update.message.reply_text("❌ Not enough ore to sell!")
+            if item == "energy" and int(p["Energy"]) < amount:
+                return await update.message.reply_text("❌ Not enough energy to sell!")
+            if item == "credits" and int(p["Credits"]) < amount:
+                return await update.message.reply_text("❌ Not enough credits to sell!")
+
+            # Lock the amount temporarily
+            p[item.capitalize()] = int(p[item.capitalize()]) - amount
+            save_player(p)
+
+        global offer_counter
+        offers[offer_counter] = {
+            "cid": cid,
+            "type": offer_type,
+            "amount": amount,
+            "price": price,
+            "item": item
+        }
+        await update.message.reply_text(f"📢 Offer #{offer_counter} posted successfully!")
+        offer_counter += 1
+
+    if text.startswith(",market"):
+        if not offers:
+            return await update.message.reply_text("🏪 No active offers in the marketplace.")
+        
+        out = "🏪 *Active Market Offers:*\n\n"
+        for oid, offer in offers.items():
+            seller = players.get(offer["cid"], {}).get("Name", "Unknown")
+            out += f"#{oid} | {offer['type'].upper()} {offer['amount']} {offer['item'].capitalize()} for {offer['price']} credits | By: {seller}\n"
+        return await update.message.reply_text(out, parse_mode=ParseMode.MARKDOWN)
+
+    if text.startswith(",buyoffer"):
+        parts = text.split()
+        if len(parts) != 2:
+            return await update.message.reply_text("⚠ Usage: ,buyoffer <offer_id>")
+        try:
+            oid = int(parts[1])
+        except ValueError:
+            return await update.message.reply_text("⚠ Offer ID must be a number.")
+        if oid not in offers:
+            return await update.message.reply_text("❌ Offer not found.")
+
+        offer = offers[oid]
+        seller_p = get_player(offer["cid"])
+
+        if int(p["Credits"]) < offer["price"]:
+            return await update.message.reply_text("❌ Not enough credits to accept this offer!")
+
+        p["Credits"] = int(p["Credits"]) - offer["price"]
+
+        if offer["type"] == "sell":
+            p[offer["item"].capitalize()] = int(p.get(offer["item"].capitalize(), 0)) + offer["amount"]
+            seller_p["Credits"] = int(seller_p["Credits"]) + offer["price"]
+            save_player(seller_p)
+        else:
+            seller_p[offer["item"].capitalize()] = int(seller_p.get(offer["item"].capitalize(), 0)) + offer["amount"]
+            seller_p["Credits"] = int(seller_p["Credits"]) - offer["price"]
+            save_player(seller_p)
+            p[offer["item"].capitalize()] = int(p.get(offer["item"].capitalize(), 0)) + offer["amount"]
+
+        save_player(p)
+        del offers[oid]
+        await update.message.reply_text("✅ Offer successfully completed!")
+
+    ### END PART 14
+    ### BEGIN PART 15: World Events and Boss Fights
+
+    world_boss = None
+    boss_timer = None
+
+    if text.startswith(",summonboss"):
+        if world_boss:
+            return await update.message.reply_text("⚠ A boss is already active!")
+        
+        world_boss = {
+            "name": "Titanus Omega",
+            "hp": 10000,
+            "attack_power": 250,
+            "reward_credits": 300,
+            "reward_ore": 500
+        }
+        boss_timer = datetime.now() + timedelta(minutes=60)
+        await update.message.reply_text(
+            "🚨 *Alert! Titanus Omega has appeared in the wastelands!*\n"
+            "⏳ You have 60 minutes to defeat it!\n"
+            "🗡 Attack it with `,attackboss <your army>`!",
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    if text.startswith(",bossstatus"):
+        if not world_boss:
+            return await update.message.reply_text("☀ No active bosses currently.")
+        time_left = (boss_timer - datetime.now()).seconds // 60
+        await update.message.reply_text(
+            f"👹 *Boss Status:*\n"
+            f"Name: {world_boss['name']}\n"
+            f"HP: {world_boss['hp']}\n"
+            f"Time left: {time_left} min",
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    if text.startswith(",attackboss"):
+        if not world_boss:
+            return await update.message.reply_text("☀ No boss to attack!")
+        
+        army = json.loads(p["Army"])
+        damage = army["scout"] * 5 + army["drone"] * 8 + army["tank"] * 15
+
+        if damage == 0:
+            return await update.message.reply_text("⚠ You have no army units to attack!")
+
+        world_boss["hp"] -= damage
+
+        if world_boss["hp"] <= 0:
+            reward_credits = world_boss["reward_credits"]
+            reward_ore = world_boss["reward_ore"]
+            p["Credits"] += reward_credits
+            p["Ore"] += reward_ore
+            save_player(p)
+            world_boss = None
+            await update.message.reply_text(
+                f"🏆 You landed the final blow on the boss!\n"
+                f"🎁 Rewards: +{reward_credits} Credits, +{reward_ore} Ore."
+            )
+        else:
+            save_player(p)
+            await update.message.reply_text(
+                f"⚔ You dealt {damage} damage to {world_boss['name']}!\n"
+                f"🧟 Remaining HP: {world_boss['hp']}"
+            )
+
+    ### END PART 15
+    ### BEGIN PART 16: Radiation Zones + Hazmat Enforcement
+
+    radiation_zones = ["Zeta", "Omega", "Kronos"]
+
+    # Expand map if needed
+    for rz in radiation_zones:
+        if rz not in zones:
+            zones[rz] = None
+
+    if text.startswith(",map"):
+        out = "🌍 *Zone Control Map:*\n\n"
+        for z, owner in zones.items():
+            name = players.get(owner, {}).get("Name", "Unclaimed") if owner else "Unclaimed"
+            if z in radiation_zones:
+                out += f"☢ {z} (Radiated): {name}\n"
+            else:
+                out += f"🛡 {z}: {name}\n"
+        return await update.message.reply_text(out, parse_mode=ParseMode.MARKDOWN)
+
+    if text.startswith(",claim"):
+        parts = text.split()
+        if len(parts) != 2:
+            return await update.message.reply_text("⚠ Usage: ,claim <zone>")
+        
+        zone = parts[1]
+        if zone not in zones:
+            return await update.message.reply_text("⚠ Unknown zone.")
+        
+        if zones[zone]:
+            return await update.message.reply_text("⚠ Zone already claimed.")
+
+        # Check radiation requirement
+        if zone in radiation_zones:
+            items = json.loads(p["Items"])
+            if "hazmat" not in items or items["hazmat"] <= 0:
+                return await update.message.reply_text(
+                    "☢ You need a Hazmat Drone (Black Market) to access radiation zones!"
+                )
+        
+        if p["Credits"] < 150:
+            return await update.message.reply_text("💳 You need at least 150 Credits to claim a zone.")
+
+        zones[zone] = cid
+        p["Zone"] = zone
+        p["Credits"] -= 150
+        save_player(p)
+
+        await update.message.reply_text(f"🏴 Successfully claimed {zone}!")
+
+    ### END PART 16
+    ### BEGIN PART 17: EMP Field Device (Item Usage)
+
+    if text.startswith(",emp"):
+        parts = text.split()
+        if len(parts) != 2:
+            return await update.message.reply_text("⚡ Usage: ,emp <target_alias>")
+        
+        target_alias = parts[1]
+        target_cid, target_p = find_by_name(target_alias)
+
+        if not target_p:
+            return await update.message.reply_text("⚡ Target not found.")
+        
+        if not target_p["ShieldUntil"]:
+            return await update.message.reply_text("⚡ Target has no active shield to disable.")
+
+        # Check if player owns EMP device
+        items = json.loads(p["Items"])
+        if "empdevice" not in items or items["empdevice"] <= 0:
+            return await update.message.reply_text("⚡ You don't have an EMP Field Device.")
+        
+        # Consume EMP device
+        items["empdevice"] -= 1
+        if items["empdevice"] == 0:
+            del items["empdevice"]
+        p["Items"] = json.dumps(items)
+        save_player(p)
+
+        # Remove target shield
+        target_p["ShieldUntil"] = ""
+        save_player(target_p)
+
+        await update.message.reply_text(f"💥 EMP Deployed! {target_p['Name']}'s shield disabled!")
+
+    ### END PART 17
 
 if __name__ == "__main__":
     app = ApplicationBuilder().token(os.getenv("BOT_TOKEN")).build()
