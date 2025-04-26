@@ -109,6 +109,26 @@ if text.startswith(",attack"):
 
     await attack_player(p, target_row, update)
     return
+    # -- Shield Activation System --
+
+from datetime import datetime, timedelta
+
+# Inside handle_message after other commands
+if text.startswith(",shield"):
+    if p["Energy"] < 50:
+        return await update.message.reply_text("⚡ Not enough energy! Need 50 Energy to activate Shield.")
+    
+    if p["ShieldUntil"]:
+        shield_time = datetime.strptime(p["ShieldUntil"], "%Y-%m-%d %H:%M:%S")
+        if shield_time > datetime.now():
+            return await update.message.reply_text(f"🛡️ Shield active until {shield_time.strftime('%Y-%m-%d %H:%M:%S')}.")
+
+    # Consume energy and set shield
+    p["Energy"] -= 50
+    p["ShieldUntil"] = (datetime.now() + timedelta(hours=12)).strftime("%Y-%m-%d %H:%M:%S")
+    save_player(p)
+    return await update.message.reply_text("🛡️ Shield activated! You are protected for 12 hours.")
+
 def get_faction_bonus(p):
     if p["Faction"] == "Solaris":
         return {"attack": 5, "defense": 0}
@@ -349,6 +369,45 @@ if text.startswith(",joinfaction"):
         return await update.message.reply_text("Usage: ,joinfaction <name>")
     success, msg = await join_faction(p, parts[1])
     return await update.message.reply_text(msg)
+    # -- Faction Communication System --
+
+async def faction_chat(p, message, update):
+    if not p["Faction"]:
+        return await update.message.reply_text("⚠️ You're not in any faction.")
+    
+    faction_members = factions.get(p["Faction"], [])
+    if not faction_members:
+        return await update.message.reply_text("⚠️ Your faction is empty.")
+    
+    for member_cid in faction_members:
+        if member_cid != p["ChatID"]:  # Don't send to self
+            try:
+                await ctx.bot.send_message(chat_id=member_cid, text=f"[Faction] {p['Name']}: {message}")
+            except:
+                pass  # Fail silently if user blocked bot or unavailable
+
+async def list_factions(update):
+    if not factions:
+        return await update.message.reply_text("❌ No factions exist yet.")
+    
+    output = "🏴‍☠️ *Current Factions:*\n"
+    for fname, members in factions.items():
+        output += f"- {fname}: {len(members)} members\n"
+    await update.message.reply_text(output, parse_mode=ParseMode.MARKDOWN)
+
+# -- Commands --
+
+if text.startswith(",fchat"):
+    parts = text.split(maxsplit=1)
+    if len(parts) != 2:
+        return await update.message.reply_text("💬 Usage: ,fchat <message>")
+    await faction_chat(p, parts[1], update)
+    return
+
+if text.startswith(",factions"):
+    await list_factions(update)
+    return
+
 # -- PvE: Pirate Raids --
 
 import random
@@ -527,6 +586,135 @@ if text.startswith(",equiptitle"):
             "`,help` - Show this help list",
             parse_mode=ParseMode.MARKDOWN
         )
+        # ---- PART 50: Spy System (Scouting other players) ----
+
+async def spy_on_player(spy, target, update):
+    if spy["Energy"] < 20:
+        return await update.message.reply_text("🔍 Not enough energy to launch a scout mission (Need 20 Energy).")
+    
+    spy["Energy"] -= 20
+    save_player(spy)
+
+    # Normal spy only sees basic info unless Infinity Scout is used
+    basic_report = (
+        f"🛰️ Scout Report on {target['Name']}:\n"
+        f"- Ore: {target['Ore']}\n"
+        f"- Credits: {target['Credits']}\n"
+        f"- Army: {target['Army']}\n"
+    )
+
+    if "infinityscout1" in spy["Items"] and spy["Items"]["infinityscout1"] > 0:
+        # Reveal hidden info if using Infinity Scout
+        spy["Items"]["infinityscout1"] -= 1
+        if spy["Items"]["infinityscout1"] == 0:
+            del spy["Items"]["infinityscout1"]
+        save_player(spy)
+
+        detailed = (
+            f"- Zone: {target['Zone']}\n"
+            f"- Shield: {target['ShieldUntil'] or 'None'}\n"
+            f"- Black Market Items: {json.loads(target['Items'])}"
+        )
+        return await update.message.reply_text(basic_report + "\n" + detailed)
+    
+    return await update.message.reply_text(basic_report)
+
+# Inside handle_message
+
+if text.startswith(",spy"):
+    parts = text.split()
+    if len(parts) != 2:
+        return await update.message.reply_text("🛰️ Usage: ,spy <enemy alias>")
+    target_alias = parts[1]
+    target_row = find_player_by_name(target_alias)
+    if not target_row:
+        return await update.message.reply_text("🎯 Target not found.")
+    if target_row["ChatID"] == p["ChatID"]:
+        return await update.message.reply_text("🤔 You can't scout yourself.")
+
+    await spy_on_player(p, target_row, update)
+    return
+
+        # ---- PART 47: Spy Mechanics ----
+
+async def spy_on_player(spy, target, update):
+    if "infinityscout1" in json.loads(spy["Items"]):
+        spy_data = (
+            f"🕵️ Spy Report on {target['Name']}:\n"
+            f"- Ore: {target['Ore']}\n"
+            f"- Energy: {target['Energy']}\n"
+            f"- Credits: {target['Credits']}\n"
+            f"- Army: {target['Army']}\n"
+            f"- Zone: {target['Zone'] or 'None'}"
+        )
+        spy_items = json.loads(spy["Items"])
+        spy_items["infinityscout1"] -= 1
+        if spy_items["infinityscout1"] == 0:
+            del spy_items["infinityscout1"]
+        spy["Items"] = json.dumps(spy_items)
+        save_player(spy)
+        return await update.message.reply_text(spy_data)
+    else:
+        return await update.message.reply_text("🔍 You need an Infinity Scout to perform espionage.")
+
+# Inside handle_message
+
+if text.startswith(",spy"):
+    parts = text.split()
+    if len(parts) != 2:
+        return await update.message.reply_text("🕵️ Usage: ,spy <enemy alias>")
+    enemy_alias = parts[1]
+    target_row = find_player_by_name(enemy_alias)
+    if not target_row:
+        return await update.message.reply_text("🎯 Target not found!")
+    if target_row["ChatID"] == p["ChatID"]:
+        return await update.message.reply_text("🤔 You cannot spy on yourself!")
+
+    await spy_on_player(p, target_row, update)
+    return
+# ---- PART 48: Radiation Zone Access ----
+
+async def enter_radiation_zone(player, update):
+    if "hazmat" not in json.loads(player["Items"]):
+        return await update.message.reply_text("☢️ You need a Hazmat Unit to access Radiation Zones!")
+    
+    zones_with_radiation = ["Gamma", "Delta"]  # Define which zones are radiation zones
+    available_zones = [z for z in zones_with_radiation if players_sheet.find(z) is None]
+
+    if not available_zones:
+        return await update.message.reply_text("⚠️ No Radiation Zones are currently unclaimed!")
+
+    # Claim first available radiation zone
+    player["Zone"] = available_zones[0]
+    save_player(player)
+    return await update.message.reply_text(f"☢️ You have bravely entered Radiation Zone: {available_zones[0]}!")
+
+
+# Inside handle_message
+
+if text.startswith(",hazzone"):
+    await enter_radiation_zone(p, update)
+    return
+# ---- PART 49: Shield System ----
+
+async def activate_shield(player, update):
+    if player["ShieldUntil"]:
+        current_shield = datetime.strptime(player["ShieldUntil"], "%Y-%m-%d %H:%M:%S")
+        if datetime.now() < current_shield:
+            return await update.message.reply_text(f"🛡️ Shield active until {current_shield.strftime('%Y-%m-%d %H:%M:%S')}")
+    
+    # Apply 12-hour shield
+    new_shield_time = datetime.now() + timedelta(hours=12)
+    player["ShieldUntil"] = new_shield_time.strftime("%Y-%m-%d %H:%M:%S")
+    save_player(player)
+    return await update.message.reply_text(f"🛡️ Shield activated! Protects until {new_shield_time.strftime('%Y-%m-%d %H:%M:%S')}.")
+
+# Inside handle_message
+
+if text.startswith(",shield"):
+    await activate_shield(p, update)
+    return
+
 if text.startswith(",blackmarket"):
     if not p.get("BlackMarketUnlocked"):
         return await update.message.reply_text("🔒 Black Market locked. Unlock it first.")
@@ -659,19 +847,35 @@ if text.startswith(",leaderboard"):
             control_map += f"{z}: {'Unclaimed' if not owner else owner}\n"
         return await update.message.reply_text(control_map)
 
-    if text.startswith(",claim"):
-        parts = text.split()
-        if len(parts) != 2:
-            return await update.message.reply_text("Usage: ,claim <zone>")
-        zone = parts[1]
-        if zone not in ["Alpha", "Beta", "Gamma", "Delta", "Epsilon"]:
-            return await update.message.reply_text("❌ Zone does not exist.")
-        if p["Credits"] < 200:
-            return await update.message.reply_text("❌ Need 200 credits to claim a zone.")
-        p["Credits"] -= 200
-        p["Zone"] = zone
-        save_player(p)
-        return await update.message.reply_text(f"🚩 You now control {zone}!")
+    # -- Enhanced Zone Claiming System --
+
+if text.startswith(",claim"):
+    parts = text.split()
+    if len(parts) != 2:
+        return await update.message.reply_text("🗺️ Usage: ,claim <zone>")
+
+    zone = parts[1]
+    if zone not in zones:
+        return await update.message.reply_text("⚠️ Invalid zone!")
+
+    if zones[zone]:
+        return await update.message.reply_text("⚠️ Zone already controlled!")
+
+    # Cannot claim while shielded
+    if p["ShieldUntil"]:
+        shield_time = datetime.strptime(p["ShieldUntil"], "%Y-%m-%d %H:%M:%S")
+        if shield_time > datetime.now():
+            return await update.message.reply_text("🛡️ You can't claim zones while shielded!")
+
+    if p["Credits"] < 500:
+        return await update.message.reply_text("💳 Need 500 credits to claim a zone!")
+
+    p["Credits"] -= 500
+    p["Zone"] = zone
+    zones[zone] = p["ChatID"]
+    save_player(p)
+    return await update.message.reply_text(f"🏰 You have claimed control over zone: {zone}!")
+
 # -- Zone Control --
 
 zones = {z: None for z in ["Alpha", "Beta", "Gamma", "Delta", "Epsilon"]}
@@ -1005,6 +1209,40 @@ if text.startswith(",joinfaction"):
         await update.message.reply_text(result)
 
     ### END PART 7
+
+# -- PvE Mission System --
+
+async def start_pve_mission(p, mission_name, update):
+    if p["Energy"] < 50:
+        return await update.message.reply_text("⚡ Need at least 50 energy to start a mission.")
+    
+    if mission_name == "pirateraid":
+        p["Energy"] -= 50
+        loot = 100
+        p["Credits"] += loot
+        save_player(p)
+        return await update.message.reply_text(f"🏴‍☠️ Raid successful! You stole {loot} credits!")
+    
+    if mission_name == "radiationrun":
+        if not p["Items"].get("hazmat", 0):
+            return await update.message.reply_text("☢️ You need a Hazmat Drone to attempt this mission.")
+        p["Energy"] -= 50
+        ore_gain = 200
+        p["Ore"] += ore_gain
+        save_player(p)
+        return await update.message.reply_text(f"☢️ Radiation run complete! Gained {ore_gain} ore.")
+
+    return await update.message.reply_text("❓ Unknown mission.")
+
+# -- Commands --
+
+if text.startswith(",pve"):
+    parts = text.split()
+    if len(parts) != 2:
+        return await update.message.reply_text("🛰️ Usage: ,pve <pirateraid/radiationrun>")
+    await start_pve_mission(p, parts[1], update)
+    return
+
     ### BEGIN PART 8: PvE Pirate Raids
 
     from random import randint
@@ -1104,6 +1342,65 @@ if text.startswith(",claim"):
             "_(Complete by doing actions normally!)_"
         )
         await update.message.reply_text(mission_text, parse_mode=ParseMode.MARKDOWN)
+# -- Fortify Zone Command --
+
+if text.startswith(",fortify"):
+    if not p.get("Zone"):
+        return await update.message.reply_text("⚠️ You don't control any zone yet!")
+
+    fortify_cost = 750
+    if p["Credits"] < fortify_cost:
+        return await update.message.reply_text(f"💳 Need {fortify_cost} credits to fortify your zone!")
+
+    # Simulate fortification: Increase player's passive defense or resource bonuses
+    p["RefineryLevel"] += 1
+    p["Credits"] -= fortify_cost
+    save_player(p)
+    return await update.message.reply_text(f"🏗️ Fortification complete! Refinery upgraded to level {p['RefineryLevel']}.\nDefense improved and mining efficiency boosted!")
+# -- Create Faction Command --
+
+if text.startswith(",createfaction"):
+    parts = text.split()
+    if len(parts) != 2:
+        return await update.message.reply_text("🏳️ Usage: ,createfaction <name>")
+    faction_name = parts[1]
+
+    if p.get("Faction"):
+        return await update.message.reply_text("⚠️ You already belong to a faction!")
+
+    existing = players_sheet.get_all_records()
+    for row in existing:
+        if row.get("Faction") == faction_name:
+            return await update.message.reply_text("❌ Faction name already taken!")
+
+    p["Faction"] = faction_name
+    save_player(p)
+    return await update.message.reply_text(f"🏳️ Faction {faction_name} created successfully!")
+
+# -- Join Faction Command --
+
+if text.startswith(",joinfaction"):
+    parts = text.split()
+    if len(parts) != 2:
+        return await update.message.reply_text("🏳️ Usage: ,joinfaction <name>")
+    faction_name = parts[1]
+
+    existing = players_sheet.get_all_records()
+    found = False
+    for row in existing:
+        if row.get("Faction") == faction_name:
+            found = True
+            break
+
+    if not found:
+        return await update.message.reply_text("❌ No such faction found!")
+
+    if p.get("Faction"):
+        return await update.message.reply_text("⚠️ You already belong to a faction!")
+
+    p["Faction"] = faction_name
+    save_player(p)
+    return await update.message.reply_text(f"🤝 You joined faction {faction_name}!")
 
     ### END PART 9
     ### BEGIN PART 10: Black Market and Premium Shop
@@ -1759,6 +2056,78 @@ if text.startswith(",claim"):
                 pass  # In case someone blocked the bot
 
     ### END PART 21
+# -- Daily and Weekly Missions System --
+
+# (At the top after imports)
+import random
+
+# -- Mission Templates --
+daily_missions = [
+    "Mine 100 ore",
+    "Forge 5 scouts",
+    "Win 1 attack",
+    "Claim a zone",
+]
+weekly_missions = [
+    "Win 5 battles",
+    "Forge 20 tanks",
+    "Earn 1000 credits",
+]
+
+def assign_daily_mission(p):
+    if not p.get("DailyMission"):
+        p["DailyMission"] = random.choice(daily_missions)
+
+def assign_weekly_mission(p):
+    if not p.get("WeeklyMission"):
+        p["WeeklyMission"] = random.choice(weekly_missions)
+
+# -- Mission Checking --
+async def check_mission_completion(p, update):
+    completed = []
+    
+    if p.get("DailyMission") == "Mine 100 ore" and p["Ore"] >= 100:
+        completed.append("Daily")
+    if p.get("DailyMission") == "Forge 5 scouts" and p["Army"].get("scout", 0) >= 5:
+        completed.append("Daily")
+    if p.get("DailyMission") == "Win 1 attack" and p["Wins"] >= 1:
+        completed.append("Daily")
+    if p.get("DailyMission") == "Claim a zone" and p["Zone"]:
+        completed.append("Daily")
+    
+    if p.get("WeeklyMission") == "Win 5 battles" and p["Wins"] >= 5:
+        completed.append("Weekly")
+    if p.get("WeeklyMission") == "Forge 20 tanks" and p["Army"].get("tank", 0) >= 20:
+        completed.append("Weekly")
+    if p.get("WeeklyMission") == "Earn 1000 credits" and p["Credits"] >= 1000:
+        completed.append("Weekly")
+    
+    reward_message = ""
+    for mission in completed:
+        if mission == "Daily":
+            reward_message += "🎯 Completed Daily Mission! +200 credits!\n"
+            p["Credits"] += 200
+            p["DailyMission"] = None
+        if mission == "Weekly":
+            reward_message += "🎯 Completed Weekly Mission! +1000 credits!\n"
+            p["Credits"] += 1000
+            p["WeeklyMission"] = None
+    
+    if reward_message:
+        save_player(p)
+        await update.message.reply_text(reward_message)
+
+# -- New Command to Show Missions --
+if text.startswith(",missions"):
+    assign_daily_mission(p)
+    assign_weekly_mission(p)
+    msg = (
+        f"🗓️ *Your Missions:*\n"
+        f"Daily: `{p.get('DailyMission', 'None')}`\n"
+        f"Weekly: `{p.get('WeeklyMission', 'None')}`"
+    )
+    await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN)
+    return
 
 if __name__ == "__main__":
     app = ApplicationBuilder().token(os.getenv("BOT_TOKEN")).build()
