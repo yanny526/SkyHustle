@@ -192,21 +192,46 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     return await update.message.reply_text(f"🎁 Daily reward: +{reward} credits, +20 energy! (Streak: {p['DailyStreak']} days)")
 
 
-    if text.startswith(",mine"):
-        parts = text.split()
-        if len(parts) != 3 or parts[1] != "ore":
-            return await update.message.reply_text("⚠ Usage: ,mine ore <count>")
-        try:
-            count = int(parts[2])
-        except:
-            return await update.message.reply_text("⚠ Count must be a number.")
-        if p["Energy"] < count * 5:
-            return await update.message.reply_text("⚠ Not enough energy.")
-        ore_gain = 20 * count
-        p["Ore"] += ore_gain
-        p["Energy"] -= count * 5
-        update_player(p)
-        return await update.message.reply_text(f"⛏ Your miners recovered *{ore_gain} Ore* from Hyperion’s core!", parse_mode=ParseMode.MARKDOWN)
+  if text.startswith(",mine"):
+    parts = text.split()
+    if len(parts) != 3 or parts[1] != "ore":
+        return await update.message.reply_text("⚒️ Usage: ,mine ore <count>")
+
+    try:
+        count = int(parts[2])
+    except ValueError:
+        return await update.message.reply_text("⚠️ Count must be a number.")
+
+    # Enforce cooldown
+    now = datetime.now()
+    if "LastMine" in p and p["LastMine"]:
+        last_mine_time = datetime.strptime(p["LastMine"], "%Y-%m-%d %H:%M:%S")
+        if (now - last_mine_time).seconds < 60:
+            seconds_left = 60 - (now - last_mine_time).seconds
+            return await update.message.reply_text(f"⏳ Mining cooldown: {seconds_left} seconds left.")
+
+    if p["Energy"] < count * 5:
+        return await update.message.reply_text("⚡ Not enough energy to mine that much!")
+
+    ore_boost = 1.0
+    if "hazmat" in json.loads(p["Items"]):
+        ore_boost = 1.2  # Hazmat players mine faster (example: extra ore in radiation zones)
+
+    ore_earned = int(20 * count * ore_boost)
+    credit_earned = int(10 * count)
+
+    p["Ore"] += ore_earned
+    p["Credits"] += credit_earned
+    p["Energy"] -= count * 5
+    p["LastMine"] = now.strftime("%Y-%m-%d %H:%M:%S")
+    save_player(p)
+
+    await update.message.reply_text(
+        f"⛏️ You mined {ore_earned} ore and earned {credit_earned} credits!\n"
+        f"Energy left: {p['Energy']}"
+    )
+    return
+
 
     if text.startswith(",forge"):
         parts = text.split()
