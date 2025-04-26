@@ -973,10 +973,250 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"💥 EMP Deployed! {target_p['Name']}'s shield disabled!")
 
     ### END PART 17
+    ### BEGIN PART 18: Advanced Shields (Auto-Daily)
+
+    if text.startswith(",shieldinfo"):
+        has_adv_shield = False
+        items = json.loads(p["Items"])
+        if "advancedshield" in items and items["advancedshield"] > 0:
+            has_adv_shield = True
+
+        status = (
+            "🛡 *Shield Status:*\n"
+            f"- {'✅' if p['ShieldUntil'] else '❌'} Normal Daily Shield\n"
+            f"- {'✅' if has_adv_shield else '❌'} Advanced Shield (auto-absorb first attack)"
+        )
+        return await update.message.reply_text(status, parse_mode=ParseMode.MARKDOWN)
+
+    async def apply_daily_shields():
+        """At daily reset, auto-reapply normal shields for all players."""
+        records = players_sheet.get_all_records()
+        for idx, record in enumerate(records, start=2):
+            # Normal shield reset daily
+            record["ShieldUntil"] = (datetime.utcnow() + timedelta(hours=24)).isoformat()
+            players_sheet.update(f"H{idx}", [[record["ShieldUntil"]]])
+
+    def consume_advanced_shield(p):
+        """Consume player's advanced shield if attacked."""
+        items = json.loads(p["Items"])
+        if "advancedshield" in items and items["advancedshield"] > 0:
+            items["advancedshield"] -= 1
+            if items["advancedshield"] == 0:
+                del items["advancedshield"]
+            p["Items"] = json.dumps(items)
+            save_player(p)
+            return True
+        return False
+
+    ### END PART 18
+    ### BEGIN PART 19: Zone Control - Occupation and Scoring
+
+    zone_scores = {z: 0 for z in ["Alpha", "Beta", "Gamma", "Delta", "Epsilon"]}
+
+    if text.startswith(",zoneclaim"):
+        parts = text.split()
+        if len(parts) != 2:
+            return await update.message.reply_text("⚠ Usage: ,zoneclaim <zone>")
+        zone = parts[1].capitalize()
+        if zone not in zone_scores:
+            return await update.message.reply_text("⚠ Invalid zone.")
+        if p["Zone"]:
+            return await update.message.reply_text("⚠ You already control a zone. Abandon first.")
+        if int(p["Credits"]) < 100:
+            return await update.message.reply_text("⚠ Need 100 credits to claim zone.")
+
+        p["Zone"] = zone
+        p["Credits"] = int(p["Credits"]) - 100
+        update_player(p)
+
+        zone_scores[zone] = cid
+        return await update.message.reply_text(f"🏴 You now control zone {zone}!")
+
+    if text.startswith(",zonemap"):
+        msg = "🗺 *Zone Control Map:*\n\n"
+        for zone, owner_id in zone_scores.items():
+            owner_name = "Unclaimed"
+            if owner_id and str(owner_id) != "0":
+                owner = get_player(owner_id)
+                owner_name = owner["Name"] or "Unknown"
+            msg += f"🏳️ {zone}: {owner_name}\n"
+        return await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN)
+
+    if text.startswith(",abandonzone"):
+        if not p["Zone"]:
+            return await update.message.reply_text("⚠ You don't control any zone.")
+        zone = p["Zone"]
+        p["Zone"] = ""
+        update_player(p)
+        zone_scores[zone] = 0
+        return await update.message.reply_text(f"⚠ You abandoned zone {zone}.")
+
+    async def zone_score_tick():
+        """Award points to players controlling zones every hour."""
+        records = players_sheet.get_all_records()
+        for idx, record in enumerate(records, start=2):
+            if record["Zone"]:
+                record["Credits"] = int(record["Credits"]) + 10  # 10 credits per hour for control
+                players_sheet.update(f"E{idx}", [[record["Credits"]]])
+
+    ### END PART 19
+    ### BEGIN PART 20: Trading & World Bank
+
+    trade_offers = {}
+    trade_id_counter = 1
+    world_bank = {"Ore": 100000, "Credits": 50000}
+
+    if text.startswith(",offer"):
+        parts = text.split()
+        if len(parts) != 5:
+            return await update.message.reply_text("⚠ Usage: ,offer <type> <amount> <cost> <resource>")
+        _, trade_type, amount, cost, resource = parts
+        amount = int(amount)
+        cost = int(cost)
+
+        if trade_type not in ["sell", "buy"]:
+            return await update.message.reply_text("⚠ Trade type must be sell or buy.")
+        if resource not in ["Ore", "Credits"]:
+            return await update.message.reply_text("⚠ Resource must be Ore or Credits.")
+        
+        global trade_id_counter
+        tid = trade_id_counter
+        trade_id_counter += 1
+
+        trade_offers[tid] = {
+            "type": trade_type,
+            "amount": amount,
+            "cost": cost,
+            "resource": resource,
+            "seller": cid
+        }
+        return await update.message.reply_text(f"📜 Trade offer created with ID {tid}.")
+
+    if text.startswith(",market"):
+        if not trade_offers:
+            return await update.message.reply_text("🏦 No active market offers.")
+        msg = "🏦 *Market Offers:*\n\n"
+        for tid, offer in trade_offers.items():
+            seller = get_player(offer["seller"])["Name"] or "Unknown"
+            msg += f"ID {tid}: {offer['type']} {offer['amount']} {offer['resource']} for {offer['cost']} Credits [{seller}]\n"
+        return await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN)
+
+    if text.startswith(",accept"):
+        parts = text.split()
+        if len(parts) != 2:
+            return await update.message.reply_text("⚠ Usage: ,accept <id>")
+        tid = int(parts[1])
+        if tid not in trade_offers:
+            return await update.message.reply_text("⚠ Offer not found.")
+        offer = trade_offers[tid]
+
+        if offer["type"] == "sell":
+            # Buyer must have enough credits
+            if int(p["Credits"]) < offer["cost"]:
+                return await update.message.reply_text("⚠ Not enough credits.")
+            seller = get_player(offer["seller"])
+            p[offer["resource"]] = int(p.get(offer["resource"], 0)) + offer["amount"]
+            p["Credits"] = int(p["Credits"]) - offer["cost"]
+            seller["Credits"] = int(seller["Credits"]) + offer["cost"]
+            update_player(p)
+            update_player(seller)
+        elif offer["type"] == "buy":
+            # Seller must have enough resource
+            if int(p.get(offer["resource"], 0)) < offer["amount"]:
+                return await update.message.reply_text("⚠ Not enough resource.")
+            buyer = get_player(offer["seller"])
+            p[offer["resource"]] = int(p.get(offer["resource"], 0)) - offer["amount"]
+            p["Credits"] = int(p["Credits"]) + offer["cost"]
+            buyer[offer["resource"]] = int(buyer.get(offer["resource"], 0)) + offer["amount"]
+            buyer["Credits"] = int(buyer["Credits"]) - offer["cost"]
+            update_player(p)
+            update_player(buyer)
+
+        del trade_offers[tid]
+        return await update.message.reply_text(f"✅ Trade ID {tid} completed.")
+
+    if text.startswith(",bankinfo"):
+        return await update.message.reply_text(
+            f"🏦 *World Bank:*\nOre: {world_bank['Ore']}\nCredits: {world_bank['Credits']}",
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    if text.startswith(",bankbuy"):
+        parts = text.split()
+        if len(parts) != 3:
+            return await update.message.reply_text("⚠ Usage: ,bankbuy <resource> <amount>")
+        res = parts[1].capitalize()
+        amt = int(parts[2])
+        if res not in ["Ore", "Credits"]:
+            return await update.message.reply_text("⚠ Resource must be Ore or Credits.")
+
+        price_per_unit = 5 if res == "Ore" else 10
+        total_cost = amt * price_per_unit
+
+        if int(p["Credits"]) < total_cost:
+            return await update.message.reply_text("⚠ Not enough credits.")
+        if world_bank[res] < amt:
+            return await update.message.reply_text("⚠ Bank doesn't have that much.")
+
+        p[res] = int(p.get(res, 0)) + amt
+        p["Credits"] = int(p["Credits"]) - total_cost
+        world_bank[res] -= amt
+        update_player(p)
+
+        return await update.message.reply_text(f"🏦 Purchased {amt} {res} for {total_cost} credits.")
+
+    ### END PART 20
+    ### BEGIN PART 21: Global Events
+
+    from random import randint, choice
+
+    invasion_targets = ["Alpha", "Beta", "Gamma", "Delta", "Epsilon"]
+    last_event_time = datetime.now()
+
+    async def check_global_events():
+        global last_event_time
+        now = datetime.now()
+
+        if (now - last_event_time).seconds > 300:  # Every 5 minutes
+            event_type = randint(1, 3)
+            last_event_time = now
+
+            if event_type == 1:
+                lucky_zone = choice(invasion_targets)
+                lucky_bonus = randint(100, 500)
+                world_bank["Ore"] += lucky_bonus
+                await broadcast_message(f"🌟 Cosmic Surge detected at {lucky_zone}! Bank Ore increased by {lucky_bonus}!")
+
+            elif event_type == 2:
+                unlucky_zone = choice(invasion_targets)
+                unlucky_penalty = randint(50, 200)
+                world_bank["Credits"] = max(0, world_bank["Credits"] - unlucky_penalty)
+                await broadcast_message(f"⚠ Solar Flare hit {unlucky_zone}! Bank lost {unlucky_penalty} Credits.")
+
+            elif event_type == 3:
+                target_zone = choice(invasion_targets)
+                await broadcast_message(f"👾 ALERT: Alien Invaders are attacking Zone {target_zone}!")
+                # Invasion weakens whoever owns it
+                for cid, p in players.items():
+                    if p["Zone"] == target_zone:
+                        p["Energy"] = max(0, int(p["Energy"]) - 20)
+                        update_player(p)
+
+    async def broadcast_message(text):
+        for cid in players.keys():
+            try:
+                await app.bot.send_message(chat_id=cid, text=text)
+            except:
+                pass  # In case someone blocked the bot
+
+    ### END PART 21
 
 if __name__ == "__main__":
     app = ApplicationBuilder().token(os.getenv("BOT_TOKEN")).build()
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    app.create_task(background_tasks())  # <-- NEW line to add
+    app.run_polling()
+
 
 
   
