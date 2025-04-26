@@ -945,6 +945,62 @@ if text.startswith(",claimzone"):
         await update.message.reply_text(result)
 
     ### END PART 8
+# -- Mission System --
+
+def generate_missions():
+    return {
+        "mine_ore": {"target": 5, "progress": 0, "reward": 50},
+        "forge_units": {"target": 3, "progress": 0, "reward": 30},
+        "win_battles": {"target": 1, "progress": 0, "reward": 100}
+    }
+
+def get_player_missions(p):
+    if not p.get("Missions"):
+        p["Missions"] = generate_missions()
+    return p["Missions"]
+
+def update_mission(p, mission_key, amount=1):
+    missions = get_player_missions(p)
+    if mission_key in missions:
+        missions[mission_key]["progress"] += amount
+        if missions[mission_key]["progress"] > missions[mission_key]["target"]:
+            missions[mission_key]["progress"] = missions[mission_key]["target"]
+    p["Missions"] = missions
+    save_player(p)
+
+async def claim_mission(p, key, update):
+    missions = get_player_missions(p)
+    if missions[key]["progress"] >= missions[key]["target"]:
+        reward = missions[key]["reward"]
+        p["Credits"] += reward
+        missions[key]["progress"] = 0  # Reset progress
+        p["Missions"] = missions
+        save_player(p)
+        await update.message.reply_text(f"🎉 Claimed {reward} credits for {key} mission!")
+    else:
+        await update.message.reply_text("🔒 Mission not completed yet!")
+
+# -- Commands --
+
+if text.startswith(",missions"):
+    missions = get_player_missions(p)
+    msg = "🎯 *Daily Missions:*\n"
+    for k, v in missions.items():
+        msg += f"- {k.replace('_', ' ').title()}: {v['progress']}/{v['target']} (Reward: {v['reward']} credits)\n"
+    msg += "\nUse `,claim <mission>` to collect rewards."
+    return await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN)
+
+if text.startswith(",claim"):
+    parts = text.split()
+    if len(parts) != 2:
+        return await update.message.reply_text("⚠️ Usage: ,claim <mission>")
+    key = parts[1]
+    missions = get_player_missions(p)
+    if key not in missions:
+        return await update.message.reply_text("❌ Mission not found.")
+    await claim_mission(p, key, update)
+    return
+
     ### BEGIN PART 9: PvP Ranking and Missions
 
     if text.startswith(",rank"):
