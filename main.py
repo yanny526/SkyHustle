@@ -345,6 +345,22 @@ if text.startswith(",unlockbm"):
     p["BlackMarketUnlocked"] = True
     save_player(p)
     return await update.message.reply_text("🖤 Black Market access unlocked!")
+if text.startswith(",missions"):
+    daily_missions = (
+        "🎯 *Daily Missions:*\n"
+        "• Mine 100 ore → Reward: 50 credits\n"
+        "• Forge 5 scouts → Reward: 50 credits\n"
+        "• Attack any enemy → Reward: 100 credits\n\n"
+        "Complete all to get a bonus!"
+    )
+    weekly_missions = (
+        "🌟 *Weekly Missions:*\n"
+        "• Win 5 battles → Reward: 300 credits\n"
+        "• Upgrade refinery → Reward: 200 credits\n"
+        "• Capture a zone → Reward: 400 credits"
+    )
+    await update.message.reply_text(daily_missions + "\n\n" + weekly_missions, parse_mode=ParseMode.MARKDOWN)
+    return
 
     await update.message.reply_text("❓ Unknown command. Type ,help for available actions.")
     ### BEGIN PART 3: Buildings, Research, Zones
