@@ -860,6 +860,50 @@ if text.startswith(",claimzone"):
 
     if zone not in zones:
         return await update.message.reply_text("🚫 Zone not found.")
+# -- Factions System --
+
+factions = {}
+
+async def create_faction(p, faction_name, update):
+    if p["Faction"]:
+        return await update.message.reply_text("⚠️ You're already in a faction!")
+    if faction_name in factions:
+        return await update.message.reply_text("⚠️ Faction name already exists.")
+    if p["Credits"] < 500:
+        return await update.message.reply_text("💳 Need 500 credits to create a faction.")
+
+    p["Faction"] = faction_name
+    factions[faction_name] = [p["ChatID"]]
+    p["Credits"] -= 500
+    save_player(p)
+    await update.message.reply_text(f"🏴‍☠️ Faction '{faction_name}' created successfully!")
+
+async def join_faction(p, faction_name, update):
+    if p["Faction"]:
+        return await update.message.reply_text("⚠️ You're already in a faction!")
+    if faction_name not in factions:
+        return await update.message.reply_text("❌ Faction does not exist.")
+    
+    factions[faction_name].append(p["ChatID"])
+    p["Faction"] = faction_name
+    save_player(p)
+    await update.message.reply_text(f"🤝 Joined faction '{faction_name}'!")
+
+# -- Commands --
+
+if text.startswith(",createfaction"):
+    parts = text.split(maxsplit=1)
+    if len(parts) != 2:
+        return await update.message.reply_text("⚠️ Usage: ,createfaction <name>")
+    await create_faction(p, parts[1], update)
+    return
+
+if text.startswith(",joinfaction"):
+    parts = text.split(maxsplit=1)
+    if len(parts) != 2:
+        return await update.message.reply_text("⚠️ Usage: ,joinfaction <name>")
+    await join_faction(p, parts[1], update)
+    return
 
     # Check ownership
     current_owner = zones.get(zone)
