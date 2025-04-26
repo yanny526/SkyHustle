@@ -7,6 +7,17 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
 from telegram.constants import ParseMode
 from sheet import get_sheet
+# Available Skins and Titles
+
+available_skins = ["Default", "Crimson Armor", "Emerald Camo", "Golden Paladin"]
+available_titles = ["Rookie", "Veteran", "Warlord", "Conqueror"]
+# Fame points system
+fame_points = {}  # {ChatID: fame score}
+# Fame adjustment
+fame_points[p["ChatID"]] = fame_points.get(p["ChatID"], 0) + 10  # Attacker gains 10 fame on win
+fame_points[target_row["ChatID"]] = fame_points.get(target_row["ChatID"], 0) + 2  # Defender gains 2 fame for defense attempt
+
+
 
 # Connect to Google Sheet
 players_sheet = get_sheet().worksheet("SkyHustle")
@@ -301,7 +312,68 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         p["Items"] = json.dumps(items_owned)
         save_player(p)
         return await update.message.reply_text(f"✅ Bought {item}!")
-        
+        # -- Faction / Clan System --
+
+async def create_faction(name, leader_chatid):
+    sheet = players_sheet
+    factions = sheet.worksheet("Factions").get_all_records()
+    for faction in factions:
+        if faction["Name"].lower() == name.lower():
+            return False, "⚠️ Faction name already exists."
+    
+    sheet.worksheet("Factions").append_row([name, leader_chatid, 1])
+    return True, f"✅ Faction '{name}' created successfully!"
+
+async def join_faction(p, faction_name):
+    sheet = players_sheet
+    factions = sheet.worksheet("Factions").get_all_records()
+    for faction in factions:
+        if faction["Name"].lower() == faction_name.lower():
+            if p["Faction"]:
+                return False, "⚠️ You're already in a faction."
+            p["Faction"] = faction["Name"]
+            save_player(p)
+            return True, f"🤝 Joined faction {faction_name}!"
+    return False, "❌ Faction not found."
+
+if text.startswith(",createfaction"):
+    parts = text.split(maxsplit=1)
+    if len(parts) != 2:
+        return await update.message.reply_text("Usage: ,createfaction <name>")
+    success, msg = await create_faction(parts[1], cid)
+    return await update.message.reply_text(msg)
+
+if text.startswith(",joinfaction"):
+    parts = text.split(maxsplit=1)
+    if len(parts) != 2:
+        return await update.message.reply_text("Usage: ,joinfaction <name>")
+    success, msg = await join_faction(p, parts[1])
+    return await update.message.reply_text(msg)
+# -- PvE: Pirate Raids --
+
+import random
+
+async def pirate_raid(p, update):
+    enemy_power = random.randint(5, 20)
+    player_power = sum(p["Army"].values()) + p["RefineryLevel"] * 5
+
+    if player_power == 0:
+        return await update.message.reply_text("⚠️ You have no army to defend against pirates!")
+
+    if player_power >= enemy_power:
+        reward = random.randint(100, 250)
+        p["Credits"] += reward
+        save_player(p)
+        return await update.message.reply_text(f"🏴‍☠️ You defeated the pirate raid! +{reward} credits!")
+    else:
+        loss = random.randint(10, 50)
+        p["Credits"] = max(0, p["Credits"] - loss)
+        save_player(p)
+        return await update.message.reply_text(f"💀 Pirates overwhelmed your forces... Lost {loss} credits.")
+
+if text.startswith(",pve") or text.startswith(",raid"):
+    return await pirate_raid(p, update)
+
 if text.startswith(",rankings"):
     records = players_sheet.get_all_records()
     ranked = sorted(records, key=lambda x: (x.get("Wins", 0) - x.get("Losses", 0)), reverse=True)
@@ -332,6 +404,19 @@ if text.startswith(",achievements"):
         f"🏅 Your Achievement Badge:\n{badge}",
         parse_mode=ParseMode.MARKDOWN
     )
+if text.startswith(",fame"):
+    fame = fame_points.get(cid, 0)
+    return await update.message.reply_text(f"🌟 Fame Points: {fame}")
+
+if text.startswith(",fameboard"):
+    if not fame_points:
+        return await update.message.reply_text("🌌 No fame points recorded yet!")
+    sorted_fame = sorted(fame_points.items(), key=lambda x: x[1], reverse=True)
+    top = "\n".join(
+        f"{i+1}. {players.get(uid, {}).get('Name', 'Unknown')} - {score} Fame"
+        for i, (uid, score) in enumerate(sorted_fame[:10])
+    )
+    return await update.message.reply_text(f"🌟 *Top Fame Leaders:*\n{top}", parse_mode=ParseMode.MARKDOWN)
 
 if text.startswith(",prestige"):
     if p.get("Wins", 0) < 100:
@@ -353,6 +438,41 @@ if text.startswith(",prestige"):
         f"🌌 Prestige complete! You are now Prestige Level {p['Prestige']}!",
         parse_mode=ParseMode.MARKDOWN
     )
+if text.startswith(",skins"):
+    skins_list = "\n".join(f"- {skin}" for skin in available_skins)
+    return await update.message.reply_text(
+        f"🎨 *Available Skins:*\n{skins_list}\n\nUse `,equipskin <skin>` to equip!",
+        parse_mode=ParseMode.MARKDOWN
+    )
+
+if text.startswith(",equipskin"):
+    parts = text.split(maxsplit=1)
+    if len(parts) != 2:
+        return await update.message.reply_text("🎨 Usage: ,equipskin <skin>")
+    chosen = parts[1]
+    if chosen not in available_skins:
+        return await update.message.reply_text("❌ Invalid skin name!")
+    p["Skin"] = chosen
+    save_player(p)
+    return await update.message.reply_text(f"✅ Skin equipped: {chosen}!")
+
+if text.startswith(",titles"):
+    titles_list = "\n".join(f"- {title}" for title in available_titles)
+    return await update.message.reply_text(
+        f"🎖 *Available Titles:*\n{titles_list}\n\nUse `,equiptitle <title>` to equip!",
+        parse_mode=ParseMode.MARKDOWN
+    )
+
+if text.startswith(",equiptitle"):
+    parts = text.split(maxsplit=1)
+    if len(parts) != 2:
+        return await update.message.reply_text("🎖 Usage: ,equiptitle <title>")
+    chosen = parts[1]
+    if chosen not in available_titles:
+        return await update.message.reply_text("❌ Invalid title name!")
+    p["Title"] = chosen
+    save_player(p)
+    return await update.message.reply_text(f"✅ Title equipped: {chosen}!")
 
    if text.startswith(",use"):
     parts = text.split()
