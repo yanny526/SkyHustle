@@ -512,6 +512,186 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(result)
 
     ### END PART 7
+    ### BEGIN PART 8: PvE Pirate Raids
+
+    from random import randint
+
+    if text.startswith(",pirateraids"):
+        enemy_force = randint(5, 25)
+        p_army_total = sum(json.loads(p["Army"]).values())
+
+        if p_army_total == 0:
+            return await update.message.reply_text("⚓ You have no army units to defend against pirates!")
+
+        if p_army_total >= enemy_force:
+            reward = randint(50, 150)
+            p["Credits"] += reward
+            result = f"🏴‍☠️ You defeated the pirate raid! +{reward} credits!"
+        else:
+            loss = randint(10, 30)
+            p["Credits"] = max(p["Credits"] - loss, 0)
+            result = f"💥 Pirates overwhelmed you! Lost {loss} credits."
+
+        save_player(p)
+        await update.message.reply_text(result)
+
+    ### END PART 8
+    ### BEGIN PART 9: PvP Ranking and Missions
+
+    if text.startswith(",rank"):
+        all_records = players_sheet.get_all_records()
+        sorted_records = sorted(all_records, key=lambda x: int(x.get("Credits", 0)), reverse=True)
+        leaderboard = "🏆 *Top Commanders:*\n"
+        for idx, rec in enumerate(sorted_records[:10], 1):
+            leaderboard += f"{idx}. {rec.get('Name', 'Unknown')} - {rec.get('Credits', 0)} credits\n"
+        await update.message.reply_text(leaderboard, parse_mode=ParseMode.MARKDOWN)
+
+    if text.startswith(",missions"):
+        mission_text = (
+            "🎯 *Available Missions:*\n"
+            "1. Mine 500 ore ➡️ +100 Credits\n"
+            "2. Forge 10 Units ➡️ +50 Energy\n"
+            "3. Win a Pirate Raid ➡️ +1 Random Item\n\n"
+            "_(Complete by doing actions normally!)_"
+        )
+        await update.message.reply_text(mission_text, parse_mode=ParseMode.MARKDOWN)
+
+    ### END PART 9
+    ### BEGIN PART 10: Black Market and Premium Shop
+
+    if text.startswith(",unlock blackmarket"):
+        if p["Credits"] < 500:
+            return await update.message.reply_text("❌ You need 500 credits to unlock the Black Market!")
+        if p["BlackMarketUnlocked"] == "TRUE":
+            return await update.message.reply_text("✅ Black Market already unlocked.")
+        p["Credits"] -= 500
+        p["BlackMarketUnlocked"] = "TRUE"
+        save_player(p)
+        return await update.message.reply_text("🛒 Black Market access granted! Use ,blackmarket to view items.")
+
+    if text.startswith(",blackmarket"):
+        if p["BlackMarketUnlocked"] != "TRUE":
+            return await update.message.reply_text("🔒 Unlock the Black Market first! Use ,unlock blackmarket")
+        bm_items = (
+            "🛒 *Black Market Deals:*\n"
+            "`buy infinityscout1` - R100 (1-use ultimate scout)\n"
+            "`buy reviveall` - R500 (revive all units & buildings)\n"
+            "`buy hazmat` - R200 (enter Radiation Zones)\n"
+        )
+        await update.message.reply_text(bm_items, parse_mode=ParseMode.MARKDOWN)
+
+    if text.startswith(",buy"):
+        if p["BlackMarketUnlocked"] != "TRUE":
+            return await update.message.reply_text("🔒 You must unlock Black Market first!")
+        parts = text.split()
+        if len(parts) != 2:
+            return await update.message.reply_text("⚠️ Usage: ,buy <item>")
+        item = parts[1].lower()
+
+        prices = {
+            "infinityscout1": 100,
+            "reviveall": 500,
+            "hazmat": 200
+        }
+
+        if item not in prices:
+            return await update.message.reply_text("❓ Invalid item.")
+        if p["Credits"] < prices[item]:
+            return await update.message.reply_text("❌ Not enough credits!")
+
+        p["Credits"] -= prices[item]
+        items_owned = json.loads(p["Items"]) if p["Items"] else {}
+        items_owned[item] = items_owned.get(item, 0) + 1
+        p["Items"] = json.dumps(items_owned)
+        save_player(p)
+        return await update.message.reply_text(f"✅ Successfully bought {item}!")
+
+    ### END PART 10
+    ### BEGIN PART 11: Radiation Zones and Hazmat Handling
+
+    radiation_zones = ["Zeta", "Sigma"]
+
+    if text.startswith(",zones"):
+        available = [z for z in radiation_zones if zones.get(z) is None]
+        normal = [z for z in zones.keys() if z not in radiation_zones and zones.get(z) is None]
+        return await update.message.reply_text(
+            f"🌍 Available Zones:\nNormal: {', '.join(normal)}\nRadiation: {', '.join(available)}\n"
+            "⚠ Radiation Zones require Hazmat Gear!"
+        )
+
+    if text.startswith(",claim"):
+        parts = text.split()
+        if len(parts) != 2:
+            return await update.message.reply_text("⚠ Usage: ,claim <zone>")
+        target = parts[1]
+
+        if target not in zones and target not in radiation_zones:
+            return await update.message.reply_text("❓ Unknown zone.")
+
+        if target in radiation_zones:
+            items_owned = json.loads(p["Items"]) if p["Items"] else {}
+            if "hazmat" not in items_owned:
+                return await update.message.reply_text("☢ Radiation detected! You need Hazmat Gear to claim this zone.")
+
+        if p["Credits"] < 200:
+            return await update.message.reply_text("💳 You need 200 credits to claim a zone.")
+
+        zones[target] = cid
+        p["Zone"] = target
+        p["Credits"] -= 200
+        save_player(p)
+        return await update.message.reply_text(f"✅ You have successfully claimed {target}!")
+
+    ### END PART 11
+    ### BEGIN PART 12: PvP Combat System (Attack Other Players)
+
+    async def attack_enemy(attacker, defender, update):
+        atk_power = 0
+        def_power = 0
+
+        atk_army = json.loads(attacker["Army"]) if attacker["Army"] else {}
+        def_army = json.loads(defender["Army"]) if defender["Army"] else {}
+
+        for unit, count in atk_army.items():
+            atk_power += count * (5 if unit == "scout" else 10 if unit == "drone" else 20)
+
+        for unit, count in def_army.items():
+            def_power += count * (5 if unit == "scout" else 10 if unit == "drone" else 20)
+
+        if atk_power > def_power:
+            steal = int(defender["Ore"]) // 2
+            attacker["Ore"] = int(attacker["Ore"]) + steal
+            defender["Ore"] = int(defender["Ore"]) - steal
+            save_player(attacker)
+            save_player(defender)
+            await update.message.reply_text(f"🏴‍☠️ Victory! You stole {steal} ore!")
+        else:
+            await update.message.reply_text(f"❌ Defeat! Enemy defenses too strong!")
+
+    if text.startswith(",attack"):
+        parts = text.split()
+        if len(parts) != 2:
+            return await update.message.reply_text("⚠ Usage: ,attack <target_name>")
+
+        target_name = parts[1]
+        records = players_sheet.get_all_records()
+        target_row = None
+        for i, row in enumerate(records):
+            if row["Name"].lower() == target_name.lower():
+                target_row = row
+                break
+
+        if not target_row:
+            return await update.message.reply_text("❓ Target not found!")
+
+        if target_row["ShieldUntil"]:
+            shield_until = datetime.strptime(target_row["ShieldUntil"], "%Y-%m-%d %H:%M:%S")
+            if datetime.now() < shield_until:
+                return await update.message.reply_text("🛡 Target is under shield protection!")
+
+        await attack_enemy(p, target_row, update)
+
+    ### END PART 12
 
 if __name__ == "__main__":
     app = ApplicationBuilder().token(os.getenv("BOT_TOKEN")).build()
