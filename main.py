@@ -31,10 +31,13 @@ app.add_handler(CommandHandler("army", army.army))
 app.add_handler(CommandHandler("research", research.research))
 app.add_handler(CommandHandler("tech", research.tech))
 
-# 🔥 New Zone Handlers
+# Zone Handlers
 app.add_handler(CommandHandler("claim", zones.claim))
 app.add_handler(CommandHandler("zone", zones.zone))
 app.add_handler(CommandHandler("map", zones.map))
+
+# 🔥 New Combat Handler
+app.add_handler(CommandHandler("shield", combat.shield))
 
 if __name__ == "__main__":
     app.run_polling()
