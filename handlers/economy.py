@@ -93,3 +93,34 @@ async def blackbuy(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # 🔥 Future: add item to player's inventory (right now just confirm purchase)
     await update.message.reply_text(f"🕵️ You secretly purchased {selected_item['name']}! Shhh... 🤫")
+async def use(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Use a purchased item (simple version)."""
+    telegram_id = update.effective_user.id
+
+    if len(context.args) != 1:
+        return await update.message.reply_text("🎯 Usage: /use <item_id>")
+
+    item_id = context.args[0].lower()
+
+    if item_id == "basicshield":
+        player = db.get_player_data(telegram_id)
+        if player["ShieldActive"] == "Yes":
+            return await update.message.reply_text("🛡️ You already have a shield active!")
+
+        db.player_profile.update_cell(db.find_player(telegram_id), 9, "Yes")
+        await update.message.reply_text("🛡️ Basic Shield activated! You're protected for 24 hours.")
+
+    elif item_id == "revivekit":
+        await update.message.reply_text("🛠️ Revive Kit used! (Troop revive feature coming soon...)")
+
+    elif item_id == "infinityscout":
+        await update.message.reply_text("🛰️ Infinity Scout launched! (Spying system coming soon...)")
+
+    elif item_id == "hazmatdrone":
+        await update.message.reply_text("☣️ Hazmat Drone deployed! (Radiation zones coming soon...)")
+
+    elif item_id == "empdevice":
+        await update.message.reply_text("🔌 EMP Device activated! (Enemy shields disruption coming soon...)")
+
+    else:
+        await update.message.reply_text("❓ Unknown item or feature not available yet!")
