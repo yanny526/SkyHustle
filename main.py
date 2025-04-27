@@ -5,7 +5,7 @@ import handlers.resource as resource
 import handlers.army as army
 import handlers.zones as zones
 import handlers.combat as combat
-import handlers.research as research  # 🔥 Add this new import
+import handlers.research as research
 
 import os
 
@@ -27,9 +27,14 @@ app.add_handler(CommandHandler("help", start.help))
 app.add_handler(CommandHandler("forge", army.forge))
 app.add_handler(CommandHandler("army", army.army))
 
-# 🔥 New Research Handlers
+# Research Handlers
 app.add_handler(CommandHandler("research", research.research))
 app.add_handler(CommandHandler("tech", research.tech))
+
+# 🔥 New Zone Handlers
+app.add_handler(CommandHandler("claim", zones.claim))
+app.add_handler(CommandHandler("zone", zones.zone))
+app.add_handler(CommandHandler("map", zones.map))
 
 if __name__ == "__main__":
     app.run_polling()
