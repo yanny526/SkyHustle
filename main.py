@@ -6,6 +6,7 @@ import handlers.army as army
 import handlers.zones as zones
 import handlers.combat as combat
 import handlers.research as research
+import handlers.missions as missions  # 🔥 New import
 
 import os
 
@@ -36,8 +37,12 @@ app.add_handler(CommandHandler("claim", zones.claim))
 app.add_handler(CommandHandler("zone", zones.zone))
 app.add_handler(CommandHandler("map", zones.map))
 
-# 🔥 New Combat Handler
+# Combat Handler
 app.add_handler(CommandHandler("shield", combat.shield))
+
+# 🔥 Mission Handlers
+app.add_handler(CommandHandler("missions", missions.missions))
+app.add_handler(CommandHandler("claimmission", missions.claim))
 
 if __name__ == "__main__":
     app.run_polling()
