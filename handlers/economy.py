@@ -9,20 +9,20 @@ import utils.db as db
 def load_store_items():
     with open("data/items.json", "r") as f:
         data = json.load(f)
-    return data["store"]
+    return data["store_items"]  # ✅ Corrected here
 
 # Load blackmarket items
 def load_blackmarket_items():
     with open("data/items.json", "r") as f:
         data = json.load(f)
-    return data["blackmarket"]
+    return data["blackmarket_items"]  # ✅ Corrected here
 
 async def store(update: Update, context: ContextTypes.DEFAULT_TYPE):
     store_items = load_store_items()
 
     text = "🛒 **SkyHustle Store** 🛒\n\n"
     for item in store_items:
-        text += f"🆔 {item['id']} | {item['name']} — {item['cost']} Gold\n"
+        text += f"🆔 {item['id']} | {item['name']} — {item['price']} Gold\n"
 
     text += "\n🛒 To buy an item, type `/buy <item_id>`!"
     await update.message.reply_text(text)
@@ -32,7 +32,7 @@ async def blackmarket(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text = "🕵️‍♂️ **SkyHustle Black Market** 🕵️‍♂️\n\n"
     for item in blackmarket_items:
-        text += f"🆔 {item['id']} | {item['name']} — {item['cost']} Gold\n"
+        text += f"🆔 {item['id']} | {item['name']} — {item['price']} Gold\n"
 
     text += "\n🛒 To buy a black market item, type `/blackbuy <item_id>`!"
     await update.message.reply_text(text)
@@ -43,19 +43,19 @@ async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(context.args) != 1:
         return await update.message.reply_text("🛒 Usage: /buy <item_id>")
 
-    item_id = context.args[0].upper()
+    item_id = context.args[0].lower()
     store_items = load_store_items()
 
-    selected_item = next((item for item in store_items if item["id"].upper() == item_id), None)
+    selected_item = next((item for item in store_items if item["id"].lower() == item_id), None)
 
     if not selected_item:
         return await update.message.reply_text("🛒 Item not found in store!")
 
     player = db.get_player_data(telegram_id)
-    if player["Gold"] < selected_item["cost"]:
+    if player["Gold"] < selected_item["price"]:
         return await update.message.reply_text("💰 Not enough Gold!")
 
-    db.update_player_resources(telegram_id, gold_delta=-selected_item["cost"])
+    db.update_player_resources(telegram_id, gold_delta=-selected_item["price"])
 
     db.update_player_resources(
         telegram_id,
@@ -76,19 +76,19 @@ async def blackbuy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(context.args) != 1:
         return await update.message.reply_text("🕵️ Usage: /blackbuy <item_id>")
 
-    item_id = context.args[0].upper()
+    item_id = context.args[0].lower()
     black_items = load_blackmarket_items()
 
-    selected_item = next((item for item in black_items if item["id"].upper() == item_id), None)
+    selected_item = next((item for item in black_items if item["id"].lower() == item_id), None)
 
     if not selected_item:
         return await update.message.reply_text("🕵️ Item not found in Black Market!")
 
     player = db.get_player_data(telegram_id)
-    if player["Gold"] < selected_item["cost"]:
+    if player["Gold"] < selected_item["price"]:
         return await update.message.reply_text("💰 Not enough Gold!")
 
-    db.update_player_resources(telegram_id, gold_delta=-selected_item["cost"])
+    db.update_player_resources(telegram_id, gold_delta=-selected_item["price"])
 
     await update.message.reply_text(f"🕵️ You secretly purchased {selected_item['name']}! 🤫")
 
