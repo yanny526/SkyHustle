@@ -1,0 +1,22 @@
+{
+    "missions": [
+        {
+            "id": "M001",
+            "description": "Mine 500 Stone",
+            "type": "mine",
+            "amount": 500,
+            "reward_gold": 100,
+            "reward_stone": 200,
+            "reward_iron": 50
+        },
+        {
+            "id": "M002",
+            "description": "Win 2 battles",
+            "type": "win_battles",
+            "amount": 2,
+            "reward_gold": 300,
+            "reward_stone": 100,
+            "reward_iron": 150
+        }
+    ]
+}
