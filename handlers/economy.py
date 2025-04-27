@@ -32,7 +32,8 @@ async def blackmarket(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text += f"🆔 {item['id']} | {item['name']} — {item['price']} Gold\n"
     text += "\n🛒 To buy a black market item, type `/blackbuy <item_id>`!"
     await update.message.reply_text(text)
-
+    
+# --- INSIDE buy() ---
 async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     telegram_id = update.effective_user.id
     if len(context.args) != 1:
@@ -40,6 +41,7 @@ async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     item_id = context.args[0].lower()
     store_items = load_store_items()
+
     selected_item = next((item for item in store_items if item["id"].lower() == item_id), None)
 
     if not selected_item:
@@ -50,7 +52,8 @@ async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await update.message.reply_text("💰 Not enough Gold!")
 
     db.update_player_resources(telegram_id, gold_delta=-selected_item["price"])
-
+    
+    # If it's a resource pack, apply immediately
     if selected_item.get("gold") or selected_item.get("stone") or selected_item.get("iron") or selected_item.get("energy"):
         db.update_player_resources(
             telegram_id,
@@ -61,9 +64,11 @@ async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         await update.message.reply_text(f"✅ You bought {selected_item['name']}!")
     else:
-        db.add_to_inventory(telegram_id, selected_item["id"])
-        await update.message.reply_text(f"✅ You bought {selected_item['name']}! (Stored in Inventory)")
+        # Otherwise, add to inventory
+        db.add_to_inventory(telegram_id, selected_item['id'])
+        await update.message.reply_text(f"✅ {selected_item['name']} added to your inventory!")
 
+# --- INSIDE blackbuy() ---
 async def blackbuy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     telegram_id = update.effective_user.id
     if len(context.args) != 1:
@@ -71,6 +76,7 @@ async def blackbuy(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     item_id = context.args[0].lower()
     black_items = load_blackmarket_items()
+
     selected_item = next((item for item in black_items if item["id"].lower() == item_id), None)
 
     if not selected_item:
@@ -81,11 +87,14 @@ async def blackbuy(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await update.message.reply_text("💰 Not enough Gold!")
 
     db.update_player_resources(telegram_id, gold_delta=-selected_item["price"])
-    db.add_to_inventory(telegram_id, selected_item["id"])
-    await update.message.reply_text(f"🕵️ You secretly purchased {selected_item['name']}! (Stored in Inventory)")
+    db.add_to_inventory(telegram_id, selected_item['id'])
 
+    await update.message.reply_text(f"🕵️ You secretly purchased {selected_item['name']}! It's now in your inventory. 🤫")   
+
+# --- INSIDE use() ---
 async def use(update: Update, context: ContextTypes.DEFAULT_TYPE):
     telegram_id = update.effective_user.id
+
     if len(context.args) != 1:
         return await update.message.reply_text("🎯 Usage: /use <item_id>")
 
@@ -118,3 +127,29 @@ async def use(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await update.message.reply_text("❓ Unknown item or feature not available yet!")
 
     db.remove_from_inventory(telegram_id, item_id)  # Consume item
+    
+    # Consume item
+    db.remove_from_inventory(telegram_id, item_id)
+
+    if item_id == "basicshield":
+        player = db.get_player_data(telegram_id)
+        if player["ShieldActive"] == "Yes":
+            return await update.message.reply_text("🛡️ You already have a shield active!")
+
+        db.player_profile.update_cell(db.find_player(telegram_id), 9, "Yes")
+        await update.message.reply_text("🛡️ Basic Shield activated! You're protected for 24 hours.")
+
+    elif item_id == "revivekit":
+        await update.message.reply_text("🛠️ Revive Kit used! (Troop revive feature coming soon...)")
+
+    elif item_id == "infinityscout":
+        await update.message.reply_text("🛰️ Infinity Scout launched! (Spying system coming soon...)")
+
+    elif item_id == "hazmatdrone":
+        await update.message.reply_text("☣️ Hazmat Drone deployed! (Radiation zones coming soon...)")
+
+    elif item_id == "empdevice":
+        await update.message.reply_text("🔌 EMP Device activated! (Enemy shields disruption coming soon...)")
+
+    else:
+        await update.message.reply_text("❓ Unknown item or feature not available yet!")
