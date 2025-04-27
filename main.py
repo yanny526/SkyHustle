@@ -354,7 +354,8 @@ async def forge_command(update: Update, context: ContextTypes.DEFAULT_TYPE, play
         return
 
     cost_ore, cost_credits = {"scout": (10, 5), "tank": (30, 20), "drone": (20, 10)}[unit]
-    if player.ore < cost_ore * count or player.credits < cost ⚠️ Not enough resources.")
+   if player.ore < cost_ore * count or player.credits < cost_credits * count:
+        await update.message.reply_text("Not enough resources.")
         return
 
     player.army[unit] += count
