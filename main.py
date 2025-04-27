@@ -608,6 +608,101 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         save_player(p)
 
         return await update.message.reply_text(f"🛒 Purchased {item} successfully!")
+    if text.startswith(",research"):
+        parts = text.split()
+        if len(parts) != 3:
+            return await update.message.reply_text("🧬 Usage: ,research <technology> <level>")
+
+        tech = parts[1].lower()
+        try:
+            level = int(parts[2])
+        except ValueError:
+            return await update.message.reply_text("⚠️ Level must be a number.")
+
+        valid_techs = ["speed", "armor", "energy"]
+        if tech not in valid_techs:
+            return await update.message.reply_text("🧪 Valid technologies: speed, armor, energy")
+
+        cost = 75 * level
+
+        if p["Credits"] < cost:
+            return await update.message.reply_text(f"💳 You need {cost} credits to research {tech}.")
+
+        p["Credits"] -= cost
+        if tech == "speed":
+            p["SpeedResearch"] += level
+        elif tech == "armor":
+            p["ArmorResearch"] += level
+        elif tech == "energy":
+            p["EnergyResearch"] += level
+
+        save_player(p)
+        return await update.message.reply_text(f"🧬 Researched {tech.capitalize()} to level {level}!")
+
+    if text.startswith(",mission"):
+        missions_list = (
+            "🎯 *Current Missions:*\n"
+            "- Mine 500 Ore [Reward: 100 Credits]\n"
+            "- Forge 10 Scouts [Reward: 50 Credits]\n"
+            "- Claim 1 Zone [Reward: 150 Credits]\n"
+            "\nUse ,claimmission <name> when completed."
+        )
+        return await update.message.reply_text(missions_list, parse_mode=ParseMode.MARKDOWN)
+
+    if text.startswith(",claimmission"):
+        parts = text.split()
+        if len(parts) != 2:
+            return await update.message.reply_text("🎯 Usage: ,claimmission <name>")
+
+        mission = parts[1].lower()
+
+        if mission == "mine":
+            if p["Ore"] >= 500:
+                p["Credits"] += 100
+                save_player(p)
+                return await update.message.reply_text("🎉 Mission complete! +100 Credits awarded.")
+            else:
+                return await update.message.reply_text("🔎 You have not mined enough ore yet.")
+
+        elif mission == "forge":
+            total_units = sum(p["Army"].values())
+            if total_units >= 10:
+                p["Credits"] += 50
+                save_player(p)
+                return await update.message.reply_text("🎉 Mission complete! +50 Credits awarded.")
+            else:
+                return await update.message.reply_text("🔎 You have not forged enough units yet.")
+
+        elif mission == "zone":
+            if p["Zone"]:
+                p["Credits"] += 150
+                save_player(p)
+                return await update.message.reply_text("🎉 Mission complete! +150 Credits awarded.")
+            else:
+                return await update.message.reply_text("🔎 You haven't claimed any zone yet.")
+
+        else:
+            return await update.message.reply_text("❓ Unknown mission.")
+
+    if text.startswith(",rank"):
+        ranks = sorted(players_data(), key=lambda x: (-x.get("Wins", 0), x.get("Losses", 0)))
+        msg = "🏆 *SkyHustle Leaderboard:*\n"
+        for i, player in enumerate(ranks[:10], start=1):
+            msg += f"{i}. {player.get('Name', 'Unknown')} - Wins: {player.get('Wins',0)}\n"
+
+        return await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN)
+
+    if text.startswith(",pve"):
+        if not p.get("PVERaidReady"):
+            return await update.message.reply_text("👾 No active PvE raids. Check back later!")
+
+        reward = 100
+        p["Credits"] += reward
+        p["Ore"] += 300
+        p["PVERaidReady"] = False
+        save_player(p)
+        return await update.message.reply_text(f"👾 Raid successful! +100 Credits and +300 Ore earned!")
+
 
 
 
