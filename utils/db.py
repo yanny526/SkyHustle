@@ -90,3 +90,141 @@ def update_player_resources(telegram_id, gold_delta=0, stone_delta=0, iron_delta
             player_profile.update_cell(row, 7, current_data['Energy'] + energy_delta)
             return True
     return False
+# ---------------------- ARMY SYSTEM ----------------------
+
+def create_army(telegram_id):
+    """Initialize an army for a new player."""
+    try:
+        army.append_row([
+            str(telegram_id),
+            0,  # Scouts
+            0,  # Soldiers
+            0,  # Tanks
+            0   # Drones
+        ])
+        return True
+    except Exception as e:
+        print(f"Error creating army: {e}")
+        return False
+
+def get_army(telegram_id):
+    """Fetch army details for a player."""
+    try:
+        ids = army.col_values(1)  # PlayerID column
+        if str(telegram_id) in ids:
+            row = ids.index(str(telegram_id)) + 1
+            values = army.row_values(row)
+            return {
+                "PlayerID": values[0],
+                "Scouts": int(values[1]),
+                "Soldiers": int(values[2]),
+                "Tanks": int(values[3]),
+                "Drones": int(values[4])
+            }
+        return None
+    except Exception as e:
+        print(f"Error getting army: {e}")
+        return None
+
+def update_army(telegram_id, scouts_delta=0, soldiers_delta=0, tanks_delta=0, drones_delta=0):
+    """Update army units for a player by adding deltas."""
+    try:
+        ids = army.col_values(1)
+        if str(telegram_id) in ids:
+            row = ids.index(str(telegram_id)) + 1
+            current_data = get_army(telegram_id)
+            if current_data:
+                army.update_cell(row, 2, current_data['Scouts'] + scouts_delta)
+                army.update_cell(row, 3, current_data['Soldiers'] + soldiers_delta)
+                army.update_cell(row, 4, current_data['Tanks'] + tanks_delta)
+                army.update_cell(row, 5, current_data['Drones'] + drones_delta)
+                return True
+    except Exception as e:
+        print(f"Error updating army: {e}")
+    return False
+# ---------------------- RESEARCH SYSTEM ----------------------
+
+def create_research(telegram_id):
+    """Initialize research tree for a new player."""
+    try:
+        research.append_row([
+            str(telegram_id),
+            0,  # MiningSpeed
+            0,  # ArmyStrength
+            0,  # DefenseBoost
+            0   # SpyPower
+        ])
+        return True
+    except Exception as e:
+        print(f"Error creating research: {e}")
+        return False
+
+def get_research(telegram_id):
+    """Fetch research progress for a player."""
+    try:
+        ids = research.col_values(1)  # PlayerID column
+        if str(telegram_id) in ids:
+            row = ids.index(str(telegram_id)) + 1
+            values = research.row_values(row)
+            return {
+                "PlayerID": values[0],
+                "MiningSpeed": int(values[1]),
+                "ArmyStrength": int(values[2]),
+                "DefenseBoost": int(values[3]),
+                "SpyPower": int(values[4])
+            }
+        return None
+    except Exception as e:
+        print(f"Error getting research: {e}")
+        return None
+
+def update_research(telegram_id, mining_speed_delta=0, army_strength_delta=0, defense_boost_delta=0, spy_power_delta=0):
+    """Update research tree for a player by adding deltas."""
+    try:
+        ids = research.col_values(1)
+        if str(telegram_id) in ids:
+            row = ids.index(str(telegram_id)) + 1
+            current_data = get_research(telegram_id)
+            if current_data:
+                research.update_cell(row, 2, current_data['MiningSpeed'] + mining_speed_delta)
+                research.update_cell(row, 3, current_data['ArmyStrength'] + army_strength_delta)
+                research.update_cell(row, 4, current_data['DefenseBoost'] + defense_boost_delta)
+                research.update_cell(row, 5, current_data['SpyPower'] + spy_power_delta)
+                return True
+    except Exception as e:
+        print(f"Error updating research: {e}")
+    return False
+
+# ---------------------- ZONE CONTROL SYSTEM ----------------------
+
+def claim_zone(telegram_id, zone_name):
+    """Claim a zone for a player."""
+    try:
+        row = find_player(telegram_id)
+        if row:
+            player_profile.update_cell(row, 3, zone_name)  # Zone column
+            return True
+    except Exception as e:
+        print(f"Error claiming zone: {e}")
+    return False
+
+def get_zone(telegram_id):
+    """Get the current zone of a player."""
+    try:
+        player_data = get_player_data(telegram_id)
+        if player_data:
+            return player_data.get("Zone", "Unclaimed")
+    except Exception as e:
+        print(f"Error getting zone: {e}")
+    return "Unclaimed"
+
+def is_zone_claimed(zone_name):
+    """Check if a zone is already claimed."""
+    try:
+        zones = player_profile.col_values(3)  # Zone column
+        if zone_name in zones:
+            return True
+        return False
+    except Exception as e:
+        print(f"Error checking zone claim: {e}")
+        return False
