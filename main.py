@@ -20,6 +20,7 @@ app.add_handler(CommandHandler("mine", resource.mine))
 app.add_handler(CommandHandler("collect", resource.collect))
 app.add_handler(CommandHandler("scan", zones.scan))
 app.add_handler(CommandHandler("attack", combat.attack))
+app.add_handler(CommandHandler("help", start.help))
 
 if __name__ == "__main__":
     app.run_polling()
