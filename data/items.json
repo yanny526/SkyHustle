@@ -1,18 +1,6 @@
 {
   "store_items": [
     {
-      "id": "goldpack_small",
-      "name": "Small Gold Pack",
-      "gold": 500,
-      "price": 200
-    },
-    {
-      "id": "goldpack_medium",
-      "name": "Medium Gold Pack",
-      "gold": 1500,
-      "price": 500
-    },
-    {
       "id": "stonepack",
       "name": "Stone Pack",
       "stone": 1000,
