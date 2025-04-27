@@ -9,6 +9,7 @@ import handlers.research as research
 import handlers.missions as missions
 import handlers.ranking as ranking
 import handlers.admin as admin  # 🔥 NEW import for Admin Tools
+import handlers.economy as economy  # 🔥 New import for store/blackmarket
 
 import os
 
@@ -53,6 +54,13 @@ app.add_handler(CommandHandler("rank", ranking.rank))
 app.add_handler(CommandHandler("givegold", admin.givegold))
 app.add_handler(CommandHandler("wipeplayer", admin.wipeplayer))
 app.add_handler(CommandHandler("shieldforce", admin.shieldforce))
+
+# Economy Handlers
+app.add_handler(CommandHandler("store", economy.store))
+app.add_handler(CommandHandler("blackmarket", economy.blackmarket))
+app.add_handler(CommandHandler("buy", economy.buy))
+app.add_handler(CommandHandler("blackbuy", economy.blackbuy))
+app.add_handler(CommandHandler("use", economy.use))
 
 if __name__ == "__main__":
     app.run_polling()
