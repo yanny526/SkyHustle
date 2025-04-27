@@ -38,10 +38,10 @@ async def map(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """View the world map (simple version for now)."""
     await update.message.reply_text(
         "🗺️ **World Map** 🗺️\n\n"
-        "- Zone A: Unclaimed\n"
-        "- Zone B: Unclaimed\n"
-        "- Zone C: Unclaimed\n"
-        "- Zone D: Unclaimed\n"
-        "- Zone E: Unclaimed\n\n"
+        "- ZoneA: Unclaimed\n"
+        "- ZoneB: Unclaimed\n"
+        "- ZoneC: Unclaimed\n"
+        "- ZoneD: Unclaimed\n"
+        "- ZoneE: Unclaimed\n\n"
         "🏰 Conquer zones with /claim <zonename>!"
     )
