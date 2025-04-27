@@ -228,3 +228,78 @@ def is_zone_claimed(zone_name):
     except Exception as e:
         print(f"Error checking zone claim: {e}")
         return False
+# ---------------------- INVENTORY SYSTEM ----------------------
+
+def create_inventory(telegram_id):
+    """Initialize an empty inventory for a new player."""
+    try:
+        inventory = sheet.worksheet("Inventory")
+        inventory.append_row([
+            str(telegram_id),  # TelegramID
+            0, 0, 0, 0, 0      # Starting with 0 items for basicshield, revivekit, infinityscout, hazmatdrone, empdevice
+        ])
+        return True
+    except Exception as e:
+        print(f"Error creating inventory: {e}")
+        return False
+
+def get_inventory(telegram_id):
+    """Fetch player's inventory row as a dictionary."""
+    try:
+        inventory = sheet.worksheet("Inventory")
+        ids = inventory.col_values(1)
+        if str(telegram_id) in ids:
+            row = ids.index(str(telegram_id)) + 1
+            values = inventory.row_values(row)
+            headers = inventory.row_values(1)  # Header row
+            return dict(zip(headers, values))
+        return None
+    except Exception as e:
+        print(f"Error getting inventory: {e}")
+        return None
+
+def add_to_inventory(telegram_id, item_id, amount=1):
+    """Add item(s) to a player's inventory."""
+    try:
+        inventory = sheet.worksheet("Inventory")
+        ids = inventory.col_values(1)
+        if str(telegram_id) in ids:
+            row = ids.index(str(telegram_id)) + 1
+            headers = inventory.row_values(1)
+
+            if item_id not in headers:
+                print(f"Item {item_id} not found in Inventory sheet headers!")
+                return False
+
+            col = headers.index(item_id) + 1
+            current_amount = int(inventory.cell(row, col).value or 0)
+            inventory.update_cell(row, col, current_amount + amount)
+            return True
+    except Exception as e:
+        print(f"Error adding to inventory: {e}")
+    return False
+
+def use_from_inventory(telegram_id, item_id):
+    """Consume (use) an item from inventory."""
+    try:
+        inventory = sheet.worksheet("Inventory")
+        ids = inventory.col_values(1)
+        if str(telegram_id) in ids:
+            row = ids.index(str(telegram_id)) + 1
+            headers = inventory.row_values(1)
+
+            if item_id not in headers:
+                print(f"Item {item_id} not found in Inventory sheet headers!")
+                return False
+
+            col = headers.index(item_id) + 1
+            current_amount = int(inventory.cell(row, col).value or 0)
+
+            if current_amount > 0:
+                inventory.update_cell(row, col, current_amount - 1)
+                return True
+            else:
+                return False
+    except Exception as e:
+        print(f"Error using item from inventory: {e}")
+    return False
