@@ -24,7 +24,7 @@ async def store(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if "gold" in item["id"]:
             emoji = "💰"  # Gold bag
         elif "stone" in item["id"]:
-            emoji = "🛠️"  # Gear / mining
+            emoji = "🪨"  # Gear / mining
         elif "iron" in item["id"]:
             emoji = "🛠️"  # Gear / mining
         elif "energy" in item["id"]:
