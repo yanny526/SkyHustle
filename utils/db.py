@@ -24,6 +24,7 @@ army = sheet.worksheet("Army")
 buildings = sheet.worksheet("Buildings")
 research = sheet.worksheet("Research")
 missions = sheet.worksheet("Missions")
+inventory = sheet.worksheet("Inventory")
 
 
 # Utility Functions
