@@ -1,6 +1,7 @@
 from telegram import Update
 from telegram.ext import ContextTypes
 import json
+import utils.db as db
 
 # Load missions from JSON
 def load_missions():
@@ -21,7 +22,8 @@ async def missions(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     await update.message.reply_text(mission_text)
-  async def claim(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+async def claim(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Claim a mission reward by mission ID."""
     telegram_id = update.effective_user.id
 
@@ -41,11 +43,7 @@ async def missions(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not selected_mission:
         return await update.message.reply_text("🎯 Mission ID not found!")
 
-    # 🔥 For now: assume player always completed the mission (basic version)
-    # ✅ Later we will check mining amount, battle wins, etc.
-
-    # Add rewards to player
-    import utils.db as db
+    # 🔥 For now: assume player always completed the mission
     db.update_player_resources(
         telegram_id,
         gold_delta=selected_mission["reward_gold"],
@@ -58,4 +56,3 @@ async def missions(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"🏆 Rewards collected: +{selected_mission['reward_gold']} Gold, "
         f"+{selected_mission['reward_stone']} Stone, +{selected_mission['reward_iron']} Iron!"
     )
-
