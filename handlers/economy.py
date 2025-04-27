@@ -19,7 +19,7 @@ def load_blackmarket_items():
 
 async def store(update: Update, context: ContextTypes.DEFAULT_TYPE):
     store_items = load_store_items()
-    text = "✨ **SkyHustle General Store** ✨\n\n"
+    text = "🛒 **SkyHustle General Store** 🛒\n\n"
     for item in store_items:
         if "gold" in item["id"]:
             emoji = "💰"  # Gold bag
