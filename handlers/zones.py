@@ -35,13 +35,30 @@ async def zone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"🏰 You are currently ruling Zone: {zone_name}")
 
 async def map(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """View the world map (simple version for now)."""
-    await update.message.reply_text(
-        "🗺️ **World Map** 🗺️\n\n"
-        "- ZoneA: Unclaimed\n"
-        "- ZoneB: Unclaimed\n"
-        "- ZoneC: Unclaimed\n"
-        "- ZoneD: Unclaimed\n"
-        "- ZoneE: Unclaimed\n\n"
-        "🏰 Conquer zones with /claim <zonename>!"
-    )
+    """View the dynamic world map."""
+    try:
+        zones = ["ZoneA", "ZoneB", "ZoneC", "ZoneD", "ZoneE"]
+        all_players = db.player_profile.get_all_values()[1:]  # Skip header
+
+        zone_owners = {zone: "Unclaimed" for zone in zones}
+
+        for player in all_players:
+            player_name = player[0]
+            player_zone = player[2]
+            if player_zone in zones:
+                zone_owners[player_zone] = player_name
+
+        map_text = "🗺️ **SkyHustle World Map** 🗺️\n\n"
+        for zone in zones:
+            owner = zone_owners[zone]
+            if owner == "Unclaimed":
+                map_text += f"🏰 {zone}: Unclaimed\n"
+            else:
+                map_text += f"🏰 {zone}: {owner}\n"
+
+        map_text += "\n🏴‍☠️ Conquer Zones using /claim <zonename>!"
+        await update.message.reply_text(map_text)
+
+    except Exception as e:
+        await update.message.reply_text("⚠️ Error loading map!")
+        print(f"Error in map(): {e}")
