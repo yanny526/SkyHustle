@@ -2,6 +2,8 @@ from telegram import Update
 from telegram.ext import ContextTypes
 import utils.db as db
 
+# ------------------- SCAN SYSTEM -------------------
+
 async def scan(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Scan nearby zones (simple version for now)."""
     await update.message.reply_text(
@@ -10,19 +12,30 @@ async def scan(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "🛡️ The wastelands are quiet... for now."
     )
 
+# ------------------- CLAIM SYSTEM -------------------
+
 async def claim(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Claim a new Zone."""
     telegram_id = update.effective_user.id
+
     if len(context.args) != 1:
         return await update.message.reply_text("🏰 Usage: /claim <zonename>")
 
-    zone_name = context.args[0].capitalize()
+    zone_input = context.args[0].strip()
+
+    # Capitalize correctly
+    if zone_input.lower().startswith("zone") and len(zone_input) == 5:
+        zone_name = "Zone" + zone_input[4].upper()
+    else:
+        return await update.message.reply_text("🏰 Invalid zone format. Use ZoneA, ZoneB, etc.")
 
     if db.is_zone_claimed(zone_name):
         return await update.message.reply_text("🏰 This zone is already claimed by another Commander!")
 
     db.claim_zone(telegram_id, zone_name)
-    await update.message.reply_text(f"🏰 You have claimed Zone {zone_name}! Expand your empire wisely!")
+    await update.message.reply_text(f"🏰 You have claimed {zone_name}! Expand your empire wisely!")
+
+# ------------------- ZONE VIEW -------------------
 
 async def zone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """View your current zone."""
@@ -33,6 +46,8 @@ async def zone(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await update.message.reply_text("🏰 You have not claimed any zone yet. Use /claim to conquer territory!")
 
     await update.message.reply_text(f"🏰 You are currently ruling Zone: {zone_name}")
+
+# ------------------- WORLD MAP -------------------
 
 async def map(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """View the dynamic world map."""
