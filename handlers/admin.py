@@ -3,7 +3,7 @@ from telegram.ext import ContextTypes
 import utils.db as db
 
 # Replace this with your real Telegram ID!
-ADMIN_ID = 123456789  
+ADMIN_ID = 6006091868
 
 def is_admin(user_id):
     return user_id == ADMIN_ID
