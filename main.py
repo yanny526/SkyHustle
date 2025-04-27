@@ -1,3 +1,7 @@
+# ===============================
+# SkyHustle: HyperClean Part 1
+# ===============================
+
 import os
 import json
 import base64
@@ -224,10 +228,12 @@ def save_player(sheet, player):
             new_row = row_data
             sheet.append_row(new_row)
             # Update the player's row number after appending (less efficient, but works)
-            #  This is tricky, you might need to rethink how you track row numbers
-            #  A better approach might be to reload the player after appending
-            #  Or to maintain a local cache of row numbers
-            #  For now, we'll leave it simple, but be aware of the inefficiency
+            #   This is tricky, you might need to rethink how you track row numbers
+            #   A better approach might be to reload the player after appending
+            #   Or to maintain a local cache of row numbers
+            #   For now, we'll leave it simple, but be aware of the inefficiency
+            #   We'll leave it for now
+            pass
     except Exception as e:
         print(f"Error saving player {player.name}: {e}")
 
@@ -236,8 +242,8 @@ def create_new_player(sheet, chat_id):
     new_player = Player(chat_id=chat_id)  # Create a new Player object
     save_player(sheet, new_player)  # Save it to the sheet
 
-    #  Inefficiently retrieve the player with the row number
-    #  This is a temporary workaround
+    #   Inefficiently retrieve the player with the row number
+    #   This is a temporary workaround
     return find_player_by_chat_id(sheet, chat_id)
 
 def find_or_create_player(sheet, chat_id):
@@ -329,7 +335,7 @@ async def mine_command(update: Update, context: ContextTypes.DEFAULT_TYPE, playe
     player.ore += ore_gain
     player.credits += credits_gain
     player.energy -= count * 5
-    save_player(player)
+    save_player(sheet, player)  # Corrected: Pass the sheet
     # check_mission_progress(player, "mine", ore_gain)  # Track mission progress
     await update.message.reply_text(f"⛏️ Mined {ore_gain} Ore and earned {credits_gain} Credits.")
 
@@ -354,14 +360,14 @@ async def forge_command(update: Update, context: ContextTypes.DEFAULT_TYPE, play
         return
 
     cost_ore, cost_credits = {"scout": (10, 5), "tank": (30, 20), "drone": (20, 10)}[unit]
-   if player.ore < cost_ore * count or player.credits < cost_credits * count:
+    if player.ore < cost_ore * count or player.credits < cost_credits * count:
         await update.message.reply_text("Not enough resources.")
         return
 
     player.army[unit] += count
     player.ore -= cost_ore * count
     player.credits -= cost_credits * count
-    save_player(player)
+    save_player(sheet, player)  # Corrected: Pass the sheet
     await update.message.reply_text(f"⚒️ Forged {count} {unit}(s).")
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -380,7 +386,6 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handles errors."""
     print(f"⚠️ Update {update} caused error {context.error}")
-
 # ===============================
 # Main Function - Bot Setup and Running
 # ===============================
@@ -388,14 +393,19 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def main():
     """Main function - sets up and runs the bot."""
     application = ApplicationBuilder().token(BOT_TOKEN).build()
+    sheet = get_sheet()  # Get the sheet instance here
+
+    if not sheet:
+        print("⚠️  Error connecting to the game. Bot will not start.")
+        return
 
     # Command handlers
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("name", name_command))
     application.add_handler(CommandHandler("status", status_command))
-    #  We need to use a lambda to pass the player object
-    application.add_handler(CommandHandler("mine", lambda update, context: mine_command(update, context, find_or_create_player(get_sheet(), update.message.chat_id))))
-    application.add_handler(CommandHandler("forge", lambda update, context: forge_command(update, context, find_or_create_player(get_sheet(), update.message.chat_id))))
+    #  We need to use a lambda to pass the player object AND the sheet
+    application.add_handler(CommandHandler("mine", lambda update, context: mine_command(update, context, find_or_create_player(sheet, update.message.chat_id))))
+    application.add_handler(CommandHandler("forge", lambda update, context: forge_command(update, context, find_or_create_player(sheet, update.message.chat_id))))
     application.add_handler(CommandHandler("help", help_command))
 
     # Error handler
