@@ -7,7 +7,8 @@ import handlers.zones as zones
 import handlers.combat as combat
 import handlers.research as research
 import handlers.missions as missions
-import handlers.ranking as ranking  # 🔥 New import for ranking
+import handlers.ranking as ranking
+import handlers.admin as admin  # 🔥 NEW import for Admin Tools
 
 import os
 
@@ -45,8 +46,13 @@ app.add_handler(CommandHandler("shield", combat.shield))
 app.add_handler(CommandHandler("missions", missions.missions))
 app.add_handler(CommandHandler("claimmission", missions.claim))
 
-# 🔥 Ranking Handler
+# Ranking Handler
 app.add_handler(CommandHandler("rank", ranking.rank))
+
+# 🔥 Admin Tools Handlers
+app.add_handler(CommandHandler("givegold", admin.givegold))
+app.add_handler(CommandHandler("wipeplayer", admin.wipeplayer))
+app.add_handler(CommandHandler("shieldforce", admin.shieldforce))
 
 if __name__ == "__main__":
     app.run_polling()
