@@ -55,7 +55,6 @@ def get_sheet():
 players_sheet = get_sheet().worksheet("SkyHustle")  # Assuming a worksheet named "SkyHustle"
 zones = {"Alpha": None, "Beta": None, "Gamma": None, "Delta": None, "Epsilon": None}  # Zone control (zone: chat_id)
 enabled_zones = list(zones.keys())  # For easier zone validation
-
 # ===============================
 # Player Data Management
 # ===============================
@@ -202,7 +201,6 @@ def find_or_create_player(cid):
     if not player:
         player = create_new_player(cid)
     return player
-
 # ===============================
 # Helper Functions
 # ===============================
@@ -303,31 +301,12 @@ def apply_attack_results(attacker, defender, damage):
 
     save_player(attacker)
     save_player(defender)
-
-
-
 # ===============================
 # End of Part 1
 # ===============================
 
 #  PASTE PART 2 CODE DIRECTLY BELOW THIS LINE
-await update.message.reply_text(f"🏭 Forged {count} {unit}(s). Remaining Ore: {player.ore}, Credits: {player.credits}, Army: {player.army}")
-
-async def use_command(update: Update, context: ContextTypes.DEFAULT_TYPE, player):
-    """Handles the /use command."""
-
-    text = update.message.text
-    parts = text.split()
-    if len(parts) != 2:
-        await update.message.reply_text("📦 Usage: /use <item>")
-        return
-
-    item = parts[1]
-    if item in player.items:
-        if item == "shield":
-            player.shield_until = (datetime.now() + timedelta(hours=1)).isoformat()
-            player.items.remove(item)
-            await update.message.reply_text("🛡️ Shield activated for 1 hour.")
+.")
         # Add other item effects here
         save_player(player)
     else:
@@ -582,82 +561,20 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-# ===============================
-# SkyHustle: HyperClean Part 2
-# ===============================
+await update.message.reply_text(f"🏭 Forged {count} {unit}(s). Remaining Ore: {player.ore}, Credits: {player.credits}, Army: {player.army}")
 
-#   (Part 1 code should already be here)
-
-async def daily_command(update: Update, context: ContextTypes.DEFAULT_TYPE, player):
-    """Handles the /daily command."""
-
-    today = date.today()
-    if player.last_daily == str(today):
-        await update.message.reply_text("🎁 You've already claimed your daily reward today.")
-        return
-
-    last_daily = datetime.strptime(player.last_daily, "%Y-%m-%d").date() if player.last_daily else None
-    player.credits += 50
-    player.energy += 20
-    player.daily_streak = player.daily_streak + 1 if last_daily == today - timedelta(days=1) else 1
-    player.last_daily = str(today)
-    save_player(player)
-    await update.message.reply_text(f"🎉 +50 Credits, +20 Energy! Streak: {player.daily_streak} days.")
-
-async def mine_command(update: Update, context: ContextTypes.DEFAULT_TYPE, player):
-    """Handles the /mine command."""
+async def use_command(update: Update, context: ContextTypes.DEFAULT_TYPE, player):
+    """Handles the /use command."""
 
     text = update.message.text
     parts = text.split()
-    if len(parts) != 3 or parts[1] != "ore":
-        await update.message.reply_text("⚠️ Usage: /mine ore <count>")
-        return
-    try:
-        count = int(parts[2])
-    except ValueError:
-        await update.message.reply_text("⚠️ Count must be a number.")
+    if len(parts) != 2:
+        await update.message.reply_text("📦 Usage: /use <item>")
         return
 
-    if player.energy < count * 5:
-        await update.message.reply_text("⚠️ Not enough energy.")
-        return
-
-    ore_gain = 20 * count + (player.refinery_level * 5)
-    credits_gain = 10 * count
-    player.ore += ore_gain
-    player.credits += credits_gain
-    player.energy -= count * 5
-    save_player(player)
-    check_mission_progress(player, "mine", ore_gain)  # Track mission progress
-    await update.message.reply_text(f"⛏️ Mined {ore_gain} Ore and earned {credits_gain} Credits.")
-
-async def forge_command(update: Update, context: ContextTypes.DEFAULT_TYPE, player):
-    """Handles the /forge command."""
-
-    text = update.message.text
-    parts = text.split()
-    if len(parts) != 3:
-        await update.message.reply_text("⚒️ Usage: /forge <unit> <count>")
-        return
-
-    unit, count = parts[1], parts[2]
-    try:
-        count = int(count)
-    except ValueError:
-        await update.message.reply_text("⚒️ Count must be a number.")
-        return
-
-    if unit not in ["scout", "tank", "drone"]:
-        await update.message.reply_text("⚒️ Invalid unit. Choose scout, tank, or drone.")
-        return
-
-    cost_ore, cost_credits = {"scout": (10, 5), "tank": (30, 20), "drone": (20, 10)}[unit]
-    if player.ore < cost_ore * count or player.credits < cost_credits * count:
-        await update.message.reply_text("⚠️ Not enough Ore or Credits.")
-        return
-
-    player.army[unit] = player.army.get(unit, 0) + count
-    player.ore -= cost_ore * count
-    player.credits -= cost_credits * count
-    save_player(player)
-    check_mission_progress(player, "forge", count)  # Track mission progress
+    item = parts[1]
+    if item in player.items:
+        if item == "shield":
+            player.shield_until = (datetime.now() + timedelta(hours=1)).isoformat()
+            player.items.remove(item)
+            await update.message.reply_text("🛡️ Shield activated for 1 hour
