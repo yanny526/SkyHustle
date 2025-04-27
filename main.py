@@ -1,711 +1,1824 @@
+# ===============================
+# SkyHustle: HyperClean Part 1
+# ===============================
+
 import os
 import json
+import base64
 import asyncio
 from datetime import datetime, timedelta, date
+import random
+
+import gspread
+from google.oauth2.service_account import Credentials
 from telegram import Update
 from telegram.constants import ParseMode
-from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
-from sheet import get_sheet
+from telegram.ext import (
+    ApplicationBuilder,
+    MessageHandler,
+    CommandHandler,
+    ContextTypes,
+    filters,
+)
 
-players_sheet = get_sheet().worksheet("SkyHustle")
+# ===============================
+# Configuration - Environment Variables
+# ===============================
 
-def get_player(cid):
-    records = players_sheet.get_all_records()
-    for i, row in enumerate(records):
-        if str(row["ChatID"]) == str(cid):
-            row["_row"] = i + 2
-            row["Army"] = json.loads(row["Army"]) if row["Army"] else {"scout": 0, "tank": 0, "drone": 0}
-            row["Items"] = json.loads(row["Items"]) if row["Items"] else {}
-            row["BlackMarketUnlocked"] = True if row.get("BlackMarketUnlocked") == "TRUE" else False
-            return row
+#   Ensure you have these set in your environment:
+#   - BOT_TOKEN: Your Telegram Bot Token
+#   - GOOGLE_CREDENTIALS_BASE64: Base64 encoded JSON of your Google Service Account credentials
 
-    new_player = {
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+GOOGLE_CREDENTIALS_BASE64 = os.getenv("GOOGLE_CREDENTIALS_BASE64")
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1_HYh2BXOGjuZ6ypovf7HUlb3GYuu033V66O6KtNmM2M/edit"  # Replace with your sheet URL
+
+# ===============================
+# Google Sheets Setup
+# ===============================
+
+def get_sheet():
+    """Connects to the Google Sheet."""
+
+    try:
+        creds_json = base64.b64decode(GOOGLE_CREDENTIALS_BASE64).decode("utf-8")
+        creds_dict = json.loads(creds_json)
+        credentials = Credentials.from_service_account_info(
+            creds_dict, scopes=["https://www.googleapis.com/auth/spreadsheets"]
+        )
+        client = gspread.authorize(credentials)
+        return client.open_by_url(SHEET_URL)
+    except Exception as e:
+        print(f"Error connecting to Google Sheets: {e}")
+        return None  # Handle the error appropriately in your app
+
+players_sheet = get_sheet().worksheet("SkyHustle")  # Assuming a worksheet named "SkyHustle"
+zones = {"Alpha": None, "Beta": None, "Gamma": None, "Delta": None, "Epsilon": None}  # Zone control (zone: chat_id)
+enabled_zones = list(zones.keys())  # For easier zone validation
+
+# ===============================
+# Player Data Management
+# ===============================
+
+class Player:
+    """Represents a player in the game."""
+
+    def __init__(self, data):
+        self.chat_id = int(data.get("ChatID", 0))
+        self.name = data.get("Name", "")
+        self.ore = int(data.get("Ore", 0))
+        self.energy = int(data.get("Energy", 100))
+        self.credits = int(data.get("Credits", 100))
+        self.army = json.loads(data.get("Army", '{"scout": 0, "tank": 0, "drone": 0}'))
+        self.zone = data.get("Zone", "")
+        self.shield_until = data.get("ShieldUntil", None)
+        self.daily_streak = int(data.get("DailyStreak", 0))
+        self.last_daily = data.get("LastDaily", "")
+        self.black_market_unlocked = bool(data.get("BlackMarketUnlocked", False))
+        self.items = json.loads(data.get("Items", "{}"))
+        self.missions = json.loads(data.get("Missions", '{}')) if data.get("Missions") else {}
+        self.last_mission_reset = data.get("LastMissionReset", "")
+        self.row_number = int(data.get("_row", 0))  # Google Sheet row number (if applicable)
+        self.wins = int(data.get("Wins", 0))
+        self.losses = int(data.get("Losses", 0))
+        self.banner = data.get("Banner", "")
+        self.refinery_level = int(data.get("RefineryLevel", 0))
+        self.lab_level = int(data.get("LabLevel", 0))
+        self.defense_level = int(data.get("DefenseLevel", 0))
+        self.research = json.loads(data.get("Research", '{"speed": 0, "armor": 0}')) if data.get("Research") else {}
+        self.faction = data.get("Faction", None)
+
+    def to_list(self):
+        """Converts player data to a list for saving to the sheet."""
+        return [
+            self.chat_id,
+            self.name,
+            self.ore,
+            self.energy,
+            self.credits,
+            json.dumps(self.army),
+            self.zone,
+            self.shield_until,
+            self.daily_streak,
+            self.last_daily,
+            self.black_market_unlocked,
+            json.dumps(self.items),
+            json.dumps(self.missions),
+            self.last_mission_reset,
+            self.wins,
+            self.losses,
+            self.banner,
+            self.refinery_level,
+            self.lab_level,
+            self.defense_level,
+            json.dumps(self.research),
+            self.faction,
+        ]
+
+def get_all_players():
+    """Fetches all player data from the sheet and returns a list of Player objects."""
+
+    try:
+        records = players_sheet.get_all_records()
+        return [Player(row) for row in records]
+    except Exception as e:
+        print(f"Error fetching all players: {e}")
+        return []
+
+def find_player_by_chat_id(cid):
+    """Finds a player by their chat ID."""
+
+    players = get_all_players()
+    for player in players:
+        if player.chat_id == cid:
+            return player
+    return None
+
+def find_player_by_name(name):
+    """Finds a player by their name (alias)."""
+
+    players = get_all_players()
+    for player in players:
+        if player.name.lower() == name.lower():
+            return player
+    return None
+
+def save_player(player):
+    """Saves a player's data back to the Google Sheet."""
+
+    try:
+        if player.row_number:
+            players_sheet.update(
+                f"A{player.row_number}:V{player.row_number}", [player.to_list()]
+            )
+        else:
+            #  Handle new player save (append)
+            new_row = player.to_list()
+            players_sheet.append_row(new_row)
+            #  Update the player's row number after appending
+            player.row_number = len(players_sheet.get_all_records()) + 1
+    except Exception as e:
+        print(f"Error saving player {player.name}: {e}")
+
+def create_new_player(cid):
+    """Creates a new player in the Google Sheet."""
+
+    new_player_data = {
         "ChatID": cid,
         "Name": "",
         "Ore": 0,
         "Energy": 100,
         "Credits": 100,
-        "Army": {"scout": 0, "tank": 0, "drone": 0},
+        "Army": json.dumps({"scout": 0, "tank": 0, "drone": 0}),
         "Zone": "",
         "ShieldUntil": "",
         "DailyStreak": 0,
         "LastDaily": "",
         "BlackMarketUnlocked": False,
-        "Items": {}
+        "Items": json.dumps({}),
+        "Missions": json.dumps({}),
+        "LastMissionReset": "",
+        "Wins": 0,
+        "Losses": 0,
+        "Banner": "",
+        "RefineryLevel": 0,
+        "LabLevel": 0,
+        "DefenseLevel": 0,
+        "Research": json.dumps({}),
+        "Faction": None,
     }
-    players_sheet.append_row([
-        new_player["ChatID"], new_player["Name"], new_player["Ore"], new_player["Energy"], new_player["Credits"],
-        json.dumps(new_player["Army"]), new_player["Zone"], new_player["ShieldUntil"],
-        new_player["DailyStreak"], new_player["LastDaily"], new_player["BlackMarketUnlocked"], json.dumps(new_player["Items"])
-    ])
-    new_player["_row"] = len(records) + 2
-    return new_player
+    try:
+        players_sheet.append_row(list(new_player_data.values()))
+        new_player = Player(find_player_by_chat_id(cid).__dict__)  # Fetch and create Player object
+        return new_player
+    except Exception as e:
+        print(f"Error creating new player: {e}")
+        return None
 
-def update_player(p):
-    players_sheet.update(
-        f"A{p['_row']}:L{p['_row']}",
-        [[
-            p["ChatID"], p["Name"], p["Ore"], p["Energy"], p["Credits"],
-            json.dumps(p["Army"]), p["Zone"], p["ShieldUntil"],
-            p["DailyStreak"], p["LastDaily"], p["BlackMarketUnlocked"], json.dumps(p["Items"])
-        ]]
+def find_or_create_player(cid):
+    """Finds a player by chat ID, or creates a new one if not found."""
+
+    player = find_player_by_chat_id(cid)
+    if not player:
+        player = create_new_player(cid)
+    return player
+
+# ===============================
+# Helper Functions
+# ===============================
+
+def can_attack(player, target):
+    """Checks if a player can attack another player."""
+
+    if not target:
+        return False, "Target player not found."
+    if player.chat_id == target.chat_id:
+        return False, "You cannot attack yourself."
+    if target.shield_until and datetime.fromisoformat(target.shield_until) > datetime.now():
+        return False, f"{target.name} is currently shielded."
+    return True, ""
+
+def find_zone_owner(zone):
+    """Finds the player who owns a specific zone."""
+
+    players = get_all_players()
+    for player in players:
+        if player.zone == zone:
+            return player
+    return None
+
+def black_market_price(item):
+    """Returns the price of a Black Market item."""
+
+    prices = {"infinityscout": 100, "reviveall": 500, "hazmat": 250}
+    return prices.get(item, 0)
+
+def check_mission_progress(player, action, amount=1):
+    """Checks and updates mission progress for a player."""
+
+    today = date.today()
+    if player.last_mission_reset != str(today):
+        reset_missions(player)  # Reset missions if it's a new day
+
+    if not player.missions:
+        return  # No missions to check
+
+    if action == "mine" and "mine5" in player.missions and not player.missions["mine5"]:
+        player.missions["mine5"] = player.missions.get("mine5", 0) + amount >= 5
+        if player.missions["mine5"]:
+            player.credits += 50  # Reward for completing mission
+    elif action == "win" and "win1" in player.missions and not player.missions["win1"]:
+        player.missions["win1"] = True
+        player.credits += 75
+    elif action == "forge" and "forge5" in player.missions and not player.missions["forge5"]:
+        player.missions["forge5"] = player.missions.get("forge5", 0) + amount >= 5
+        if player.missions["forge5"]:
+            player.credits += 60
+    save_player(player)
+
+def reset_missions(player):
+    """Resets daily missions for a player."""
+
+    player.missions = {
+        "mine5": False,
+        "win1": False,
+        "forge5": False,
+    }  # Reset mission status
+    player.last_mission_reset = str(date.today())
+    save_player(player)
+
+def calculate_attack_damage(attacker, defender):
+    """Calculates the damage in an attack."""
+
+    attacker_power = (
+        attacker.army["scout"] * 1 +
+        attacker.army["tank"] * 3 +
+        attacker.army["drone"] * 2
+    )
+    defender_power = (
+        defender.army["scout"] * 1 +
+        defender.army["tank"] * 3 +
+        defender.army["drone"] * 2
     )
 
-def save_player(p):
-    update_player(p)
-async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    cid = update.effective_chat.id
-    text = update.message.text.strip()
-    p = get_player(cid)
+    # Apply research bonuses
+    attacker_power *= 1 + (attacker.research.get("speed", 0) * 0.1)
+    defender_power *= 1 + (defender.research.get("armor", 0) * 0.1)
 
-    if text.startswith(",start"):
-        intro = (
-            "🌌 Welcome to *SkyHustle*!\n"
-            "The world of Hyperion awaits you, Commander.\n\n"
-            "⚡ *Set Callsign:* `,name <alias>`\n"
-            "📊 *View Status:* `,status`\n"
-            "🛠️ *Begin Mining:* `,mine ore <amount>`\n"
-            "🎯 *Daily Rewards:* `,daily`\n"
-            "🏰 *Claim a Zone:* `,claim <zone>`\n"
-        )
-        return await update.message.reply_text(intro, parse_mode=ParseMode.MARKDOWN)
+    damage = attacker_power - defender_power
+    damage = max(1, damage)  # Ensure minimum damage of 1
+    return damage
 
-    if text.startswith(",name"):
-        alias = text[6:].strip()
-        if not alias:
-            return await update.message.reply_text("⚠️ Usage: ,name <alias>")
-        p["Name"] = alias
-        save_player(p)
-        return await update.message.reply_text(f"🚩 Callsign set to *{alias}*", parse_mode=ParseMode.MARKDOWN)
+def apply_attack_results(attacker, defender, damage):
+    """Applies the results of an attack, updating army counts."""
 
-    if text.startswith(",status"):
-        army = json.loads(p["Army"])
-        items = json.loads(p["Items"])
-        status = (
-            f"📜 *Commander {p['Name']}*\n"
-            f"🪨 Ore: {p['Ore']} | ⚡ Energy: {p['Energy']} | 💳 Credits: {p['Credits']}\n"
-            f"🛡 Zone: {p['Zone'] or 'None'} | 🎯 Daily Streak: {p['DailyStreak']}\n"
-            f"🤖 Army: {army}\n"
-            f"🎒 Items: {items or 'None'}"
-        )
-        return await update.message.reply_text(status, parse_mode=ParseMode.MARKDOWN)
-        if text.startswith(",name"):
-        alias = text[6:].strip()
-        if not alias:
-            return await update.message.reply_text("⚠️ Usage: ,name <alias>")
-        p["Name"] = alias
-        save_player(p)
-        return await update.message.reply_text(f"🎖️ Callsign set to {alias}!")
+    attacker_loss_rate = 0.2
+    defender_loss_rate = 0.3
 
-    if text.startswith(",status"):
-        army = json.loads(p["Army"])
-        items_owned = ", ".join([f"{k}x{v}" for k, v in json.loads(p["Items"]).items()]) or "None"
-        msg = (
-            f"📊 *Commander {p['Name'] or 'Unknown'}*\n"
-            f"🪨 Ore: {p['Ore']} | ⚡ Energy: {p['Energy']} | 💳 Credits: {p['Credits']}\n"
-            f"🤖 Army: {army}\n"
-            f"🎒 Items: {items_owned}\n"
-            f"📍 Zone: {p['Zone'] or 'None'}"
-        )
-        return await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN)
-        if text.startswith(",daily"):
-        today = str(date.today())
-        if p["LastDaily"] == today:
-            return await update.message.reply_text("🎁 You've already claimed your daily reward today!")
-        last = p["LastDaily"]
-        if last and last == str(date.today() - timedelta(days=1)):
-            p["DailyStreak"] += 1
-        else:
-            p["DailyStreak"] = 1
-        p["Credits"] += 50
-        p["Energy"] += 25
-        p["LastDaily"] = today
-        save_player(p)
-        return await update.message.reply_text(f"🎉 +50 Credits, +25 Energy! Streak: {p['DailyStreak']} days.")
+    for unit in attacker.army:
+        attacker.army[unit] = max(0, int(attacker.army[unit] * (1 - attacker_loss_rate)))
+    for unit in defender.army:
+        defender.army[unit] = max(0, int(defender.army[unit] * (1 - defender_loss_rate)))
 
-    if text.startswith(",mine"):
-        parts = text.split()
-        if len(parts) != 3 or parts[1] != "ore":
-            return await update.message.reply_text("⚠️ Usage: ,mine ore <count>")
-        try:
-            count = int(parts[2])
-        except:
-            return await update.message.reply_text("⚠️ Count must be a number.")
-        if p["Energy"] < count * 5:
-            return await update.message.reply_text("⚡ Not enough Energy.")
-        ore_gain = 20 * count
-        p["Ore"] += ore_gain
-        p["Energy"] -= count * 5
-        p["Credits"] += 10 * count
-        save_player(p)
-        return await update.message.reply_text(f"⛏️ You mined {ore_gain} ore and earned {10*count} credits!")
-        if text.startswith(",forge"):
-        parts = text.split()
-        if len(parts) != 3:
-            return await update.message.reply_text("⚒️ Usage: ,forge <unit> <count>")
+    # Reduce more units based on damage
+    total_defender_units = sum(defender.army.values())
+    damage_reduction_ratio = min(1, damage / (total_defender_units + 1e-6))  # Avoid division by zero
+    for unit in defender.army:
+        defender.army[unit] = max(0, int(defender.army[unit] * (1 - damage_reduction_ratio)))
 
-        unit = parts[1].lower()
-        try:
-            count = int(parts[2])
-        except:
-            return await update.message.reply_text("⚠️ Count must be a number.")
+    save_player(attacker)
+    save_player(defender)
 
-        if unit not in ["scout", "tank", "drone"]:
-            return await update.message.reply_text("⚠️ Invalid unit. Available: scout, tank, drone.")
+# ===============================
+# Command Handlers
+# ===============================
 
-        unit_costs = {
-            "scout": {"Ore": 20, "Credits": 10},
-            "tank": {"Ore": 50, "Credits": 30},
-            "drone": {"Ore": 80, "Credits": 50}
-        }
+async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE, player):
+    """Handles the /start command."""
 
-        cost = unit_costs[unit]
-        if p["Ore"] < cost["Ore"] * count or p["Credits"] < cost["Credits"] * count:
-            return await update.message.reply_text("💳 Not enough resources!")
+    intro = (
+        "🌌 *Welcome to SkyHustle!*\n"
+        "Centuries from now, the Hyperion core pulses with boundless energy.\n"
+        "You are a Commander in the New Galactic Order.\n"
+        "Gather ore, strengthen your army, dominate the zones.\n\n"
+        "💠 Use /name <alias> to set your callsign.\n"
+        "💠 Use /status to view your progress.\n"
+        "💠 Use /mine ore 1 to start mining resources.\n\n"
+        "🛡 Glory and power await!"
+    )
+    await update.message.reply_text(intro, parse_mode=ParseMode.MARKDOWN)
 
-        p["Ore"] -= cost["Ore"] * count
-        p["Credits"] -= cost["Credits"] * count
-        army = json.loads(p["Army"])
-        army[unit] += count
-        p["Army"] = json.dumps(army)
-        save_player(p)
-        return await update.message.reply_text(f"⚔️ Forged {count} {unit}(s) successfully!")
-    if text.startswith(",spy"):
-        parts = text.split()
-        if len(parts) != 2:
-            return await update.message.reply_text("🕵️ Usage: ,spy <enemy alias>")
+async def name_command(update: Update, context: ContextTypes.DEFAULT_TYPE, player):
+    """Handles the /name command."""
 
-        enemy_alias = parts[1]
-        enemy = find_player_by_name(enemy_alias)
-        if not enemy:
-            return await update.message.reply_text("🎯 Target not found!")
-
-        scout_count = json.loads(p["Army"]).get("scout", 0)
-        if scout_count <= 0:
-            return await update.message.reply_text("🚫 You need at least 1 scout to spy.")
-
-        success = random.choice([True, False])
-        if success:
-            army = json.loads(enemy["Army"])
-            return await update.message.reply_text(
-                f"🛰️ Spy Report on {enemy['Name']}:\n"
-                f"Ore: {enemy['Ore']} | Credits: {enemy['Credits']}\n"
-                f"Army: {army}"
-            )
-        else:
-            return await update.message.reply_text("❌ Your scouts failed to gather intel.")
-                if text.startswith(",missions"):
-        mission_list = [
-            "🛡 Complete a daily login streak (5 days)",
-            "⛏ Mine 500 Ore",
-            "⚔️ Win 5 Battles",
-            "🏗 Upgrade your Refinery",
-            "🛰 Unlock the Black Market"
-        ]
-        msg = "🎯 *Available Missions:*\n\n" + "\n".join(f"- {m}" for m in mission_list)
-        return await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN)
-
-    if text.startswith(",claimmission"):
-        parts = text.split()
-        if len(parts) != 2:
-            return await update.message.reply_text("🏅 Usage: ,claimmission <mission>")
-        mission_id = parts[1]
-        if mission_id == "1" and p["DailyStreak"] >= 5:
-            p["Credits"] += 200
-            await update.message.reply_text("🎯 Mission 1 completed! +200 credits.")
-        elif mission_id == "2" and p["Ore"] >= 500:
-            p["Credits"] += 150
-            await update.message.reply_text("🎯 Mission 2 completed! +150 credits.")
-        elif mission_id == "3" and p["Wins"] >= 5:
-            p["Credits"] += 300
-            await update.message.reply_text("🎯 Mission 3 completed! +300 credits.")
-        elif mission_id == "4" and p["RefineryLevel"] >= 2:
-            p["Credits"] += 250
-            await update.message.reply_text("🎯 Mission 4 completed! +250 credits.")
-        elif mission_id == "5" and p.get("BlackMarketUnlocked"):
-            p["Credits"] += 500
-            await update.message.reply_text("🎯 Mission 5 completed! +500 credits.")
-        else:
-            return await update.message.reply_text("🚫 Mission requirements not met.")
-        save_player(p)
+    text = update.message.text
+    alias = text[6:].strip()
+    if not alias:
+        await update.message.reply_text("⚠️ Usage: /name <alias>")
         return
 
-    if text.startswith(",upgrade"):
-        parts = text.split()
-        if len(parts) != 2:
-            return await update.message.reply_text("🏗 Usage: ,upgrade <refinery/lab>")
-        building = parts[1]
-        if building == "refinery":
-            cost = (p["RefineryLevel"] + 1) * 100
-            if p["Credits"] < cost:
-                return await update.message.reply_text(f"💳 Need {cost} credits to upgrade.")
-            p["Credits"] -= cost
-            p["RefineryLevel"] += 1
-            save_player(p)
-            return await update.message.reply_text(f"🏗 Refinery upgraded to level {p['RefineryLevel']}!")
-        elif building == "lab":
-            cost = (p["LabLevel"] + 1) * 120
-            if p["Credits"] < cost:
-                return await update.message.reply_text(f"💳 Need {cost} credits to upgrade.")
-            p["Credits"] -= cost
-            p["LabLevel"] += 1
-            save_player(p)
-            return await update.message.reply_text(f"🔬 Lab upgraded to level {p['LabLevel']}!")
+    existing_player = find_player_by_name(alias)
+    if existing_player and existing_player.chat_id != player.chat_id:
+        await update.message.reply_text("❌ That alias is already taken.")
+        return
+
+    player.name = alias
+    save_player(player)
+    await update.message.reply_text(f"✅ Callsign set to *{alias}*!", parse_mode=ParseMode.MARKDOWN)
+
+async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE, player):
+    """Handles the /status command."""
+
+    shield = player.shield_until if player.shield_until else "None"
+    msg = (
+        f"📊 *Commander {player.name or 'Unnamed'}*\n"
+        f"🪨 Ore: {player.ore} | ⚡ Energy: {player.energy} | 💳 Credits: {player.credits}\n"
+        f"🛡 Shield Until: {shield}\n"
+        f"⚔ Army: {player.army}\n"
+        f"🎁 Items: {player.items or 'None'}\n"
+        f"🌍 Zone: {player.zone or 'None'}\n"
+        f"Wins: {player.wins} | Losses: {player.losses}\n"
+        f"Refinery Level: {player.refinery_level}\n"
+        f"Lab Level: {player.lab_level}\n"
+# ===============================
+# SkyHustle: HyperClean Part 2
+# ===============================
+
+#   (Part 1 code goes here - do not repeat it)
+
+async def daily_command(update: Update, context: ContextTypes.DEFAULT_TYPE, player):
+    """Handles the /daily command."""
+
+    today = date.today()
+    if player.last_daily == str(today):
+        await update.message.reply_text("🎁 You've already claimed your daily reward today.")
+        return
+
+    last_daily = datetime.strptime(player.last_daily, "%Y-%m-%d").date() if player.last_daily else None
+    player.credits += 50
+    player.energy += 20
+    player.daily_streak = player.daily_streak + 1 if last_daily == today - timedelta(days=1) else 1
+    player.last_daily = str(today)
+    save_player(player)
+    await update.message.reply_text(f"🎉 +50 Credits, +20 Energy! Streak: {player.daily_streak} days.")
+
+async def mine_command(update: Update, context: ContextTypes.DEFAULT_TYPE, player):
+    """Handles the /mine command."""
+
+    text = update.message.text
+    parts = text.split()
+    if len(parts) != 3 or parts[1] != "ore":
+        await update.message.reply_text("⚠️ Usage: /mine ore <count>")
+        return
+    try:
+        count = int(parts[2])
+    except ValueError:
+        await update.message.reply_text("⚠️ Count must be a number.")
+        return
+
+    if player.energy < count * 5:
+        await update.message.reply_text("⚠️ Not enough energy.")
+        return
+
+    ore_gain = 20 * count + (player.refinery_level * 5)
+    credits_gain = 10 * count
+    player.ore += ore_gain
+    player.credits += credits_gain
+    player.energy -= count * 5
+    save_player(player)
+    check_mission_progress(player, "mine", ore_gain)  # Track mission progress
+    await update.message.reply_text(f"⛏️ Mined {ore_gain} Ore and earned {credits_gain} Credits.")
+
+async def forge_command(update: Update, context: ContextTypes.DEFAULT_TYPE, player):
+    """Handles the /forge command."""
+
+    text = update.message.text
+    parts = text.split()
+    if len(parts) != 3:
+        await update.message.reply_text("⚒️ Usage: /forge <unit> <count>")
+        return
+
+    unit, count = parts[1], parts[2]
+    try:
+        count = int(count)
+    except ValueError:
+        await update.message.reply_text("⚒️ Count must be a number.")
+        return
+
+    if unit not in ["scout", "tank", "drone"]:
+        await update.message.reply_text("⚒️ Invalid unit. Choose scout, tank, or drone.")
+        return
+
+    cost_ore, cost_credits = {"scout": (10, 5), "tank": (30, 20), "drone": (20, 10)}[unit]
+    if player.ore < cost_ore * count or player.credits < cost_credits * count:
+        await update.message.reply_text("⚠️ Not enough Ore or Credits.")
+        return
+
+    player.army[unit] = player.army.get(unit, 0) + count
+    player.ore -= cost_ore * count
+    player.credits -= cost_credits * count
+    save_player(player)
+    check_mission_progress(player, "forge", count)  # Track mission progress
+    await update.message.reply_text(f"✅ Forged {count} {unit}(s)!")
+
+async def use_command(update: Update, context: ContextTypes.DEFAULT_TYPE, player):
+    """Handles the /use command."""
+
+    text = update.message.text
+    parts = text.split()
+    if len(parts) != 2:
+        await update.message.reply_text("🛡️ Usage: /use <item>")
+        return
+
+    item_id = parts[1]
+
+    if item_id not in player.items or player.items[item_id] <= 0:
+        await update.message.reply_text("⚠️ You don't own that item or have none left.")
+        return
+
+    # Perishable item logic
+    if item_id.startswith("infinityscout") or item_id == "reviveall":
+        player.items[item_id] -= 1
+        if player.items[item_id] <= 0:
+            del player.items[item_id]
+
+    if item_id == "reviveall":
+        for unit in player.army:
+            player.army[unit] += 5
+        await update.message.reply_text("🛡️ All standard army units revived!")
+
+    if item_id == "hazmat":
+        await update.message.reply_text("☢️ Your units are now radiation-proof for zone exploration!")
+
+    save_player(player)
+    await update.message.reply_text(f"✅ Used {item_id}.")
+
+async def unlockbm_command(update: Update, context: ContextTypes.DEFAULT_TYPE, player):
+    """Handles the /unlockbm command."""
+
+    if player.black_market_unlocked:
+        await update.message.reply_text("✅ Black Market already unlocked!")
+        return
+    if player.credits < 1000:
+        await update.message.reply_text("💳 Need 1000 credits to unlock the Black Market.")
+        return
+    player.credits -= 1000
+    player.black_market_unlocked = True
+    save_player(player)
+    await update.message.reply_text("🖤 Black Market access unlocked!")
+
+async def blackmarket_command(update: Update, context: ContextTypes.DEFAULT_TYPE, player):
+    """Handles the /blackmarket command."""
+
+    if not player.black_market_unlocked:
+        await update.message.reply_text("🔒 Black Market is locked. Use /unlockbm first.")
+        return
+    shop = (
+        "🖤 *Black Market Deals:*\n"
+        "`/buy infinityscout` - 100 credits\n"
+        "`/buy reviveall` - 500 credits\n"
+        "`/buy hazmat` - 250 credits\n"
+        "\nUse `/buy <item>` to purchase."
+    )
+    await update.message.reply_text(shop, parse_mode=ParseMode.MARKDOWN)
+
+async def buy_command(update: Update, context: ContextTypes.DEFAULT_TYPE, player):
+    """Handles the /buy command."""
+
+    text = update.message.text
+    parts = text.split()
+    if len(parts) != 2:
+        await update.message.reply_text("🛒 Usage: /buy <item>")
+        return
+    item = parts[1]
+
+    if not player.black_market_unlocked:
+        await update.message.reply_text("🔒 Unlock Black Market first.")
+        return
+
+    price = black_market_price(item)
+    if not price:
+        await update.message.reply_text("❌ Item not found in Black Market.")
+        return
+
+    if player.credits < price:
+        await update.message.reply_text("💳 Not enough credits.")
+        return
+
+    player.credits -= price
+    player.items[item] = player.items.get(item, 0) + 1
+    save_player(player)
+
+    await update.message.reply_text(f"🛒 Purchased {item} successfully!")
+
+# ===============================
+# Helper Command
+# ===============================
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show help for all commands"""
+    await update.message.reply_text(
+        "📜 *Available Commands:*\\n"\
+        "`/start` - Start your journey\\n"\
+        "`/name <alias>` - Set your commander name\\n"\
+        "`/status` - View your stats\\n"\
+        "`/mine ore <amount>` - Mine Hyperion ore\\n"\
+        "`/forge <unit> <count>` - Build units\\n"\
+        "`/daily` - Claim your daily rewards\\n"\
+        "`/claim <zone>` - Claim a zone\\n"\
+        "`/map` - View zone map\\n"\
+        "`/missions` - View missions\\n"\
+        "`/blackmarket` - Open premium store\\n"\
+        "`/buy <item>` - Purchase Black Market item\\n"\
+        "`/unlockbm` - Unlock Black Market\\n"\
+        "`/attack <player>` - Attack enemy commander\\n"\
+        "`/rules` - Show game rules\\n"\
+        "`/help` - Show this list\\n",
+        parse_mode=ParseMode.MARKDOWN
+    )
+
+# 📜 Rules Command
+async def rules_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "📜 *SkyHustle Universal Laws:*\\n"\
+        "- Respect zones and their owners.\\n"\
+        "- No griefing or abuse.\\n"\
+        "- Play fair, play smart.\\n"\
+        "- Wars are ruthless but honor matters.\\n"\
+        "- Exploits/cheats = permanent ban.\\n\\n"\
+        "💬 Questions? Contact the SkyCouncil!",
+        parse_mode=ParseMode.MARKDOWN
+    )
+async def map_command(update: Update, context: ContextTypes.DEFAULT_TYPE, player):
+    """Handles the /map command."""
+
+    zones_status = "🌍 *Zone Control Map:*\n"
+    for zone in enabled_zones:
+        owner = find_zone_owner(zone)
+        if owner:
+            zones_status += f"🔸 {zone}: {owner.name}\n"
         else:
-            return await update.message.reply_text("🏗 Invalid building. Use ,upgrade refinery or ,upgrade lab.")
+            zones_status += f"🔹 {zone}: Unclaimed\n"
+    await update.message.reply_text(zones_status, parse_mode=ParseMode.MARKDOWN)
 
-    if text.startswith(",store"):
-        msg = (
-            "🏪 *SkyHustle Store:*\n"
-            "`pack1` - 500 credits for 5$\n"
-            "`pack2` - 1200 credits for 10$\n"
-            "`pack3` - 3000 credits for 20$\n\n"
-            "Use ,buycredit <pack> to purchase."
+async def claim_command(update: Update, context: ContextTypes.DEFAULT_TYPE, player):
+    """Handles the /claim command."""
+
+    text = update.message.text
+    parts = text.split()
+    if len(parts) != 2:
+        await update.message.reply_text("📍 Usage: /claim <zone>")
+        return
+
+    zone_name = parts[1].capitalize()
+    if zone_name not in enabled_zones:
+        await update.message.reply_text("❌ Invalid zone.")
+        return
+
+    if find_zone_owner(zone_name):
+        await update.message.reply_text("⚠️ Zone already claimed.")
+        return
+
+    if player.credits < 100:
+        await update.message.reply_text("💳 Need at least 100 credits to claim a zone.")
+        return
+
+    player.zone = zone_name
+    player.credits -= 100
+    save_player(player)
+
+    await update.message.reply_text(f"🏴 Successfully claimed {zone_name}!")
+
+async def missions_command(update: Update, context: ContextTypes.DEFAULT_TYPE, player):
+    """Handles the /missions command."""
+
+    today = date.today()
+    missions_text = "🎯 *Current Missions:*\n"
+    missions_data = {
+        "mine5": {"desc": "Mine 5 ores today", "reward": 50},
+        "win1": {"desc": "Win 1 attack today", "reward": 75},
+        "forge5": {"desc": "Forge 5 units today", "reward": 60},
+    }
+
+    # Initialize player missions if empty or new day
+    if not player.missions or player.last_mission_reset != str(today):
+        player.missions = {k: False for k in missions_data.keys()}
+        player.last_mission_reset = str(today)
+        save_player(player)
+
+    for mission_id, status in player.missions.items():
+        completed = "✅" if status else "❌"
+        missions_text += f"{completed} {missions_data[mission_id]['desc']} (+{missions_data[mission_id]['reward']} credits)\n"
+
+    missions_text += "\n_Complete missions and earn credits!_"
+
+    await update.message.reply_text(missions_text, parse_mode=ParseMode.MARKDOWN)
+
+# ===============================
+# Main Message Handler
+# ===============================
+
+COMMAND_HANDLERS = {
+    "/start": start_command,
+    "/name": name_command,
+    "/status": status_command,
+    "/daily": daily_command,
+    "/mine": mine_command,
+    "/forge": forge_command,
+    "/use": use_command,
+    "/unlockbm": unlockbm_command,
+    "/blackmarket": blackmarket_command,
+    "/buy": buy_command,
+    "/map": map_command,
+    "/claim": claim_command,
+    "/missions": missions_command,
+    "/help": help_command,
+    "/rules": rules_command,
+    # ... (Add the attack command here in Part 4)
+}
+
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handles all incoming messages."""
+
+    if not update.message:
+        return
+
+    text = update.message.text.strip()
+    cid = update.message.chat_id
+
+    player = find_or_create_player(cid)  # Ensure player exists
+
+    for command, handler in COMMAND_HANDLERS.items():
+        if text.startswith(command):
+            try:
+                await handler(update, context, player)
+            except Exception as e:
+                print(f"Error handling command {command}: {e}")
+                await update.message.reply_text(
+                    "⚠️ An error occurred. Please try again later.",
+                    parse_mode=ParseMode.MARKDOWN,
+                )
+            return  # Stop processing after handling the command
+# ===============================
+# SkyHustle: HyperClean Part 1
+# ===============================
+
+import os
+import json
+import base64
+import asyncio
+from datetime import datetime, timedelta, date
+import random
+
+import gspread
+from google.oauth2.service_account import Credentials
+from telegram import Update
+from telegram.constants import ParseMode
+from telegram.ext import (
+    ApplicationBuilder,
+    MessageHandler,
+    CommandHandler,
+    ContextTypes,
+    filters,
+)
+
+# ===============================
+# Configuration - Environment Variables
+# ===============================
+
+#   Ensure you have these set in your environment:
+#   - BOT_TOKEN: Your Telegram Bot Token
+#   - GOOGLE_CREDENTIALS_BASE64: Base64 encoded JSON of your Google Service Account credentials
+
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+GOOGLE_CREDENTIALS_BASE64 = os.getenv("GOOGLE_CREDENTIALS_BASE64")
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1_HYh2BXOGjuZ6ypovf7HUlb3GYuu033V66O6KtNmM2M/edit"  # Replace with your sheet URL
+
+# ===============================
+# Google Sheets Setup
+# ===============================
+
+def get_sheet():
+    """Connects to the Google Sheet."""
+
+    try:
+        creds_json = base64.b64decode(GOOGLE_CREDENTIALS_BASE64).decode("utf-8")
+        creds_dict = json.loads(creds_json)
+        credentials = Credentials.from_service_account_info(
+            creds_dict, scopes=["https://www.googleapis.com/auth/spreadsheets"]
         )
-        return await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN)
+        client = gspread.authorize(credentials)
+        return client.open_by_url(SHEET_URL)
+    except Exception as e:
+        print(f"Error connecting to Google Sheets: {e}")
+        return None  # Handle the error appropriately in your app
 
-    if text.startswith(",buycredit"):
-        parts = text.split()
-        if len(parts) != 2:
-            return await update.message.reply_text("🏪 Usage: ,buycredit <pack>")
-        pack = parts[1]
-        if pack == "pack1":
-            p["Credits"] += 500
-        elif pack == "pack2":
-            p["Credits"] += 1200
-        elif pack == "pack3":
-            p["Credits"] += 3000
+players_sheet = get_sheet().worksheet("SkyHustle")  # Assuming a worksheet named "SkyHustle"
+zones = {"Alpha": None, "Beta": None, "Gamma": None, "Delta": None, "Epsilon": None}  # Zone control (zone: chat_id)
+enabled_zones = list(zones.keys())  # For easier zone validation
+
+# ===============================
+# Player Data Management
+# ===============================
+
+class Player:
+    """Represents a player in the game."""
+
+    def __init__(self, data):
+        self.chat_id = int(data.get("ChatID", 0))
+        self.name = data.get("Name", "")
+        self.ore = int(data.get("Ore", 0))
+        self.energy = int(data.get("Energy", 100))
+        self.credits = int(data.get("Credits", 100))
+        self.army = json.loads(data.get("Army", '{"scout": 0, "tank": 0, "drone": 0}'))
+        self.zone = data.get("Zone", "")
+        self.shield_until = data.get("ShieldUntil", None)
+        self.daily_streak = int(data.get("DailyStreak", 0))
+        self.last_daily = data.get("LastDaily", "")
+        self.black_market_unlocked = bool(data.get("BlackMarketUnlocked", False))
+        self.items = json.loads(data.get("Items", "{}"))
+        self.missions = json.loads(data.get("Missions", '{}')) if data.get("Missions") else {}
+        self.last_mission_reset = data.get("LastMissionReset", "")
+        self.row_number = int(data.get("_row", 0))  # Google Sheet row number (if applicable)
+        self.wins = int(data.get("Wins", 0))
+        self.losses = int(data.get("Losses", 0))
+        self.banner = data.get("Banner", "")
+        self.refinery_level = int(data.get("RefineryLevel", 0))
+        self.lab_level = int(data.get("LabLevel", 0))
+        self.defense_level = int(data.get("DefenseLevel", 0))
+        self.research = json.loads(data.get("Research", '{"speed": 0, "armor": 0}')) if data.get("Research") else {}
+        self.faction = data.get("Faction", None)
+
+    def to_list(self):
+        """Converts player data to a list for saving to the sheet."""
+        return [
+            self.chat_id,
+            self.name,
+            self.ore,
+            self.energy,
+            self.credits,
+            json.dumps(self.army),
+            self.zone,
+            self.shield_until,
+            self.daily_streak,
+            self.last_daily,
+            self.black_market_unlocked,
+            json.dumps(self.items),
+            json.dumps(self.missions),
+            self.last_mission_reset,
+            self.wins,
+            self.losses,
+            self.banner,
+            self.refinery_level,
+            self.lab_level,
+            self.defense_level,
+            json.dumps(self.research),
+            self.faction,
+        ]
+
+def get_all_players():
+    """Fetches all player data from the sheet and returns a list of Player objects."""
+
+    try:
+        records = players_sheet.get_all_records()
+        return [Player(row) for row in records]
+    except Exception as e:
+        print(f"Error fetching all players: {e}")
+        return []
+
+def find_player_by_chat_id(cid):
+    """Finds a player by their chat ID."""
+
+    players = get_all_players()
+    for player in players:
+        if player.chat_id == cid:
+            return player
+    return None
+
+def find_player_by_name(name):
+    """Finds a player by their name (alias)."""
+
+    players = get_all_players()
+    for player in players:
+        if player.name.lower() == name.lower():
+            return player
+    return None
+
+def save_player(player):
+    """Saves a player's data back to the Google Sheet."""
+
+    try:
+        if player.row_number:
+            players_sheet.update(
+                f"A{player.row_number}:V{player.row_number}", [player.to_list()]
+            )
         else:
-            return await update.message.reply_text("🏪 Invalid pack. Use pack1, pack2, or pack3.")
-        save_player(p)
-        return await update.message.reply_text(f"🏪 Purchased {pack}! Credits added.")
-            if text.startswith(",donate"):
-        parts = text.split()
-        if len(parts) != 3:
-            return await update.message.reply_text("💳 Usage: ,donate <player alias> <amount>")
-        alias = parts[1]
-        amount = parts[2]
-        try:
-            amount = int(amount)
-        except:
-            return await update.message.reply_text("⚠ Amount must be a number.")
+            #  Handle new player save (append)
+            new_row = player.to_list()
+            players_sheet.append_row(new_row)
+            #  Update the player's row number after appending
+            player.row_number = len(players_sheet.get_all_records()) + 1
+    except Exception as e:
+        print(f"Error saving player {player.name}: {e}")
 
-        target_row = find_player_by_name(alias)
-        if not target_row:
-            return await update.message.reply_text("👤 Target player not found.")
+def create_new_player(cid):
+    """Creates a new player in the Google Sheet."""
 
-        if amount <= 0:
-            return await update.message.reply_text("⚠ Invalid donation amount.")
+    new_player_data = {
+        "ChatID": cid,
+        "Name": "",
+        "Ore": 0,
+        "Energy": 100,
+        "Credits": 100,
+        "Army": json.dumps({"scout": 0, "tank": 0, "drone": 0}),
+        "Zone": "",
+        "ShieldUntil": "",
+        "DailyStreak": 0,
+        "LastDaily": "",
+        "BlackMarketUnlocked": False,
+        "Items": json.dumps({}),
+        "Missions": json.dumps({}),
+        "LastMissionReset": "",
+        "Wins": 0,
+        "Losses": 0,
+        "Banner": "",
+        "RefineryLevel": 0,
+        "LabLevel": 0,
+        "DefenseLevel": 0,
+        "Research": json.dumps({}),
+        "Faction": None,
+    }
+    try:
+        players_sheet.append_row(list(new_player_data.values()))
+        new_player = Player(find_player_by_chat_id(cid).__dict__)  # Fetch and create Player object
+        return new_player
+    except Exception as e:
+        print(f"Error creating new player: {e}")
+        return None
 
-        if p["Credits"] < amount:
-            return await update.message.reply_text("💳 You don't have enough credits.")
+def find_or_create_player(cid):
+    """Finds a player by chat ID, or creates a new one if not found."""
 
-        p["Credits"] -= amount
-        target_row["Credits"] += amount
-        save_player(p)
-        save_player(target_row)
+    player = find_player_by_chat_id(cid)
+    if not player:
+        player = create_new_player(cid)
+    return player
 
-        return await update.message.reply_text(f"🎁 Donated {amount} credits to {target_row['Name']}!")
+# ===============================
+# Helper Functions
+# ===============================
 
-    if text.startswith(",research"):
-        parts = text.split()
-        if len(parts) != 2:
-            return await update.message.reply_text("🔬 Usage: ,research <field>")
-        field = parts[1]
-        if field not in ["speed", "armor"]:
-            return await update.message.reply_text("🔬 Invalid research field. Use speed or armor.")
+def can_attack(player, target):
+    """Checks if a player can attack another player."""
 
-        cost = 100 + (p["ResearchLevels"][field] * 50)
-        if p["Credits"] < cost:
-            return await update.message.reply_text(f"💳 Need {cost} credits for this research.")
+    if not target:
+        return False, "Target player not found."
+    if player.chat_id == target.chat_id:
+        return False, "You cannot attack yourself."
+    if target.shield_until and datetime.fromisoformat(target.shield_until) > datetime.now():
+        return False, f"{target.name} is currently shielded."
+    return True, ""
 
-        p["Credits"] -= cost
-        p["ResearchLevels"][field] += 1
-        save_player(p)
+def find_zone_owner(zone):
+    """Finds the player who owns a specific zone."""
 
-        return await update.message.reply_text(f"🔬 Upgraded {field} research to Level {p['ResearchLevels'][field]}!")
+    players = get_all_players()
+    for player in players:
+        if player.zone == zone:
+            return player
+    return None
 
-    if text.startswith(",build"):
-        parts = text.split()
-        if len(parts) != 2:
-            return await update.message.reply_text("🏗️ Usage: ,build <structure>")
-        structure = parts[1]
-        valid_structures = ["refinery", "lab", "defense"]
-        if structure not in valid_structures:
-            return await update.message.reply_text("🏗️ Structures: refinery, lab, defense")
+def black_market_price(item):
+    """Returns the price of a Black Market item."""
 
-        cost = 200
-        if p["Credits"] < cost:
-            return await update.message.reply_text("💳 Not enough credits.")
+    prices = {"infinityscout": 100, "reviveall": 500, "hazmat": 250}
+    return prices.get(item, 0)
 
-        if structure == "refinery":
-            p["RefineryLevel"] += 1
-        elif structure == "lab":
-            p["LabLevel"] += 1
-        elif structure == "defense":
-            p["DefenseLevel"] += 1
+def check_mission_progress(player, action, amount=1):
+    """Checks and updates mission progress for a player."""
 
-        p["Credits"] -= cost
-        save_player(p)
+    today = date.today()
+    if player.last_mission_reset != str(today):
+        reset_missions(player)  # Reset missions if it's a new day
 
-        return await update.message.reply_text(f"🏗️ Upgraded {structure} to level {p[structure.capitalize()+'Level']}!")
-    if text.startswith(",missions"):
-        today = date.today()
-        mission_report = (
-            f"🎯 *Your Missions for {today}:*\n"
-            "• Mine ore x5 ✅\n"
-            "• Forge units x3 ✅\n"
-            "• Donate credits ✅\n"
-            "• Attack a player ✅\n"
-            "\n(Missions system will track officially soon!)"
-        )
-        return await update.message.reply_text(mission_report, parse_mode=ParseMode.MARKDOWN)
+    if not player.missions:
+        return  # No missions to check
 
-    if text.startswith(",use"):
-        parts = text.split()
-        if len(parts) != 2:
-            return await update.message.reply_text("🧪 Usage: ,use <item>")
-        item_name = parts[1]
+    if action == "mine" and "mine5" in player.missions and not player.missions["mine5"]:
+        player.missions["mine5"] = player.missions.get("mine5", 0) + amount >= 5
+        if player.missions["mine5"]:
+            player.credits += 50  # Reward for completing mission
+    elif action == "win" and "win1" in player.missions and not player.missions["win1"]:
+        player.missions["win1"] = True
+        player.credits += 75
+    elif action == "forge" and "forge5" in player.missions and not player.missions["forge5"]:
+        player.missions["forge5"] = player.missions.get("forge5", 0) + amount >= 5
+        if player.missions["forge5"]:
+            player.credits += 60
+    save_player(player)
 
-        if item_name not in p["Items"] or p["Items"][item_name] == 0:
-            return await update.message.reply_text("❌ You don't own that item.")
+def reset_missions(player):
+    """Resets daily missions for a player."""
 
-        # Perishable item use
-        if item_name.startswith("infinityscout"):
-            return await update.message.reply_text("🛰️ Sending Infinity Scout... (scouting not yet live)")
+    player.missions = {
+        "mine5": False,
+        "win1": False,
+        "forge5": False,
+    }  # Reset mission status
+    player.last_mission_reset = str(date.today())
+    save_player(player)
 
-        if item_name == "reviveall":
-            for unit in p["Army"]:
-                p["Army"][unit] += 5
-            p["Ore"] += 200
-            p["Energy"] += 100
-            del p["Items"][item_name]
-            save_player(p)
-            return await update.message.reply_text("⚕️ All troops revived + bonus resources!")
+def calculate_attack_damage(attacker, defender):
+    """Calculates the damage in an attack."""
 
-        if item_name == "hazmat":
-            p["HasHazmat"] = True
-            save_player(p)
-            return await update.message.reply_text("☢️ Hazmat Equipment activated. You can now enter Radiation Zones!")
+    attacker_power = (
+        attacker.army["scout"] * 1 +
+        attacker.army["tank"] * 3 +
+        attacker.army["drone"] * 2
+    )
+    defender_power = (
+        defender.army["scout"] * 1 +
+        defender.army["tank"] * 3 +
+        defender.army["drone"] * 2
+    )
 
-        return await update.message.reply_text("❓ Unknown item effect.")
+    # Apply research bonuses
+    attacker_power *= 1 + (attacker.research.get("speed", 0) * 0.1)
+    defender_power *= 1 + (defender.research.get("armor", 0) * 0.1)
 
-    if text.startswith(",zones"):
-        out = "🗺️ *Zone Control Map:*\n"
-        for z, o in zones.items():
-            owner = "Unclaimed" if not o else players.get(o, {}).get("Name", "???")
-            out += f"{z} ➔ {owner}\n"
-        return await update.message.reply_text(out, parse_mode=ParseMode.MARKDOWN)
+    damage = attacker_power - defender_power
+    damage = max(1, damage)  # Ensure minimum damage of 1
+    return damage
 
-    if text.startswith(",claim"):
-        parts = text.split()
-        if len(parts) != 2:
-            return await update.message.reply_text("🗺️ Usage: ,claim <zone>")
-        zone_name = parts[1]
-        if zone_name not in zones:
-            return await update.message.reply_text("⚠️ Invalid zone.")
+def apply_attack_results(attacker, defender, damage):
+    """Applies the results of an attack, updating army counts."""
 
-        if zones[zone_name] and zones[zone_name] != p["ChatID"]:
-            return await update.message.reply_text("🚫 Zone already claimed by another Commander!")
+    attacker_loss_rate = 0.2
+    defender_loss_rate = 0.3
 
-        if p["Credits"] < 300:
-            return await update.message.reply_text("💳 Need 300 credits to claim a zone.")
+    for unit in attacker.army:
+        attacker.army[unit] = max(0, int(attacker.army[unit] * (1 - attacker_loss_rate)))
+    for unit in defender.army:
+        defender.army[unit] = max(0, int(defender.army[unit] * (1 - defender_loss_rate)))
 
-        p["Credits"] -= 300
-        p["Zone"] = zone_name
-        zones[zone_name] = p["ChatID"]
-        save_player(p)
+    # Reduce more units based on damage
+    total_defender_units = sum(defender.army.values())
+    damage_reduction_ratio = min(1, damage / (total_defender_units + 1e-6))  # Avoid division by zero
+    for unit in defender.army:
+        defender.army[unit] = max(0, int(defender.army[unit] * (1 - damage_reduction_ratio)))
 
-        return await update.message.reply_text(f"🏴 Claimed zone {zone_name}! Expand your Empire!")
-    if text.startswith(",research"):
-        parts = text.split()
-        if len(parts) != 2:
-            return await update.message.reply_text("🧬 Usage: ,research <tech>")
-        tech = parts[1]
-        if tech not in ["speed", "armor"]:
-            return await update.message.reply_text("🧬 Invalid technology. Choose 'speed' or 'armor'.")
+    save_player(attacker)
+    save_player(defender)
 
-        if p["Credits"] < 500:
-            return await update.message.reply_text("💳 Need 500 credits to research!")
+# ===============================
+# Command Handlers
+# ===============================
 
-        p["Credits"] -= 500
-        p["Research"][tech] += 1
-        save_player(p)
+async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE, player):
+    """Handles the /start command."""
 
-        return await update.message.reply_text(f"🧪 {tech.capitalize()} research upgraded to level {p['Research'][tech]}!")
+    intro = (
+        "🌌 *Welcome to SkyHustle!*\n"
+        "Centuries from now, the Hyperion core pulses with boundless energy.\n"
+        "You are a Commander in the New Galactic Order.\n"
+        "Gather ore, strengthen your army, dominate the zones.\n\n"
+        "💠 Use /name <alias> to set your callsign.\n"
+        "💠 Use /status to view your progress.\n"
+        "💠 Use /mine ore 1 to start mining resources.\n\n"
+        "🛡 Glory and power await!"
+    )
+    await update.message.reply_text(intro, parse_mode=ParseMode.MARKDOWN)
 
-    if text.startswith(",build"):
-        parts = text.split()
-        if len(parts) != 2:
-            return await update.message.reply_text("🏗️ Usage: ,build <structure>")
+async def name_command(update: Update, context: ContextTypes.DEFAULT_TYPE, player):
+    """Handles the /name command."""
 
-        building = parts[1].lower()
-        structures = {
-            "refinery": "RefineryLevel",
-            "lab": "LabLevel",
-            "defense": "DefenseLevel"
-        }
+    text = update.message.text
+    alias = text[6:].strip()
+    if not alias:
+        await update.message.reply_text("⚠️ Usage: /name <alias>")
+        return
 
-        if building not in structures:
-            return await update.message.reply_text("🏗️ Available: refinery, lab, defense.")
+    existing_player = find_player_by_name(alias)
+    if existing_player and existing_player.chat_id != player.chat_id:
+        await update.message.reply_text("❌ That alias is already taken.")
+        return
 
-        level_key = structures[building]
-        current_level = p.get(level_key, 0)
+    player.name = alias
+    save_player(player)
+    await update.message.reply_text(f"✅ Callsign set to *{alias}*!", parse_mode=ParseMode.MARKDOWN)
 
-        cost = 200 + (current_level * 150)
-        if p["Credits"] < cost:
-            return await update.message.reply_text(f"💳 Not enough credits! {cost} needed.")
+async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE, player):
+    """Handles the /status command."""
 
-        p["Credits"] -= cost
-        p[level_key] = current_level + 1
-        save_player(p)
+    shield = player.shield_until if player.shield_until else "None"
+    msg = (
+        f"📊 *Commander {player.name or 'Unnamed'}*\n"
+        f"🪨 Ore: {player.ore} | ⚡ Energy: {player.energy} | 💳 Credits: {player.credits}\n"
+        f"🛡 Shield Until: {shield}\n"
+        f"⚔ Army: {player.army}\n"
+        f"🎁 Items: {player.items or 'None'}\n"
+        f"🌍 Zone: {player.zone or 'None'}\n"
+        f"Wins: {player.wins} | Losses: {player.losses}\n"
+        f"Refinery Level: {player.refinery_level}\n"
+        f"Lab Level: {player.lab_level}\n"
+continue to part 2 a natural continuation from part 1
 
-        return await update.message.reply_text(f"🏗️ {building.capitalize()} upgraded to level {p[level_key]}!")
 
-    if text.startswith(",store"):
-        return await update.message.reply_text(
-            "🛒 *Store Packages:*\n"
-            "• `pack1` ➔ 500 Credits ➔ 5 Units each\n"
-            "• `pack2` ➔ 1500 Credits ➔ 20 Units each\n"
-            "• `pack3` ➔ 3000 Credits ➔ 50 Units each\n"
-            "\nUse ,buy <pack> to purchase.",
-            parse_mode=ParseMode.MARKDOWN
-        )
 
-    if text.startswith(",buy"):
-        parts = text.split()
-        if len(parts) != 2:
-            return await update.message.reply_text("🛒 Usage: ,buy <pack>")
-        pack = parts[1].lower()
+Okay, here's Part 2, continuing directly from where Part 1 left off. This part adds more command handlers, including those for mining, forging, using items, and some Black Market functionality:
 
-        if pack == "pack1":
-            cost = 500
-            bonus = 5
-        elif pack == "pack2":
-            cost = 1500
-            bonus = 20
-        elif pack == "pack3":
-            cost = 3000
-            bonus = 50
+Python
+
+# ===============================
+# SkyHustle: HyperClean Part 2
+# ===============================
+
+#   (Part 1 code goes here - do not repeat it)
+
+async def daily_command(update: Update, context: ContextTypes.DEFAULT_TYPE, player):
+    """Handles the /daily command."""
+
+    today = date.today()
+    if player.last_daily == str(today):
+        await update.message.reply_text("🎁 You've already claimed your daily reward today.")
+        return
+
+    last_daily = datetime.strptime(player.last_daily, "%Y-%m-%d").date() if player.last_daily else None
+    player.credits += 50
+    player.energy += 20
+    player.daily_streak = player.daily_streak + 1 if last_daily == today - timedelta(days=1) else 1
+    player.last_daily = str(today)
+    save_player(player)
+    await update.message.reply_text(f"🎉 +50 Credits, +20 Energy! Streak: {player.daily_streak} days.")
+
+async def mine_command(update: Update, context: ContextTypes.DEFAULT_TYPE, player):
+    """Handles the /mine command."""
+
+    text = update.message.text
+    parts = text.split()
+    if len(parts) != 3 or parts[1] != "ore":
+        await update.message.reply_text("⚠️ Usage: /mine ore <count>")
+        return
+    try:
+        count = int(parts[2])
+    except ValueError:
+        await update.message.reply_text("⚠️ Count must be a number.")
+        return
+
+    if player.energy < count * 5:
+        await update.message.reply_text("⚠️ Not enough energy.")
+        return
+
+    ore_gain = 20 * count + (player.refinery_level * 5)
+    credits_gain = 10 * count
+    player.ore += ore_gain
+    player.credits += credits_gain
+    player.energy -= count * 5
+    save_player(player)
+    check_mission_progress(player, "mine", ore_gain)  # Track mission progress
+    await update.message.reply_text(f"⛏️ Mined {ore_gain} Ore and earned {credits_gain} Credits.")
+
+async def forge_command(update: Update, context: ContextTypes.DEFAULT_TYPE, player):
+    """Handles the /forge command."""
+
+    text = update.message.text
+    parts = text.split()
+    if len(parts) != 3:
+        await update.message.reply_text("⚒️ Usage: /forge <unit> <count>")
+        return
+
+    unit, count = parts[1], parts[2]
+    try:
+        count = int(count)
+    except ValueError:
+        await update.message.reply_text("⚒️ Count must be a number.")
+        return
+
+    if unit not in ["scout", "tank", "drone"]:
+        await update.message.reply_text("⚒️ Invalid unit. Choose scout, tank, or drone.")
+        return
+
+    cost_ore, cost_credits = {"scout": (10, 5), "tank": (30, 20), "drone": (20, 10)}[unit]
+    if player.ore < cost_ore * count or player.credits < cost_credits * count:
+        await update.message.reply_text("⚠️ Not enough Ore or Credits.")
+        return
+
+    player.army[unit] = player.army.get(unit, 0) + count
+    player.ore -= cost_ore * count
+    player.credits -= cost_credits * count
+    save_player(player)
+    check_mission_progress(player, "forge", count)  # Track mission progress
+    await update.message.reply_text(f"✅ Forged {count} {unit}(s)!")
+
+async def use_command(update: Update, context: ContextTypes.DEFAULT_TYPE, player):
+    """Handles the /use command."""
+
+    text = update.message.text
+    parts = text.split()
+    if len(parts) != 2:
+        await update.message.reply_text("🛡️ Usage: /use <item>")
+        return
+
+    item_id = parts[1]
+
+    if item_id not in player.items or player.items[item_id] <= 0:
+        await update.message.reply_text("⚠️ You don't own that item or have none left.")
+        return
+
+    # Perishable item logic
+    if item_id.startswith("infinityscout") or item_id == "reviveall":
+        player.items[item_id] -= 1
+        if player.items[item_id] <= 0:
+            del player.items[item_id]
+
+    if item_id == "reviveall":
+        for unit in player.army:
+            player.army[unit] += 5
+        await update.message.reply_text("🛡️ All standard army units revived!")
+
+    if item_id == "hazmat":
+        await update.message.reply_text("☢️ Your units are now radiation-proof for zone exploration!")
+
+    save_player(player)
+    await update.message.reply_text(f"✅ Used {item_id}.")
+
+async def unlockbm_command(update: Update, context: ContextTypes.DEFAULT_TYPE, player):
+    """Handles the /unlockbm command."""
+
+    if player.black_market_unlocked:
+        await update.message.reply_text("✅ Black Market already unlocked!")
+        return
+    if player.credits < 1000:
+        await update.message.reply_text("💳 Need 1000 credits to unlock the Black Market.")
+        return
+    player.credits -= 1000
+    player.black_market_unlocked = True
+    save_player(player)
+    await update.message.reply_text("🖤 Black Market access unlocked!")
+
+async def blackmarket_command(update: Update, context: ContextTypes.DEFAULT_TYPE, player):
+    """Handles the /blackmarket command."""
+
+    if not player.black_market_unlocked:
+        await update.message.reply_text("🔒 Black Market is locked. Use /unlockbm first.")
+        return
+    shop = (
+        "🖤 *Black Market Deals:*\n"
+        "`/buy infinityscout` - 100 credits\n"
+        "`/buy reviveall` - 500 credits\n"
+        "`/buy hazmat` - 250 credits\n"
+        "\nUse `/buy <item>` to purchase."
+    )
+    await update.message.reply_text(shop, parse_mode=ParseMode.MARKDOWN)
+
+async def buy_command(update: Update, context: ContextTypes.DEFAULT_TYPE, player):
+    """Handles the /buy command."""
+
+    text = update.message.text
+    parts = text.split()
+    if len(parts) != 2:
+        await update.message.reply_text("🛒 Usage: /buy <item>")
+        return
+    item = parts[1]
+
+    if not player.black_market_unlocked:
+        await update.message.reply_text("🔒 Unlock Black Market first.")
+        return
+
+    price = black_market_price(item)
+    if not price:
+        await update.message.reply_text("❌ Item not found in Black Market.")
+        return
+
+    if player.credits < price:
+        await update.message.reply_text("💳 Not enough credits.")
+        return
+
+    player.credits -= price
+    player.items[item] = player.items.get(item, 0) + 1
+    save_player(player)
+
+    await update.message.reply_text(f"🛒 Purchased {item} successfully!")
+
+# ===============================
+# Helper Command
+# ===============================
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show help for all commands"""
+    await update.message.reply_text(
+        "📜 *Available Commands:*\\n"\
+        "`/start` - Start your journey\\n"\
+        "`/name <alias>` - Set your commander name\\n"\
+        "`/status` - View your stats\\n"\
+        "`/mine ore <amount>` - Mine Hyperion ore\\n"\
+        "`/forge <unit> <count>` - Build units\\n"\
+        "`/daily` - Claim your daily rewards\\n"\
+        "`/claim <zone>` - Claim a zone\\n"\
+        "`/map` - View zone map\\n"\
+        "`/missions` - View missions\\n"\
+        "`/blackmarket` - Open premium store\\n"\
+        "`/buy <item>` - Purchase Black Market item\\n"\
+        "`/unlockbm` - Unlock Black Market\\n"\
+        "`/attack <player>` - Attack enemy commander\\n"\
+        "`/rules` - Show game rules\\n"\
+        "`/help` - Show this list\\n",
+        parse_mode=ParseMode.MARKDOWN
+    )
+
+# 📜 Rules Command
+async def rules_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "📜 *SkyHustle Universal Laws:*\\n"\
+        "- Respect zones and their owners.\\n"\
+        "- No griefing or abuse.\\n"\
+        "- Play fair, play smart.\\n"\
+        "- Wars are ruthless but honor matters.\\n"\
+        "- Exploits/cheats = permanent ban.\\n\\n"\
+        "💬 Questions? Contact the SkyCouncil!",
+        parse_mode=ParseMode.MARKDOWN
+    )
+
+# App Main Loop
+if __name__ == "__main__":
+    app = ApplicationBuilder().token(os.getenv("BOT_TOKEN")).build()
+
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+    # Connect extra /help and /rules commands...
+    app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("rules", rules_command))
+
+    # Connect all handlers
+    app.add_handler(CommandHandler("start", start_command))
+    app.add_handler(CommandHandler("name", name_command))
+    app.add_handler(CommandHandler("status", status_command))
+    app.add_handler(CommandHandler("daily", daily_command))
+    app.add_handler(CommandHandler("mine", mine_command))
+    app.add_handler(CommandHandler("forge", forge_command))
+    app.add_handler(CommandHandler("use", use_command))
+    app.add_handler(CommandHandler("unlockbm", unlockbm_command))
+    app.add_handler(CommandHandler("blackmarket", blackmarket_command))
+    app.add_handler(CommandHandler("buy", buy_command))
+
+    app.run_polling()
+What Part 2 Adds:
+
+More Command Handlers: Implements daily, mine, forge, use, unlockbm, blackmarket, and buy.
+Help and Rules Commands: Adds /help and /rules for player guidance.
+Main Loop Enhancements: Includes the /help and /rules command handlers in the main application.
+Next Steps:
+
+Combine Part 1 and Part 2: Copy the code from Part 2 and paste it directly after the code from Part 1. Make sure you don't accidentally duplicate any sections.
+Run the Code (with setup!):
+Set your environment variables (BOT_TOKEN, GOOGLE_CREDENTIALS_BASE64).
+Install dependencies (pip install python-telegram-bot gspread google-auth).
+Ensure your Google Sheet is set up correctly.
+Run the Python script.
+Test: Try the commands you've implemented so far in your Telegram bot.
+Let me know when you're ready for Part 3, which will focus on zone control and missions!
+
+ready for part 3
+
+
+
+Alright, here's Part 3. This section adds the zone control commands (/map, /claim) and the missions command (/missions):
+
+Python
+
+# ===============================
+# SkyHustle: HyperClean Part 3
+# ===============================
+
+#   (Part 1 and Part 2 code goes here - do not repeat it)
+
+async def map_command(update: Update, context: ContextTypes.DEFAULT_TYPE, player):
+    """Handles the /map command."""
+
+    zones_status = "🌍 *Zone Control Map:*\n"
+    for zone in enabled_zones:
+        owner = find_zone_owner(zone)
+        if owner:
+            zones_status += f"🔸 {zone}: {owner.name}\n"
         else:
-            return await update.message.reply_text("🛒 Invalid pack. Choose pack1, pack2, or pack3.")
+            zones_status += f"🔹 {zone}: Unclaimed\n"
+    await update.message.reply_text(zones_status, parse_mode=ParseMode.MARKDOWN)
 
-        if p["Credits"] < cost:
-            return await update.message.reply_text("💳 Not enough credits.")
+async def claim_command(update: Update, context: ContextTypes.DEFAULT_TYPE, player):
+    """Handles the /claim command."""
 
-        p["Credits"] -= cost
-        for unit in p["Army"]:
-            p["Army"][unit] += bonus
-        save_player(p)
+    text = update.message.text
+    parts = text.split()
+    if len(parts) != 2:
+        await update.message.reply_text("📍 Usage: /claim <zone>")
+        return
 
-        return await update.message.reply_text(f"🛒 Purchased {pack}. Units boosted!")
+    zone_name = parts[1].capitalize()
+    if zone_name not in enabled_zones:
+        await update.message.reply_text("❌ Invalid zone.")
+        return
 
-    if text.startswith(",pvp"):
-        board = "🏆 *Top PvP Players:*\n"
-        leaderboard = sorted(players.values(), key=lambda x: x.get("Wins", 0), reverse=True)[:5]
-        for idx, commander in enumerate(leaderboard, 1):
-            board += f"{idx}. {commander['Name']} - {commander.get('Wins', 0)} Wins\n"
+    if find_zone_owner(zone_name):
+        await update.message.reply_text("⚠️ Zone already claimed.")
+        return
 
-        return await update.message.reply_text(board, parse_mode=ParseMode.MARKDOWN)
-    if text.startswith(",missions"):
-        mission_text = (
-            "🎯 *Available Missions:*\n"
-            "• Mine 100 Ore ➔ +200 Credits\n"
-            "• Win 3 Battles ➔ +500 Credits\n"
-            "• Recruit 20 Units ➔ +300 Credits\n"
-            "\nUse ,claim <mission> to claim rewards."
-        )
-        return await update.message.reply_text(mission_text, parse_mode=ParseMode.MARKDOWN)
+    if player.credits < 100:
+        await update.message.reply_text("💳 Need at least 100 credits to claim a zone.")
+        return
 
-    if text.startswith(",claim"):
-        parts = text.split()
-        if len(parts) != 2:
-            return await update.message.reply_text("🎯 Usage: ,claim <mission>")
+    player.zone = zone_name
+    player.credits -= 100
+    save_player(player)
 
-        mission = parts[1].lower()
+    await update.message.reply_text(f"🏴 Successfully claimed {zone_name}!")
 
-        if mission == "mine":
-            if p["Ore"] >= 100:
-                p["Credits"] += 200
-                p["Ore"] -= 100
-                save_player(p)
-                return await update.message.reply_text("✅ Mission Complete: +200 Credits!")
-            else:
-                return await update.message.reply_text("⚒️ You haven't mined enough Ore yet!")
+async def missions_command(update: Update, context: ContextTypes.DEFAULT_TYPE, player):
+    """Handles the /missions command."""
 
-        elif mission == "battles":
-            if p.get("Wins", 0) >= 3:
-                p["Credits"] += 500
-                p["Wins"] -= 3
-                save_player(p)
-                return await update.message.reply_text("✅ Mission Complete: +500 Credits!")
-            else:
-                return await update.message.reply_text("⚔️ You haven't won enough battles yet!")
+    today = date.today()
+    missions_text = "🎯 *Current Missions:*\n"
+    missions_data = {
+        "mine5": {"desc": "Mine 5 ores today", "reward": 50},
+        "win1": {"desc": "Win 1 attack today", "reward": 75},
+        "forge5": {"desc": "Forge 5 units today", "reward": 60},
+    }
 
-        elif mission == "recruit":
-            total_units = sum(p["Army"].values())
-            if total_units >= 20:
-                p["Credits"] += 300
-                for unit in p["Army"]:
-                    p["Army"][unit] = max(0, p["Army"][unit] - 5)
-                save_player(p)
-                return await update.message.reply_text("✅ Mission Complete: +300 Credits!")
-            else:
-                return await update.message.reply_text("🛡️ You haven't recruited enough units yet!")
+    # Initialize player missions if empty or new day
+    if not player.missions or player.last_mission_reset != str(today):
+        player.missions = {k: False for k in missions_data.keys()}
+        player.last_mission_reset = str(today)
+        save_player(player)
 
-        else:
-            return await update.message.reply_text("❓ Unknown mission. Try: mine, battles, recruit")
+    for mission_id, status in player.missions.items():
+        completed = "✅" if status else "❌"
+        missions_text += f"{completed} {missions_data[mission_id]['desc']} (+{missions_data[mission_id]['reward']} credits)\n"
 
-    if text.startswith(",blackmarket"):
-        if not p.get("BlackMarketUnlocked"):
-            return await update.message.reply_text("🔒 Black Market locked. Use ,unlockbm first.")
-        shop = (
-            "🖤 *Black Market Deals:*\n"
-            "• `buy infinityscout1` - 100 Credits\n"
-            "• `buy reviveall` - 500 Credits\n"
-            "• `buy hazmat` - 250 Credits\n"
-            "\nUse ,buy <item> to purchase."
-        )
-        return await update.message.reply_text(shop, parse_mode=ParseMode.MARKDOWN)
+    missions_text += "\n_Complete missions and earn credits!_"
 
-    if text.startswith(",unlockbm"):
-        if p.get("BlackMarketUnlocked"):
-            return await update.message.reply_text("✅ Black Market already unlocked.")
-        if p["Credits"] < 1000:
-            return await update.message.reply_text("💳 You need 1000 Credits to unlock the Black Market.")
+    await update.message.reply_text(missions_text, parse_mode=ParseMode.MARKDOWN)
 
-        p["Credits"] -= 1000
-        p["BlackMarketUnlocked"] = True
-        save_player(p)
-        return await update.message.reply_text("🖤 Black Market access granted!")
+# ===============================
+# Main Message Handler
+# ===============================
 
-    if text.startswith(",buy"):
-        parts = text.split()
-        if len(parts) != 2:
-            return await update.message.reply_text("🛒 Usage: ,buy <item>")
-        item = parts[1].lower()
+COMMAND_HANDLERS = {
+    "/start": start_command,
+    "/name": name_command,
+    "/status": status_command,
+    "/daily": daily_command,
+    "/mine": mine_command,
+    "/forge": forge_command,
+    "/use": use_command,
+    "/unlockbm": unlockbm_command,
+    "/blackmarket": blackmarket_command,
+    "/buy": buy_command,
+    "/map": map_command,
+    "/claim": claim_command,
+    "/missions": missions_command,
+    "/help": help_command,
+    "/rules": rules_command,
+    # ... (Add the attack command here in Part 4)
+}
 
-        if not p.get("BlackMarketUnlocked"):
-            return await update.message.reply_text("🔒 You must unlock Black Market first.")
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handles all incoming messages."""
 
-        price_table = {
-            "infinityscout1": 100,
-            "reviveall": 500,
-            "hazmat": 250
-        }
+    if not update.message:
+        return
 
-        if item not in price_table:
-            return await update.message.reply_text("🛒 Invalid item. Check ,blackmarket.")
+    text = update.message.text.strip()
+    cid = update.message.chat_id
 
-        price = price_table[item]
+    player = find_or_create_player(cid)  # Ensure player exists
 
-        if p["Credits"] < price:
-            return await update.message.reply_text("💳 Not enough credits to buy.")
+    for command, handler in COMMAND_HANDLERS.items():
+        if text.startswith(command):
+            try:
+                await handler(update, context, player)
+            except Exception as e:
+                print(f"Error handling command {command}: {e}")
+                await update.message.reply_text(
+                    "⚠️ An error occurred. Please try again later.",
+                    parse_mode=ParseMode.MARKDOWN,
+                )
+            return  # Stop processing after handling the command
 
-        p["Credits"] -= price
-        p["Items"].setdefault(item, 0)
-        p["Items"][item] += 1
-        save_player(p)
+    # Handle non-command messages (you can add game logic here if needed)
+    # For example, you could check for zone chat or other interactions
+    # await update.message.reply_text("💬 I received your message!")
 
-        return await update.message.reply_text(f"🛒 Purchased {item} successfully!")
-    if text.startswith(",research"):
-        parts = text.split()
-        if len(parts) != 3:
-            return await update.message.reply_text("🧬 Usage: ,research <technology> <level>")
+if __name__ == "__main__":
+    app = ApplicationBuilder().token(os.getenv("BOT_TOKEN")).build()
 
-        tech = parts[1].lower()
-        try:
-            level = int(parts[2])
-        except ValueError:
-            return await update.message.reply_text("⚠️ Level must be a number.")
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-        valid_techs = ["speed", "armor", "energy"]
-        if tech not in valid_techs:
-            return await update.message.reply_text("🧪 Valid technologies: speed, armor, energy")
+    # Connect all handlers
+    for command, handler in COMMAND_HANDLERS.items():
+        app.add_handler(CommandHandler(command[1:], handler))  # Remove the leading "/"
 
-        cost = 75 * level
+    app.run_polling()
+What Part 3 Adds:
 
-        if p["Credits"] < cost:
-            return await update.message.reply_text(f"💳 You need {cost} credits to research {tech}.")
+Zone Control: Implements the /map and /claim commands, allowing players to view and claim zones.
+Missions: Adds the /missions command to display daily missions.
+Enhanced handle_message:
+It now ensures a player object exists using find_or_create_player.
+Includes basic error handling within the command processing loop.
+Adds a placeholder for handling non-command messages (where you could add more complex chat interactions).
+Dynamically registers command handlers from the COMMAND_HANDLERS dictionary, making it easier to add new commands.
+Next Steps:
 
-        p["Credits"] -= cost
-        if tech == "speed":
-            p["SpeedResearch"] += level
-        elif tech == "armor":
-            p["ArmorResearch"] += level
-        elif tech == "energy":
-            p["EnergyResearch"] += level
+Combine All Parts: Copy the code from Part 3 and paste it after the combined code of Part 1 and Part 2.
+Test: Run the bot and test the /map, /claim, and /missions commands.
+Are you ready for Part 4, where we'll add the attack functionality and some building/research mechanics?
 
-        save_player(p)
-        return await update.message.reply_text(f"🧬 Researched {tech.capitalize()} to level {level}!")
-
-    if text.startswith(",mission"):
-        missions_list = (
-            "🎯 *Current Missions:*\n"
-            "- Mine 500 Ore [Reward: 100 Credits]\n"
-            "- Forge 10 Scouts [Reward: 50 Credits]\n"
-            "- Claim 1 Zone [Reward: 150 Credits]\n"
-            "\nUse ,claimmission <name> when completed."
-        )
-        return await update.message.reply_text(missions_list, parse_mode=ParseMode.MARKDOWN)
-
-    if text.startswith(",claimmission"):
-        parts = text.split()
-        if len(parts) != 2:
-            return await update.message.reply_text("🎯 Usage: ,claimmission <name>")
-
-        mission = parts[1].lower()
-
-        if mission == "mine":
-            if p["Ore"] >= 500:
-                p["Credits"] += 100
-                save_player(p)
-                return await update.message.reply_text("🎉 Mission complete! +100 Credits awarded.")
-            else:
-                return await update.message.reply_text("🔎 You have not mined enough ore yet.")
-
-        elif mission == "forge":
-            total_units = sum(p["Army"].values())
-            if total_units >= 10:
-                p["Credits"] += 50
-                save_player(p)
-                return await update.message.reply_text("🎉 Mission complete! +50 Credits awarded.")
-            else:
-                return await update.message.reply_text("🔎 You have not forged enough units yet.")
-
-        elif mission == "zone":
-            if p["Zone"]:
-                p["Credits"] += 150
-                save_player(p)
-                return await update.message.reply_text("🎉 Mission complete! +150 Credits awarded.")
-            else:
-                return await update.message.reply_text("🔎 You haven't claimed any zone yet.")
-
-        else:
-            return await update.message.reply_text("❓ Unknown mission.")
-
-    if text.startswith(",rank"):
-        ranks = sorted(players_data(), key=lambda x: (-x.get("Wins", 0), x.get("Losses", 0)))
-        msg = "🏆 *SkyHustle Leaderboard:*\n"
-        for i, player in enumerate(ranks[:10], start=1):
-            msg += f"{i}. {player.get('Name', 'Unknown')} - Wins: {player.get('Wins',0)}\n"
-
-        return await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN)
-
-    if text.startswith(",pve"):
-        if not p.get("PVERaidReady"):
-            return await update.message.reply_text("👾 No active PvE raids. Check back later!")
-
-        reward = 100
-        p["Credits"] += reward
-        p["Ore"] += 300
-        p["PVERaidReady"] = False
-        save_player(p)
-        return await update.message.reply_text(f"👾 Raid successful! +100 Credits and +300 Ore earned!")
+ready for part 4
 
 
 
+Okay, here's Part 4. This is a big one, adding the attack command, shield functionality, and the building upgrade commands:
+
+Python
+
+# ===============================
+# SkyHustle: HyperClean Part 4
+# ===============================
+
+#   (Parts 1, 2, and 3 code goes here - do not repeat it)
+
+import asyncio
+from datetime import datetime, timedelta, date
+import random
+
+# ===============================
+# Attack and Shield Logic
+# ===============================
+
+def apply_shield(player, duration_hours):
+    """Applies a shield to a player for a given duration."""
+    shield_end = datetime.now() + timedelta(hours=duration_hours)
+    player.shield_until = shield_end.isoformat()
+    save_player(player)
+
+async def attack_command(update: Update, context: ContextTypes.DEFAULT_TYPE, player):
+    """Handles the /attack command."""
+
+    text = update.message.text
+    parts = text.split()
+    if len(parts) != 2:
+        await update.message.reply_text("⚔️ Usage: /attack <player_name>")
+        return
+
+    target_name = parts[1]
+    target = find_player_by_name(target_name)
+    if not target:
+        await update.message.reply_text("❌ Player not found.")
+        return
+
+    can_attack_result, reason = can_attack(player, target)
+    if not can_attack_result:
+        await update.message.reply_text(f"🛡️ Cannot attack: {reason}")
+        return
+
+    damage = calculate_attack_damage(player, target)
+    apply_attack_results(player, target, damage)
+
+    # Determine winner and loser (simplified)
+    if damage > 0:  # Attacker wins (simplified)
+        winner = player
+        loser = target
+    else:
+        winner = target
+        loser = player
+
+    winner.wins += 1
+    loser.losses += 1
+    save_player(winner)
+    save_player(loser)
+
+    check_mission_progress(player, "win")  # Track mission progress
+
+    await update.message.reply_text(
+        f"💥 Attack successful! {player.name} dealt {damage} damage to {target.name}!\n"
+        f"{winner.name} wins, {loser.name} loses.",
+        parse_mode=ParseMode.MARKDOWN,
+    )
+
+    apply_shield(target, 2)  # Apply shield to the defender
+    await context.bot.send_message(
+        chat_id=target.chat_id,
+        text=f"🛡️ You have been attacked and shielded for 2 hours!",
+    )
+
+# ===============================
+# Building Upgrades
+# ===============================
+
+async def upgrade_refinery_command(update: Update, context: ContextTypes.DEFAULT_TYPE, player):
+    """Handles the /upgraderefinery command."""
+
+    cost = 100 * (player.refinery_level + 1)
+    if player.ore < cost:
+        await update.message.reply_text(f"⚠️ Not enough Ore to upgrade. Cost: {cost}")
+        return
+
+    player.ore -= cost
+    player.refinery_level += 1
+    save_player(player)
+    await update.message.reply_text(f"🏭 Refinery upgraded to level {player.refinery_level}!")
+
+async def upgrade_lab_command(update: Update, context: ContextTypes.DEFAULT_TYPE, player):
+    """Handles the /upgradelab command."""
+
+    cost = 150 * (player.lab_level + 1)
+    if player.credits < cost:
+        await update.message.reply_text(f"⚠️ Not enough Credits to upgrade. Cost: {cost}")
+        return
+
+    player.credits -= cost
+    player.lab_level += 1
+    save_player(player)
+    # Apply research bonus
+    player.research["speed"] += 1
+    player.research["armor"] += 1
+    save_player(player)
+    await update.message.reply_text(f"🔬 Lab upgraded to level {player.lab_level}!")
+
+async def upgrade_defense_command(update: Update, context: ContextTypes.DEFAULT_TYPE, player):
+    """Handles the /upgradedefense command."""
+
+    cost = 200 * (player.defense_level + 1)
+    if player.ore < cost or player.credits < cost:
+        await update.message.reply_text(f"⚠️ Not enough resources to upgrade Defense. Cost: {cost} Ore and Credits")
+        return
+
+    player.ore -= cost
+    player.credits -= cost
+    player.defense_level += 1
+    save_player(player)
+    await update.message.reply_text(f"🛡️ Defense upgraded to level {player.defense_level}!")
+
+# ===============================
+# Main Message Handler (Modified)
+# ===============================
+
+COMMAND_HANDLERS = {
+    "/start": start_command,
+    "/name": name_command,
+    "/status": status_command,
+    "/daily": daily_command,
+    "/mine": mine_command,
+    "/forge": forge_command,
+    "/use": use_command,
+    "/unlockbm": unlockbm_command,
+    "/blackmarket": blackmarket_command,
+    "/buy": buy_command,
+    "/map": map_command,
+    "/claim": claim_command,
+    "/missions": missions_command,
+    "/attack": attack_command,  # Added attack
+    "/upgraderefinery": upgrade_refinery_command,
+    "/upgradelab": upgrade_lab_command,
+    "/upgradedefense": upgrade_defense_command,
+    "/help": help_command,
+    "/rules": rules_command,
+    # ... (Add faction commands in Part 5)
+}
+
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handles all incoming messages."""
+
+    if not update.message:
+        return
+
+    text = update.message.text.strip()
+    cid = update.message.chat_id
+
+    player = find_or_create_player(cid)  # Ensure player exists
+
+    for command, handler in COMMAND_HANDLERS.items():
+        if text.startswith(command):
+            try:
+                await handler(update, context, player)
+            except Exception as e:
+                print(f"Error handling command {command}: {e}")
+                await update.message.reply_text(
+                    "⚠️ An error occurred. Please try again later.",
+                    parse_mode=ParseMode.MARKDOWN,
+                )
+            return  # Stop processing after handling the command
+
+    # Handle non-command messages (you can add game logic here if needed)
+    # For example, you could check for zone chat or other interactions
+    # await update.message.reply_text("💬 I received your message!")
+
+if __name__ == "__main__":
+    app = ApplicationBuilder().token(os.getenv("BOT_TOKEN")).build()
+
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+    # Connect all handlers
+    for command, handler in COMMAND_HANDLERS.items():
+        app.add_handler(CommandHandler(command[1:], handler))  # Remove the leading "/"
+
+    app.run_polling()
+What Part 4 Adds:
+
+Attack Command: Implements the /attack command with basic combat logic, shield application, and win/loss tracking.
+Building Upgrades: Implements /upgraderefinery, /upgradelab, and /upgradedefense commands, allowing players to upgrade their buildings.
+Modified COMMAND_HANDLERS: Includes the new attack and upgrade commands.
+Next Steps:
+
+Combine All Parts: Copy the code from Part 4 and paste it after the combined code of Parts 1, 2, and 3.
+Test: Run the bot and thoroughly test the attack and upgrade commands. Pay close attention to:
+Shield application and expiration.
+Resource costs for upgrades.
+Combat calculations.
+Win/loss tracking.
+Are you ready for Part 5, where we'll add faction functionality?
+
+
+ready for Part 5
 
 
 
+Okay, here's Part 5, which adds the faction functionality:
 
+Python
+
+# ===============================
+# SkyHustle: HyperClean Part 5
+# ===============================
+
+#   (Parts 1, 2, 3, and 4 code goes here - do not repeat it)
+
+# ===============================
+# Faction Commands
+# ===============================
+
+async def join_faction_command(update: Update, context: ContextTypes.DEFAULT_TYPE, player):
+    """Handles the /joinfaction command."""
+
+    text = update.message.text
+    parts = text.split()
+    if len(parts) != 2:
+        await update.message.reply_text("🚩 Usage: /joinfaction <faction_name>")
+        return
+
+    faction_name = parts[1].capitalize()
+    valid_factions = ["Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo", "Libra", "Scorpio", "Sagittarius", "Capricorn", "Aquarius", "Pisces"]  # Define valid faction names
+    if faction_name not in valid_factions:
+        await update.message.reply_text(f"❌ Invalid faction. Choose from: {', '.join(valid_factions)}")
+        return
+
+    if player.faction:
+        await update.message.reply_text(f"🛡️ You are already in the {player.faction} faction.")
+        return
+
+    player.faction = faction_name
+    save_player(player)
+    await update.message.reply_text(f"🤝 Joined the {faction_name} faction!")
+
+async def leave_faction_command(update: Update, context: ContextTypes.DEFAULT_TYPE, player):
+    """Handles the /leavefaction command."""
+
+    if not player.faction:
+        await update.message.reply_text("🍂 You are not currently in a faction.")
+        return
+
+    old_faction = player.faction
+    player.faction = None
+    save_player(player)
+    await update.message.reply_text(f"👋 Left the {old_faction} faction.")
+
+async def faction_info_command(update: Update, context: ContextTypes.DEFAULT_TYPE, player):
+    """Handles the /factioninfo command."""
+
+    if not player.faction:
+        await update.message.reply_text("ℹ️ You are not currently in a faction. Use /joinfaction to join one.")
+        return
+
+    faction_name = player.faction
+    #  Replace this with your actual faction data retrieval (from a dictionary, etc.)
+    faction_data = {
+        "Aries": {"desc": "The fiery warriors.", "bonus": "+10% attack"},
+        "Taurus": {"desc": "The steadfast builders.", "bonus": "+10% defense"},
+        "Gemini": {"desc": "The cunning traders.", "bonus": "+10% credits gain"},
+        "Cancer": {"desc": "The resilient defenders.", "bonus": "+20% more units after attack"},
+        "Leo": {"desc": "The charismatic leaders.", "bonus": "+5% attack, +5% credits gain"},
+        "Virgo": {"desc": "The diligent miners.", "bonus": "+20% more ore from mining"},
+        "Libra": {"desc": "The balanced diplomats.", "bonus": "+5% attack, +5% defense"},
+        "Scorpio": {"desc": "The strategic tacticians.", "bonus": "+10% more units after attack"},
+        "Sagittarius": {"desc": "The adventurous explorers.", "bonus": "+10% energy regen"},
+        "Capricorn": {"desc": "The disciplined engineers.", "bonus": "-10% cost for upgrades"},
+        "Aquarius": {"desc": "The innovative scientists.", "bonus": "+10% research speed"},
+        "Pisces": {"desc": "The mystical healers.", "bonus": "+10% defense, +5% energy regen"},
+    }
+
+    if faction_name not in faction_data:
+        await update.message.reply_text("❌ Faction data not found.")  # Handle potential error
+        return
+
+    info = faction_data[faction_name]
+    await update.message.reply_text(
+        f"🚩 *{faction_name} Faction:*\n{info['desc']}\nBonus: {info['bonus']}",
+        parse_mode=ParseMode.MARKDOWN,
+    )
+
+# ===============================
+# Main Message Handler (Modified)
+# ===============================
+
+COMMAND_HANDLERS = {
+    "/start": start_command,
+    "/name": name_command,
+    "/status": status_command,
+    "/daily": daily_command,
+    "/mine": mine_command,
+    "/forge": forge_command,
+    "/use": use_command,
+    "/unlockbm": unlockbm_command,
+    "/blackmarket": blackmarket_command,
+    "/buy": buy_command,
+    "/map": map_command,
+    "/claim": claim_command,
+    "/missions": missions_command,
+    "/attack": attack_command,
+    "/upgraderefinery": upgrade_refinery_command,
+    "/upgradelab": upgrade_lab_command,
+    "/upgradedefense": upgrade_defense_command,
+    "/joinfaction": join_faction_command,  # Added faction commands
+    "/leavefaction": leave_faction_command,
+    "/factioninfo": faction_info_command,
+    "/help": help_command,
+    "/rules": rules_command,
+}
+
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handles all incoming messages."""
+
+    if not update.message:
+        return
+
+    text = update.message.text.strip()
+    cid = update.message.chat_id
+
+    player = find_or_create_player(cid)  # Ensure player exists
+
+    for command, handler in COMMAND_HANDLERS.items():
+        if text.startswith(command):
+            try:
+                await handler(update, context, player)
+            except Exception as e:
+                print(f"Error handling command {command}: {e}")
+                await update.message.reply_text(
+                    "⚠️ An error occurred. Please try again later.",
+                    parse_mode=ParseMode.MARKDOWN,
+                )
+            return  # Stop processing after handling the command
+    # Handle non-command messages (you can add game logic here if needed)
+    # For example, you could check for zone chat or other interactions
+    # await update.message.reply_text("💬 I received your message!")
+# App Main Loop
+if __name__ == "__main__":
+    app = ApplicationBuilder().token(os.getenv("BOT_TOKEN")).build()
+
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+    # Connect extra /help and /rules commands...
+    app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("rules", rules_command))
+
+    # Connect all handlers
+    app.add_handler(CommandHandler("start", start_command))
+    app.add_handler(CommandHandler("name", name_command))
+    app.add_handler(CommandHandler("status", status_command))
+    app.add_handler(CommandHandler("daily", daily_command))
+    app.add_handler(CommandHandler("mine", mine_command))
+    app.add_handler(CommandHandler("forge", forge_command))
+    app.add_handler(CommandHandler("use", use_command))
+    app.add_handler(CommandHandler("unlockbm", unlockbm_command))
+    app.add_handler(CommandHandler("blackmarket", blackmarket_command))
+    app.add_handler(CommandHandler("buy", buy_command))
+
+    app.run_polling()
