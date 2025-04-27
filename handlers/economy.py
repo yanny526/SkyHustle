@@ -9,43 +9,37 @@ import utils.db as db
 def load_store_items():
     with open("data/items.json", "r") as f:
         data = json.load(f)
-    return data["store_items"]  # ✅ Corrected here
+    return data["store_items"]
 
 # Load blackmarket items
 def load_blackmarket_items():
     with open("data/items.json", "r") as f:
         data = json.load(f)
-    return data["blackmarket_items"]  # ✅ Corrected here
+    return data["blackmarket_items"]
 
 async def store(update: Update, context: ContextTypes.DEFAULT_TYPE):
     store_items = load_store_items()
-
     text = "🛒 **SkyHustle Store** 🛒\n\n"
     for item in store_items:
         text += f"🆔 {item['id']} | {item['name']} — {item['price']} Gold\n"
-
     text += "\n🛒 To buy an item, type `/buy <item_id>`!"
     await update.message.reply_text(text)
 
 async def blackmarket(update: Update, context: ContextTypes.DEFAULT_TYPE):
     blackmarket_items = load_blackmarket_items()
-
     text = "🕵️‍♂️ **SkyHustle Black Market** 🕵️‍♂️\n\n"
     for item in blackmarket_items:
         text += f"🆔 {item['id']} | {item['name']} — {item['price']} Gold\n"
-
     text += "\n🛒 To buy a black market item, type `/blackbuy <item_id>`!"
     await update.message.reply_text(text)
 
 async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Buy an item from the normal store."""
     telegram_id = update.effective_user.id
     if len(context.args) != 1:
         return await update.message.reply_text("🛒 Usage: /buy <item_id>")
 
     item_id = context.args[0].lower()
     store_items = load_store_items()
-
     selected_item = next((item for item in store_items if item["id"].lower() == item_id), None)
 
     if not selected_item:
@@ -57,28 +51,26 @@ async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     db.update_player_resources(telegram_id, gold_delta=-selected_item["price"])
 
-    db.update_player_resources(
-        telegram_id,
-        gold_delta=selected_item.get("gold", 0),
-        stone_delta=selected_item.get("stone", 0),
-        iron_delta=selected_item.get("iron", 0),
-        energy_delta=selected_item.get("energy", 0)
-    )
-
-    if selected_item.get("shield"):
-        db.player_profile.update_cell(db.find_player(telegram_id), 9, "Yes")
-
-    await update.message.reply_text(f"✅ You bought {selected_item['name']}!")
+    if selected_item.get("gold") or selected_item.get("stone") or selected_item.get("iron") or selected_item.get("energy"):
+        db.update_player_resources(
+            telegram_id,
+            gold_delta=selected_item.get("gold", 0),
+            stone_delta=selected_item.get("stone", 0),
+            iron_delta=selected_item.get("iron", 0),
+            energy_delta=selected_item.get("energy", 0)
+        )
+        await update.message.reply_text(f"✅ You bought {selected_item['name']}!")
+    else:
+        db.add_to_inventory(telegram_id, selected_item["id"])
+        await update.message.reply_text(f"✅ You bought {selected_item['name']}! (Stored in Inventory)")
 
 async def blackbuy(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Buy an item from the Black Market."""
     telegram_id = update.effective_user.id
     if len(context.args) != 1:
         return await update.message.reply_text("🕵️ Usage: /blackbuy <item_id>")
 
     item_id = context.args[0].lower()
     black_items = load_blackmarket_items()
-
     selected_item = next((item for item in black_items if item["id"].lower() == item_id), None)
 
     if not selected_item:
@@ -89,23 +81,24 @@ async def blackbuy(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await update.message.reply_text("💰 Not enough Gold!")
 
     db.update_player_resources(telegram_id, gold_delta=-selected_item["price"])
-
-    await update.message.reply_text(f"🕵️ You secretly purchased {selected_item['name']}! 🤫")
+    db.add_to_inventory(telegram_id, selected_item["id"])
+    await update.message.reply_text(f"🕵️ You secretly purchased {selected_item['name']}! (Stored in Inventory)")
 
 async def use(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Use a purchased item."""
     telegram_id = update.effective_user.id
-
     if len(context.args) != 1:
         return await update.message.reply_text("🎯 Usage: /use <item_id>")
 
     item_id = context.args[0].lower()
 
+    if not db.has_item(telegram_id, item_id):
+        return await update.message.reply_text("❌ You don't own this item!")
+
+    # Use item effects
     if item_id == "basicshield":
         player = db.get_player_data(telegram_id)
         if player["ShieldActive"] == "Yes":
             return await update.message.reply_text("🛡️ You already have a shield active!")
-
         db.player_profile.update_cell(db.find_player(telegram_id), 9, "Yes")
         await update.message.reply_text("🛡️ Basic Shield activated! You're protected for 24 hours.")
 
@@ -122,4 +115,6 @@ async def use(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("🔌 EMP Device activated! (Enemy shields disruption coming soon...)")
 
     else:
-        await update.message.reply_text("❓ Unknown item or feature not available yet!")
+        return await update.message.reply_text("❓ Unknown item or feature not available yet!")
+
+    db.remove_from_inventory(telegram_id, item_id)  # Consume item
