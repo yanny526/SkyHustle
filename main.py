@@ -72,6 +72,8 @@ def main():
     # Army System Commands
     app.add_handler(CommandHandler("train", army_system.train_units))
     app.add_handler(CommandHandler("army", army_system.view_army))
+    app.add_handler(CommandHandler("trainstatus", army_system.training_status))  # New Command
+    app.add_handler(CommandHandler("claimtrain", army_system.claim_training))    # New Command
 
     # Catch unknown /commands
     app.add_handler(CommandHandler(None, unknown_command))
