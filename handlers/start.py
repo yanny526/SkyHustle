@@ -1,58 +1,68 @@
+# handlers/start.py
+
 from telegram import Update
 from telegram.ext import ContextTypes
 import utils.db as db
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    created = db.create_player(user.id, user.first_name)
-    
-    if created:
+    """Initialize player profile."""
+    telegram_id = update.effective_user.id
+    player = db.get_player_data(telegram_id)
+
+    if not player:
+        # Create new player
+        db.create_player(telegram_id, f"Commander{telegram_id}")
         await update.message.reply_text(
-            "🌌 **Welcome, Commander!** 🌌\n\n"
-            "A new empire is born from the ashes...\n"
-            "Type /help to begin your conquest! 🏰"
+            "🚀 Welcome, new Commander!\n\n"
+            "Your SkyHustle profile has been created.\n"
+            "Type /help to see what you can do!"
         )
     else:
         await update.message.reply_text(
-            "🏰 **Welcome back, Commander!**\n\n"
-            "Your empire awaits your command. ⚔️"
+            "👋 Welcome back, Commander!\n"
+            "Type /help to continue your conquest!"
         )
 
 async def help(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "🧭 **SkyHustle Command Guide** 🧭\n\n"
-        "🏰 *Empire Management*\n"
-        "`/start` - Begin your empire\n"
-        "`/status` - View your empire's strength\n"
-        "`/name <new_name>` - Change your Commander name (future)\n\n"
-        "⛏️ *Resource Commands*\n"
-        "`/daily` - Claim daily resource rewards\n"
-        "`/mine` - Start mining expedition\n"
-        "`/collect` - Collect mined resources\n"
-        "`/resources` - View current resources (future)\n\n"
-        "🛡️ *Military Commands*\n"
-        "`/forge <unit> <amount>` - Train army units (future)\n"
-        "`/army` - View your army (future)\n"
-        "`/use <item>` - Use special items (future)\n\n"
-        "🌍 *Territory Commands*\n"
-        "`/claim` - Claim a zone (future)\n"
-        "`/map` - View the world map (future)\n"
-        "`/zone` - View your zone (future)\n\n"
-        "⚔️ *Warfare Commands*\n"
-        "`/scan` - Scan nearby territories\n"
-        "`/attack <player>` - Attack a rival Commander\n\n"
-        "🧬 *Research & Market*\n"
-        "`/research <tech> <level>` - Research technologies (future)\n"
-        "`/blackmarket` - Visit the secret Black Market (future)\n"
-        "`/buy <item>` - Buy a Black Market item (future)\n\n"
-        "🎯 *Missions & Rankings*\n"
-        "`/missions` - Complete missions (future)\n"
-        "`/rank` - View your rank\n"
-        "`/leaderboard` - View top players\n\n"
-        "⚙️ *Admin Commands (Dev Only)*\n"
-        "`/admin give <player> <resource> <amount>`\n"
-        "`/admin wipe <player>`\n"
-        "`/debug` - Testing functions\n\n"
-        "🏆 _Conquer. Expand. Dominate._ 🏆"
-        , parse_mode='Markdown'
+    """Display help menu."""
+    text = (
+        "📜 **SkyHustle Commands Guide** 📜\n\n"
+        "🛠️ **Account**\n"
+        "• /start — Create your SkyHustle profile\n"
+        "• /setname <name> — Set a unique Commander name\n"
+        "• /status — View your profile and resources\n\n"
+        "⛏️ **Resources**\n"
+        "• /daily — Claim daily bonus rewards\n"
+        "• /mine — Send miners to collect resources\n"
+        "• /collect — Gather mined resources\n\n"
+        "⚔️ **Army and Combat**\n"
+        "• /forge <unit> — Create war units\n"
+        "• /army — View your army\n"
+        "• /attack <enemy> — Attack another Commander\n"
+        "• /shield — Activate protective shield\n\n"
+        "🧠 **Research and Technology**\n"
+        "• /research <tech> <level> — Upgrade technologies\n"
+        "• /tech — View your research levels\n\n"
+        "🌍 **Zone Control**\n"
+        "• /scan — Discover nearby zones\n"
+        "• /claim <zone> — Claim a zone\n"
+        "• /zone — View your current zone\n"
+        "• /map — View world map\n\n"
+        "🛒 **Store and Black Market**\n"
+        "• /store — Browse official store\n"
+        "• /blackmarket — Browse secret market\n"
+        "• /buy <item> — Buy from official store\n"
+        "• /blackbuy <item> — Buy from black market\n"
+        "• /use <item> — Use an item from your inventory\n\n"
+        "🏆 **Missions and Ranking**\n"
+        "• /missions — View available missions\n"
+        "• /claimmission — Claim mission rewards\n"
+        "• /rank — See top players ranking\n\n"
+        "🛡️ **Admin Tools** (for authorized staff)\n"
+        "• /givegold <player> <amount>\n"
+        "• /wipeplayer <player>\n"
+        "• /shieldforce <player>\n\n"
+        "✨ Keep growing your empire, Commander! ✨"
     )
+
+    await update.message.reply_text(text)
