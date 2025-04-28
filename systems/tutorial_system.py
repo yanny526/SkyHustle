@@ -1,148 +1,172 @@
+# tutorial_system.py
+
 from telegram import Update
 from telegram.ext import ContextTypes
 from utils.ui_helpers import render_status_panel
 
 # === Tutorial State ===
 # Tracks tutorial step per player
-# 1=setname, 2=ready, 3=build, 4=mine, 5=claimmine, 6=train, 7=army, 8=complete
- tutorial_progress = {}
+# 1: set name, 2: ready shield, 3: build CC, 4: mine, 5: claim mine, 6: train, 7: claim train, 8: attack
+tutorial_progress = {}
 # Stores chosen commander name per player
 player_names = {}
-# Track shield status (True if active)
-player_shields = {}
 
 async def tutorial(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    player_id = str(update.effective_user.id)
-    tutorial_progress[player_id] = 1
-    player_shields[player_id] = False
+    """
+    /tutorial - Start the first-time player tutorial.
+    """
+    pid = str(update.effective_user.id)
+    tutorial_progress[pid] = 1
     await update.message.reply_text(
         "🛰️ Welcome to SkyHustle Tutorial!\n\n"
         "Commander, what shall we call you?\n"
-        "Type /setname [Your Name] to choose your identity.\n\n"
-        + render_status_panel(player_id)
+        "Type /setname [Your Name] to choose your identity."
     )
 
 async def setname(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    player_id = str(update.effective_user.id)
-    step = tutorial_progress.get(player_id)
-    if step != 1:
-        await update.message.reply_text("⚠️ Please start the tutorial with /tutorial.")
+    """
+    /setname [name] - Let player choose their commander name and advance tutorial.
+    """
+    pid = str(update.effective_user.id)
+    if tutorial_progress.get(pid) != 1:
+        await update.message.reply_text("⚠️ Please start with /tutorial.")
         return
     if not context.args:
         await update.message.reply_text("⚡ Usage: /setname [Your Name]")
         return
     name = " ".join(context.args)
-    player_names[player_id] = name
-    tutorial_progress[player_id] = 2
-    panel = render_status_panel(player_id)
+    player_names[pid] = name
+    tutorial_progress[pid] = 2
     await update.message.reply_text(
         f"👋 Welcome Commander {name}!\n"
-        "🔰 Next: activate your 4-day starter shield.\n"
-        "Type /ready when you're prepared.\n\n"
-        + panel
+        "🔰 Your identity is set.\n\n"
+        "Type /ready when you're prepared to activate your 4-day starter shield."
     )
 
+# --- Part 2: Activate Starter Shield ---
 async def ready(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    player_id = str(update.effective_user.id)
-    step = tutorial_progress.get(player_id)
-    if step != 2:
-        await update.message.reply_text("⚠️ Use /setname first.")
+    """
+    /ready - Activate shield and continue tutorial.
+    """
+    pid = str(update.effective_user.id)
+    if tutorial_progress.get(pid) != 2:
+        await update.message.reply_text("⚠️ You need to set your name first with /setname.")
         return
-    player_shields[player_id] = True
-    tutorial_progress[player_id] = 3
-    panel = render_status_panel(player_id)
+    tutorial_progress[pid] = 3
+    name = player_names.get(pid, "Commander")
     await update.message.reply_text(
-        "🛡️ Shield activated! You are safe for 4 days.\n"
-        "🛠️ Step 1: Build your Command Center.\n"
-        "Type /build command_center\n\n"
-        + panel
+        f"🛡️ Starter Shield activated! Welcome, {name}."
+        " You are safe for 4 days.\n\n"
+        "Let’s build your Command Center.\n"
+        "Type /build command_center to begin construction."
     )
 
-async def deactivate_shield(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    player_id = str(update.effective_user.id)
-    if not player_shields.get(player_id):
-        await update.message.reply_text("🔓 Shield is not active.")
-        return
-    player_shields[player_id] = False
-    await update.message.reply_text(
-        "🔓 Starter shield deactivated. Enemies can now attack!"
-    )
-
+# --- Part 3: Build Command Center ---
 async def build(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    player_id = str(update.effective_user.id)
-    step = tutorial_progress.get(player_id)
-    if step != 3:
-        return  # let building_system handle elsewhere
-    args = context.args
-    if len(args)!=1 or args[0].lower()!='command_center':
+    """
+    /build [building] - Simulate building and advance tutorial.
+    """
+    pid = str(update.effective_user.id)
+    if tutorial_progress.get(pid) != 3:
+        await update.message.reply_text("⚠️ That’s not on our agenda right now.")
+        return
+    if not context.args or context.args[0].lower() != 'command_center':
+        await update.message.reply_text("⚒️ To continue, type /build command_center.")
+        return
+    tutorial_progress[pid] = 4
+    await update.message.reply_text(
+        "🏗️ Command Center constructed!\n"
+        "Great work. Now let's mine some resources."
+        "\nType /mine metal 100 to start mining."
+    )
+
+# --- Part 4: Tutorial Mining ---
+async def tutorial_mine(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Intercepts /mine during tutorial.
+    """
+    pid = str(update.effective_user.id)
+    if tutorial_progress.get(pid) != 4:
+        return  # let normal handler take over
+    # Expect exactly: /mine metal 100
+    if len(context.args)==2 and context.args[0].lower()=='metal' and context.args[1]=='100':
+        tutorial_progress[pid] = 5
         await update.message.reply_text(
-            "⚙️ Usage: /build command_center"
+            "⛏️ Mining 100 Metal started!\n"
+            "...fast-forwarding time for tutorial...\n"
+            "🏁 Mining complete! Type /claimmine to claim your metal."
         )
+    else:
+        await update.message.reply_text("⚡ Tutorial expects /mine metal 100. Try that!\n\n"+render_status_panel(pid))
+
+# --- Part 5: Claim Mining ---
+async def tutorial_claimmine(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /claimmine during tutorial flow.
+    """
+    pid = str(update.effective_user.id)
+    if tutorial_progress.get(pid) != 5:
         return
-    tutorial_progress[player_id] = 4
-    panel = render_status_panel(player_id)
+    tutorial_progress[pid] = 6
+    # Grant tutorial resource (in-memory)
+    # Normally we'd update Google Sheets here
     await update.message.reply_text(
-        "🏗️ Command Center constructed! Level 1 unlocked.\n"
-        "⛏️ Step 2: Start mining resources.\n"
-        "Type /mine metal 500\n\n"
-        + panel
+        "🎉 You claimed 100 Metal!\n"
+        "Resources are key. Now let's train your first troops.\n"
+        "Type /train soldier 10 to begin training."
     )
 
-# Part 5: Mining step
-async def tutorial_mine(update, context: ContextTypes.DEFAULT_TYPE):
-    player_id = str(update.effective_user.id)
-    step = tutorial_progress.get(player_id)
-    if step != 4:
+# --- Part 6: Tutorial Training ---
+async def tutorial_train(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /train during tutorial flow.
+    """
+    pid = str(update.effective_user.id)
+    if tutorial_progress.get(pid) != 6:
         return
-    # let timer_system.start_mining run normally, then advance
-    tutorial_progress[player_id] = 5
-    panel = render_status_panel(player_id)
+    if len(context.args)==2 and context.args[0].lower()=='soldier' and context.args[1]=='10':
+        tutorial_progress[pid] = 7
+        await update.message.reply_text(
+            "🏭 Training 10 Soldiers started...\n"
+            "✅ Training complete! Type /claimtrain to add them to your army."
+        )
+    else:
+        await update.message.reply_text("⚡ Tutorial expects /train soldier 10. Give it another try.\n\n"+render_status_panel(pid))
+
+# --- Part 7: Claim Training ---
+async def tutorial_claimtrain(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /claimtrain during tutorial.
+    """
+    pid = str(update.effective_user.id)
+    if tutorial_progress.get(pid) != 7:
+        return
+    tutorial_progress[pid] = 8
     await update.message.reply_text(
-        "⛏️ Good start! Now claim your resources.\n"
-        "Type /claimmine to collect your mining haul.\n\n"
-        + panel
+        "🎉 You now have 10 Soldiers in your army!\n"
+        "Great progress, Commander. Your next challenge: combat.\n"
+        "Type /attack TRAINER to battle the practice dummy."
     )
 
-# Part 6: Claim mining
-async def tutorial_claim(update, context: ContextTypes.DEFAULT_TYPE):
-    player_id = str(update.effective_user.id)
-    step = tutorial_progress.get(player_id)
-    if step != 5:
+# --- Part 8: Tutorial Attack & Completion ---
+async def tutorial_attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /attack during tutorial.
+    """
+    pid = str(update.effective_user.id)
+    if tutorial_progress.get(pid) != 8:
         return
-    tutorial_progress[player_id] = 6
-    panel = render_status_panel(player_id)
-    await update.message.reply_text(
-        "🎉 Resources claimed!\n"
-        "🏭 Step 3: Train your first troops.\n"
-        "Type /train soldier 10\n\n"
-        + panel
-    )
+    if len(context.args)==1 and context.args[0].upper()=='TRAINER':
+        tutorial_progress[pid] = 9
+        await update.message.reply_text(
+            "⚔️ You attacked the practice dummy and emerged victorious!\n"
+            "🏆 Tutorial complete! Welcome to the true skies of SkyHustle.\n"
+            "Type /help to explore all commands, or /status at any time to view your empire.\n"
+            + render_status_panel(pid)
+        )
+    else:
+        await update.message.reply_text("⚡ Tutorial expects `/attack TRAINER`. Try again!\n\n"+render_status_panel(pid))
 
-# Part 7: Training
-async def tutorial_train(update, context: ContextTypes.DEFAULT_TYPE):
-    player_id = str(update.effective_user.id)
-    step = tutorial_progress.get(player_id)
-    if step != 6:
-        return
-    tutorial_progress[player_id] = 7
-    panel = render_status_panel(player_id)
-    await update.message.reply_text(
-        "🛡️ Training underway!\n"
-        "👀 Step 4: View your army.\n"
-        "Type /army to inspect your forces.\n\n"
-        + panel
-    )
-
-# Part 8: View army & complete
-async def tutorial_army(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    player_id = str(update.effective_user.id)
-    step = tutorial_progress.get(player_id)
-    if step != 7:
-        return
-    tutorial_progress[player_id] = 8
-    panel = render_status_panel(player_id)
-    await update.message.reply_text(
-        "🏁 Congratulations! You have completed the SkyHustle tutorial.\n"
-        "Use /status anytime to check your empire. Happy conquering, Commander!\n\n"
-        + panel
-    )
+# Helper to get name
+async def get_name(player_id: str) -> str:
+    return player_names.get(player_id, "Commander")
