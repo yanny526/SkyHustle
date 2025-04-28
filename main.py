@@ -10,6 +10,7 @@ from telegram.ext import (
     filters,
 )
 from systems import (
+    tutorial_system,    # ← new
     timer_system,
     army_system,
     battle_system,
@@ -35,20 +36,19 @@ LORE_TEXT = (
     "The skies belong to the strong. Welcome to SKYHUSTLE."
 )
 
-# -------------- /start command --------------
+# -------------- /start --------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🛰️ Welcome Commander!\n\n"
-        "The skies are yours to conquer.\n"
-        "Type /help to begin your journey."
+        "Type /tutorial for a quick guided setup—or /help to see all commands."
     )
 
-# -------------- /help command --------------
+# -------------- /help --------------
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     help_text = (
         "🛡️ SkyHustle Help Menu\n\n"
-        "Available Commands:\n"
-        "- /status — View your Empire Status (coming soon)\n"
+        "Core Commands:\n"
+        "- /tutorial — First-time player walkthrough\n"
         "- /army — View Your Army\n"
         "- /train [unit] [amount] — Train New Units\n"
         "- /trainstatus — Check Training Progress\n"
@@ -60,19 +60,13 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "- /battle_status — View Battle History\n"
         "- /spy [player_id] — Spy on an Enemy\n"
         "- /missions — View Daily Missions\n"
-        "- /storymissions — View Story Missions\n"
-        "- /epicmissions — View Epic Missions\n"
-        "- /claimmission — Claim Mission Rewards\n"
         "- /shop — Open Normal Shop\n"
-        "- /buy [item_id] — Purchase from Normal Shop\n"
-        "- /unlockblackmarket — Unlock Black Market (R200)\n"
-        "- /blackmarket — Browse Black Market\n"
-        "- /bmbuy [item_id] — Purchase from Black Market\n"
+        "- /unlockblackmarket — Unlock Black Market\n"
         "- /lore — Read the SkyHustle Backstory"
     )
     await update.message.reply_text(help_text)
 
-# -------------- /lore command --------------
+# -------------- /lore --------------
 async def lore_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(LORE_TEXT)
 
@@ -84,7 +78,19 @@ async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    # Core
+    # --- Tutorial System ---
+    app.add_handler(CommandHandler("tutorial", tutorial_system.tutorial))
+    app.add_handler(CommandHandler("setname", tutorial_system.setname))
+    # once you’ve implemented them in tutorial_system.py:
+    # app.add_handler(CommandHandler("ready",    tutorial_system.ready_shield))
+    # app.add_handler(CommandHandler("build",    tutorial_system.build_command_center))
+    # app.add_handler(CommandHandler("mine",     tutorial_system.tutorial_mine))
+    # app.add_handler(CommandHandler("claimmine",tutorial_system.tutorial_claim_mine))
+    # app.add_handler(CommandHandler("train",    tutorial_system.tutorial_train))
+    # app.add_handler(CommandHandler("claimtrain",tutorial_system.tutorial_claim_train))
+    # app.add_handler(CommandHandler("attack",   tutorial_system.tutorial_attack))
+
+    # --- Core Bot Commands ---
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("lore", lore_command))
