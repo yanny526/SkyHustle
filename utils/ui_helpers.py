@@ -38,4 +38,3 @@ def render_status_panel(player_id: str) -> str:
         army_line = "🛡️ Army — (no units)"
 
     return resource_line + "\n" + army_line
-
