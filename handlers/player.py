@@ -5,16 +5,11 @@ from telegram.ext import ContextTypes
 import utils.db as db
 import re
 
-# Forbidden pattern to block emojis and symbols
+# Proper forbidden pattern to block emojis and symbols
 FORBIDDEN_PATTERN = re.compile(
     r"["
-    "\U0001F600-\U0001F64F"  # Emoticons
-    "\U0001F300-\U0001F5FF"  # Symbols & pictographs
-    "\U0001F680-\U0001F6FF"  # Transport & map symbols
-    "\U0001F1E0-\U0001F1FF"  # Flags
-    "\U00002500-\U00002BEF"  # Chinese/Japanese/Korean characters
-    "\U00002700-\U000027BF"  # Dingbats
-    "\U0001F900-\U0001F9FF"  # Supplemental Symbols and Pictographs
+    "\U00010000-\U0010FFFF"  # Supplementary Multilingual Plane
+    "\u2600-\u26FF"          # Misc symbols (Weather etc.)
     "!@#%&*^$?{}[]()/\\<>=+`~"  # Manually forbidden symbols
     "]", flags=re.UNICODE
 )
@@ -28,14 +23,14 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await update.message.reply_text("⚠️ You don't have a SkyHustle profile yet! Use /start to create one.")
 
     text = (
-        f"\U0 **Commander Profile**\n\n"
-        f"\U0001F464 Name: {player['PlayerName']}\n"
-        f"\U0001F30D Zone: {player['Zone']}\n"
-        f"\U0001F4B0 Gold: {player['Gold']}\n"
-        f"\U0001FAA8 Stone: {player['Stone']}\n"
-        f"\u26D3\uFE0F Iron: {player['Iron']}\n"
-        f"\u26A1 Energy: {player['Energy']}\n"
-        f"\U0001F6E1\uFE0F Shield Active: {player['ShieldActive']}\n"
+        f"👑 **Commander Profile**\n\n"
+        f"👤 Name: {player['PlayerName']}\n"
+        f"🌍 Zone: {player['Zone']}\n"
+        f"💰 Gold: {player['Gold']}\n"
+        f"🪨 Stone: {player['Stone']}\n"
+        f"⛓️ Iron: {player['Iron']}\n"
+        f"⚡ Energy: {player['Energy']}\n"
+        f"🛡️ Shield Active: {player['ShieldActive']}\n"
     )
 
     await update.message.reply_text(text)
@@ -53,9 +48,9 @@ async def setname(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not new_name.replace(" ", "").isalnum():
         return await update.message.reply_text("🚫 Name must contain only letters, numbers, and spaces. No emojis or special symbols!")
 
-    # SECOND FILTER: Unicode forbidden
+    # SECOND FILTER: Unicode emoji forbidden
     if FORBIDDEN_PATTERN.search(new_name):
-        return await update.message.reply_text("🚫 Name contains forbidden characters (emojis, symbols, forbidden characters)!")
+        return await update.message.reply_text("🚫 Name contains forbidden characters (emojis, symbols)!")
 
     # Check if name is already taken
     all_players = db.player_profile.col_values(1)[1:]  # Skip header
