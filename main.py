@@ -2,7 +2,8 @@
 
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
-from systems import timer_system  # Import the timer system
+from systems import timer_system, army_system  # Import both systems
+from utils import google_sheets  # Needed to initialize Google Sheets connection
 
 # -------------- BOT TOKEN (Replace with your real token) --------------
 BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN_HERE"
@@ -33,7 +34,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "🛡️ SkyHustle Help Menu\n\n"
         "Available Commands:\n"
         "- /status — View your Empire Status (coming soon)\n"
-        "- /army — View Your Army (coming soon)\n"
+        "- /army — View Your Army\n"
+        "- /train [unit] [amount] — Train New Units\n"
         "- /mine [resource] [amount] — Start Mining\n"
         "- /minestatus — View Mining Progress\n"
         "- /claimmine — Claim Completed Mining\n"
@@ -66,6 +68,10 @@ def main():
     app.add_handler(CommandHandler("mine", timer_system.start_mining))
     app.add_handler(CommandHandler("minestatus", timer_system.mining_status))
     app.add_handler(CommandHandler("claimmine", timer_system.claim_mining))
+
+    # Army System Commands
+    app.add_handler(CommandHandler("train", army_system.train_units))
+    app.add_handler(CommandHandler("army", army_system.view_army))
 
     # Catch unknown /commands
     app.add_handler(CommandHandler(None, unknown_command))
