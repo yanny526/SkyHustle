@@ -2,14 +2,29 @@
 
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from systems import timer_system  # Import the timer system
 
-# -------------- BOT TOKEN (Replace with your own token) --------------
+# -------------- BOT TOKEN (Replace with your real token) --------------
 BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN_HERE"
 
-# -------------- /start command --------------
+# -------------- Backstory Text --------------
+LORE_TEXT = (
+    "🌌 Year 3137.\n"
+    "Humanity shattered into warring factions.\n"
+    "The planet's surface is dead. Survivors now live aboard colossal flying fortresses known as SkyHustles.\n\n"
+    "🛡️ As Commander, you lead your SkyHustle to survival.\n"
+    "Mine rare resources, build your forces, and conquer the skies.\n\n"
+    "🕶️ Rumors speak of a forbidden Black Market — where power can be bought, but destiny must still be earned.\n\n"
+    "⚔️ Fight bravely, Commander.\n"
+    "The skies belong to the strong. Welcome to SKYHUSTLE."
+)
+
+# -------------- /start command (Short cinematic intro) --------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "🛰️ SkyHustle System Online!\n\nType /help to see available commands."
+        "🛰️ Welcome Commander!\n\n"
+        "The skies are yours to conquer.\n"
+        "Type /help to begin your journey."
     )
 
 # -------------- /help command --------------
@@ -17,30 +32,42 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     help_text = (
         "🛡️ SkyHustle Help Menu\n\n"
         "Available Commands:\n"
-        "- /status — View your Empire Status\n"
-        "- /army — View Your Army\n"
-        "- /mine — Start Mining\n"
-        "- /train — Train Your Troops\n"
-        "- /attack — Attack an Enemy\n"
-        "- /missions — View Daily Missions\n"
-        "- /shop — Open Normal Store\n"
-        "- /blackmarket — Open Elite Store\n\n"
-        "More features unlocking soon!"
+        "- /status — View your Empire Status (coming soon)\n"
+        "- /army — View Your Army (coming soon)\n"
+        "- /mine [resource] [amount] — Start Mining\n"
+        "- /minestatus — View Mining Progress\n"
+        "- /claimmine — Claim Completed Mining\n"
+        "- /attack — Attack an Enemy (coming soon)\n"
+        "- /missions — View Daily Missions (coming soon)\n"
+        "- /shop — Open Normal Store (coming soon)\n"
+        "- /blackmarket — Open Elite Store (coming soon)\n"
+        "- /lore — Read the SkyHustle Backstory"
     )
     await update.message.reply_text(help_text)
 
-# -------------- Catch-all for unknown /commands --------------
+# -------------- /lore command --------------
+async def lore_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(LORE_TEXT)
+
+# -------------- Catch unknown commands --------------
 async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🤖 Unknown command. Type /help to see the list of available commands.")
+    await update.message.reply_text("🤖 Unknown command. Type /help to see available commands.")
 
 # -------------- Main Setup --------------
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
+    # Core Commands
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("lore", lore_command))
 
-    # Unknown commands
+    # Timer System Commands
+    app.add_handler(CommandHandler("mine", timer_system.start_mining))
+    app.add_handler(CommandHandler("minestatus", timer_system.mining_status))
+    app.add_handler(CommandHandler("claimmine", timer_system.claim_mining))
+
+    # Catch unknown /commands
     app.add_handler(CommandHandler(None, unknown_command))
 
     app.run_polling()
