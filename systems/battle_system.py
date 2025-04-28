@@ -1,9 +1,8 @@
-# battle_system.py
-
 import datetime
 from utils import google_sheets
 from systems import army_system
 from utils.army_combat import calculate_battle_outcome, calculate_battle_rewards
+from utils.ui_helpers import render_status_panel
 
 # Attack another player
 async def attack(update, context):
@@ -11,7 +10,10 @@ async def attack(update, context):
     args = context.args
 
     if len(args) != 1:
-        await update.message.reply_text("🛡️ Usage: /attack [player_id]\nExample: /attack 12345")
+        await update.message.reply_text(
+            "🛡️ Usage: /attack [player_id]\nExample: /attack 12345\n\n" +
+            render_status_panel(player_id)
+        )
         return
 
     target_id = args[0]
@@ -21,10 +23,16 @@ async def attack(update, context):
     target_army = google_sheets.load_player_army(target_id)
 
     if not player_army:
-        await update.message.reply_text("❌ Your army is empty. Train units with /train.")
+        await update.message.reply_text(
+            "❌ Your army is empty. Train units with /train.\n\n" +
+            render_status_panel(player_id)
+        )
         return
     if not target_army:
-        await update.message.reply_text(f"❌ Player {target_id} has no army. Unable to attack.")
+        await update.message.reply_text(
+            f"❌ Player {target_id} has no army. Unable to attack.\n\n" +
+            render_status_panel(player_id)
+        )
         return
 
     # Perform combat
@@ -39,12 +47,14 @@ async def attack(update, context):
         player_id, target_id, outcome, rewards, now_str, battle_log
     )
 
-    # Send detailed report
-    await update.message.reply_text(
+    # Send detailed report + status panel
+    msg = (
         f"⚔️ Battle vs {target_id} — {outcome}!\n\n"
         f"🎖️ Rewards: {rewards}\n\n"
-        f"📜 Battle Log:\n{battle_log}"
+        f"📜 Battle Log:\n{battle_log}\n\n"
+        + render_status_panel(player_id)
     )
+    await update.message.reply_text(msg)
 
 # View battle history
 async def battle_status(update, context):
@@ -52,15 +62,22 @@ async def battle_status(update, context):
     history = google_sheets.load_battle_history(player_id)
 
     if not history:
-        await update.message.reply_text("❌ You have no battle history.")
+        await update.message.reply_text(
+            "❌ You have no battle history.\n\n" +
+            render_status_panel(player_id)
+        )
         return
 
-    lines = []
-    for b in history:
-        lines.append(
-            f"• [{b['date']}] vs {b['target_id']} — {b['outcome']} | Rewards: {b['rewards']}"
-        )
-    await update.message.reply_text("🛡️ Battle History:\n\n" + "\n".join(lines))
+    lines = [
+        f"• [{b['date']}] vs {b['target_id']} — {b['outcome']} | Rewards: {b['rewards']}"
+        for b in history
+    ]
+    msg = (
+        "🛡️ Battle History:\n\n"
+        + "\n".join(lines)
+        + "\n\n" + render_status_panel(player_id)
+    )
+    await update.message.reply_text(msg)
 
 # Spy another player's army
 async def spy(update, context):
@@ -68,17 +85,24 @@ async def spy(update, context):
     args = context.args
 
     if len(args) != 1:
-        await update.message.reply_text("🛡️ Usage: /spy [player_id]\nExample: /spy 12345")
+        await update.message.reply_text(
+            "🛡️ Usage: /spy [player_id]\nExample: /spy 12345\n\n" +
+            render_status_panel(player_id)
+        )
         return
 
     target_id = args[0]
     target_army = google_sheets.load_player_army(target_id)
 
     if not target_army:
-        await update.message.reply_text(f"❌ Player {target_id} has no army to spy on.")
+        await update.message.reply_text(
+            f"❌ Player {target_id} has no army to spy on.\n\n" +
+            render_status_panel(player_id)
+        )
         return
 
-    report = [f"🕵️‍♂️ Spy Report — Player {target_id}:"]
+    report_lines = [f"🕵️‍♂️ Spy Report — Player {target_id}:"]
     for unit, qty in target_army.items():
-        report.append(f"- {unit.capitalize()}: {qty}")
-    await update.message.reply_text("\n".join(report))
+        report_lines.append(f"- {unit.capitalize()}: {qty}")
+    report_lines.append("\n" + render_status_panel(player_id))
+    await update.message.reply_text("\n".join(report_lines))
