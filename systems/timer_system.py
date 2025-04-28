@@ -1,6 +1,5 @@
-# timer_system.py
-
 import datetime
+from utils.ui_helpers import render_status_panel
 
 # In-memory mining database for players (expandable later to Google Sheets)
 player_mining = {}
@@ -51,19 +50,22 @@ async def start_mining(update, context):
         "end_time": end_time.strftime("%Y-%m-%d %H:%M:%S")
     }
 
-    await update.message.reply_text(
+    # Reply with mining started + status panel
+    msg = (
         f"⛏️ Mining Started!\n\n"
         f"Resource: {resource.capitalize()}\n"
         f"Amount: {amount}\n"
         f"Estimated Completion: {end_time.strftime('%Y-%m-%d %H:%M:%S')}"
     )
+    msg += "\n\n" + render_status_panel(player_id)
+    await update.message.reply_text(msg)
 
 # Check mining status
 async def mining_status(update, context):
     player_id = str(update.effective_user.id)
 
     if player_id not in player_mining or not player_mining[player_id]:
-        await update.message.reply_text("❌ No active mining operations.\nUse /mine to start mining!")
+        await update.message.reply_text("❌ No active mining operations.\nUse /mine to start mining!\n\n" + render_status_panel(player_id))
         return
 
     status_messages = []
@@ -81,13 +83,16 @@ async def mining_status(update, context):
 
         status_messages.append(status)
 
-    await update.message.reply_text("\n".join(status_messages))
+    base = "\n".join(status_messages)
+    msg = base + "\n\n" + render_status_panel(player_id)
+    await update.message.reply_text(msg)
+
 # Claim mined resources
 async def claim_mining(update, context):
     player_id = str(update.effective_user.id)
 
     if player_id not in player_mining or not player_mining[player_id]:
-        await update.message.reply_text("❌ You have no resources ready to claim.")
+        await update.message.reply_text("❌ You have no resources ready to claim.\n\n" + render_status_panel(player_id))
         return
 
     claimed_resources = []
@@ -102,7 +107,7 @@ async def claim_mining(update, context):
             to_remove.append(resource)
 
     if not claimed_resources:
-        await update.message.reply_text("⏳ Mining still in progress. Please wait until completion.")
+        await update.message.reply_text("⏳ Mining still in progress. Please wait until completion.\n\n" + render_status_panel(player_id))
         return
 
     # Remove claimed resources from mining list
@@ -113,10 +118,7 @@ async def claim_mining(update, context):
     if not player_mining[player_id]:
         del player_mining[player_id]
 
-    # Respond with claim summary
-    await update.message.reply_text(
-        "🎉 Mining Completed! You have claimed:\n\n" +
-        "\n".join(f"🔹 {res}" for res in claimed_resources)
-    )
-
- 
+    # Respond with claim summary + status panel
+    summary = "🎉 Mining Completed! You have claimed:\n\n" + "\n".join(f"🔹 {res}" for res in claimed_resources)
+    msg = summary + "\n\n" + render_status_panel(player_id)
+    await update.message.reply_text(msg)
