@@ -2,7 +2,7 @@
 
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
-from systems import timer_system, army_system  # Import both systems
+from systems import timer_system, army_system, battle_system  # Import battle system
 from utils import google_sheets  # Needed to initialize Google Sheets connection
 
 # -------------- BOT TOKEN (Replace with your real token) --------------
@@ -39,7 +39,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "- /mine [resource] [amount] — Start Mining\n"
         "- /minestatus — View Mining Progress\n"
         "- /claimmine — Claim Completed Mining\n"
-        "- /attack — Attack an Enemy (coming soon)\n"
+        "- /attack — Attack an Enemy\n"
         "- /missions — View Daily Missions (coming soon)\n"
         "- /shop — Open Normal Store (coming soon)\n"
         "- /blackmarket — Open Elite Store (coming soon)\n"
@@ -74,6 +74,11 @@ def main():
     app.add_handler(CommandHandler("army", army_system.view_army))
     app.add_handler(CommandHandler("trainstatus", army_system.training_status))  # New Command
     app.add_handler(CommandHandler("claimtrain", army_system.claim_training))    # New Command
+
+    # Battle System Commands
+    app.add_handler(CommandHandler("attack", battle_system.attack))  # New Command
+    app.add_handler(CommandHandler("battle_status", battle_system.battle_status))  # New Command
+    app.add_handler(CommandHandler("spy", battle_system.spy))  # New Command
 
     # Catch unknown /commands
     app.add_handler(CommandHandler(None, unknown_command))
