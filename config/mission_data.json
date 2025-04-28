@@ -1,0 +1,113 @@
+{
+  "daily_templates": [
+    {
+      "id": "train_50_soldiers",
+      "description": "Train 50 Soldiers",
+      "type": "train",
+      "amount": 50,
+      "rewards": {
+        "xp": 200,
+        "crystals": 100,
+        "speedup": "small"
+      }
+    },
+    {
+      "id": "mine_5000_metal",
+      "description": "Mine 5000 Metal",
+      "type": "mine",
+      "resource": "metal",
+      "amount": 5000,
+      "rewards": {
+        "xp": 150,
+        "crystals": 50
+      }
+    },
+    {
+      "id": "attack_1_player",
+      "description": "Attack 1 enemy player",
+      "type": "attack",
+      "amount": 1,
+      "rewards": {
+        "xp": 250,
+        "crystals": 75,
+        "speedup": "medium"
+      }
+    },
+    {
+      "id": "upgrade_any_building",
+      "description": "Upgrade any building once",
+      "type": "upgrade",
+      "amount": 1,
+      "rewards": {
+        "xp": 200,
+        "crystals": 100
+      }
+    }
+  ],
+  "story_missions": [
+    {
+      "level_required": 1,
+      "id": "cc_level_2",
+      "description": "Upgrade Command Center to Level 2",
+      "requirement": {
+        "building": "command_center",
+        "level": 2
+      },
+      "rewards": {
+        "xp": 500,
+        "crystals": 200
+      }
+    },
+    {
+      "level_required": 3,
+      "id": "train_100_soldiers",
+      "description": "Train 100 Soldiers",
+      "requirement": {
+        "train": {
+          "unit": "soldier",
+          "amount": 100
+        }
+      },
+      "rewards": {
+        "xp": 1000,
+        "speedup": "medium"
+      }
+    },
+    {
+      "level_required": 5,
+      "id": "win_3_battles",
+      "description": "Win 3 Battles",
+      "requirement": {
+        "battle_wins": 3
+      },
+      "rewards": {
+        "xp": 1500,
+        "crystals": 500
+      }
+    }
+  ],
+  "epic_missions": [
+    {
+      "id": "win_1000_battles",
+      "description": "Win 1000 Battles",
+      "requirement": {
+        "battle_wins": 1000
+      },
+      "rewards": {
+        "badge": "Legendary Commander",
+        "crystals": 10000
+      }
+    },
+    {
+      "id": "defend_100_attacks",
+      "description": "Defend against 100 attacks",
+      "requirement": {
+        "defenses": 100
+      },
+      "rewards": {
+        "badge": "Master Defender",
+        "xp": 5000
+      }
+    }
+  ]
+}
