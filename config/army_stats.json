@@ -1,0 +1,20 @@
+{
+    "soldier": {
+        "attack": 10,
+        "defense": 5,
+        "hp": 50,
+        "training_time": 1
+    },
+    "tank": {
+        "attack": 40,
+        "defense": 30,
+        "hp": 200,
+        "training_time": 5
+    },
+    "vehicle": {
+        "attack": 25,
+        "defense": 15,
+        "hp": 100,
+        "training_time": 3
+    }
+}
