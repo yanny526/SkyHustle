@@ -1,29 +1,28 @@
+import json
 import datetime
+from utils import google_sheets
 from utils.ui_helpers import render_status_panel
 
-# In-memory mining database for players (expandable later to Google Sheets)
-player_mining = {}
+# Load army unit stats from JSON config
+with open("config/army_stats.json", "r") as file:
+    UNIT_STATS = json.load(file)
 
-# Mining speeds (resources per minute)
-MINING_SPEEDS = {
-    "metal": 100,    # 100 Metal per minute
-    "fuel": 60,      # 60 Fuel per minute
-    "crystal": 30    # 30 Crystals per minute
-}
+# Max army size base settings (expand later based on Command Center level)
+BASE_MAX_ARMY_SIZE = 1000
 
-# Start mining operation
-async def start_mining(update, context):
+# Train units with a timer
+async def train_units(update, context):
     player_id = str(update.effective_user.id)
     args = context.args
 
     if len(args) != 2:
         await update.message.reply_text(
-            "⛏️ Usage: /mine [resource] [amount]\nExample: /mine metal 1000\n\n"
+            "🛡️ Usage: /train [unit] [amount]\nExample: /train soldier 50\n\n"
             + render_status_panel(player_id)
         )
         return
 
-    resource = args[0].lower()
+    unit_name = args[0].lower()
     try:
         amount = int(args[1])
     except ValueError:
@@ -32,102 +31,145 @@ async def start_mining(update, context):
         )
         return
 
-    if resource not in MINING_SPEEDS:
+    if unit_name not in UNIT_STATS:
         await update.message.reply_text(
-            "❌ Invalid resource. Available: metal, fuel, crystal.\n\n"
+            f"❌ Invalid unit. Available units: {', '.join(UNIT_STATS.keys())}\n\n"
             + render_status_panel(player_id)
         )
         return
 
-    if player_id in player_mining and player_mining[player_id].get(resource):
+    # Load current training queue and army
+    training_queue = google_sheets.load_training_queue(player_id)
+    total_in_training = sum(item['amount'] for item in training_queue.values())
+    current_army = google_sheets.load_player_army(player_id)
+    current_total = sum(current_army.values())
+
+    if current_total + total_in_training + amount > BASE_MAX_ARMY_SIZE:
         await update.message.reply_text(
-            f"⚡ You are already mining {resource.capitalize()}! Finish or claim it first.\n\n"
+            f"⚡ Not enough army capacity!\n"
+            f"Current Army: {current_total}/{BASE_MAX_ARMY_SIZE}\n"
+            f"In Training: {total_in_training}\n"
+            f"Trying to add: {amount}\n"
+            f"Space Left: {BASE_MAX_ARMY_SIZE - (current_total + total_in_training)}\n\n"
             + render_status_panel(player_id)
         )
         return
 
-    # Calculate mining time
-    minutes_needed = amount / MINING_SPEEDS[resource]
-    mining_time = datetime.timedelta(minutes=minutes_needed)
-    end_time = datetime.datetime.now() + mining_time
+    # Calculate training time
+    per_unit_minutes = UNIT_STATS[unit_name]["training_time"]
+    total_training_time = datetime.timedelta(minutes=per_unit_minutes * amount)
+    end_time = datetime.datetime.now() + total_training_time
 
-    # Save mining operation
-    player_mining.setdefault(player_id, {})
-    player_mining[player_id][resource] = {
-        "amount": amount,
-        "start_time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "end_time": end_time.strftime("%Y-%m-%d %H:%M:%S")
-    }
+    # Save training task to Google Sheets
+    google_sheets.save_training_task(player_id, unit_name, amount, end_time)
 
     msg = (
-        f"⛏️ Mining Started!\n\n"
-        f"Resource: {resource.capitalize()}\n"
-        f"Amount: {amount}\n"
-        f"Estimated Completion: {end_time.strftime('%Y-%m-%d %H:%M:%S')}"
+        f"🛡️ Training Started!\n\n"
+        f"Units: {amount} {unit_name.capitalize()}\n"
+        f"Ready In: {int(per_unit_minutes * amount)} minutes\n"
+        f"Completion Time: {end_time.strftime('%Y-%m-%d %H:%M:%S')}"
     )
     await update.message.reply_text(msg + "\n\n" + render_status_panel(player_id))
 
-# Check mining status
-async def mining_status(update, context):
+# View current army
+async def view_army(update, context):
     player_id = str(update.effective_user.id)
+    player_army = google_sheets.load_player_army(player_id)
 
-    if player_id not in player_mining or not player_mining[player_id]:
+    if not player_army:
         await update.message.reply_text(
-            "❌ No active mining operations.\nUse /mine to start mining!\n\n"
+            "🛡️ Your army is empty.\nUse /train to build your forces.\n\n"
             + render_status_panel(player_id)
         )
         return
 
-    status_messages = []
+    army_list = []
+    total_power = 0
+    total_defense = 0
+    total_hp = 0
+
+    for unit, count in player_army.items():
+        stats = UNIT_STATS.get(unit, {})
+        attack = stats.get("attack", 0)
+        defense = stats.get("defense", 0)
+        hp = stats.get("hp", 0)
+        unit_power = attack * count
+        unit_def = defense * count
+        unit_hp = hp * count
+        total_power += unit_power
+        total_defense += unit_def
+        total_hp += unit_hp
+        army_list.append(
+            f"🔹 {unit.capitalize()}: {count} units (Atk:{unit_power} Def:{unit_def} HP:{unit_hp})"
+        )
+
+    summary = (
+        "🛡️ Your Current Army:\n\n" + "\n".join(army_list) +
+        f"\n\n⚡ Total Attack Power: {total_power} | Total Defense: {total_defense} | Total HP: {total_hp}"
+    )
+    await update.message.reply_text(summary + "\n\n" + render_status_panel(player_id))
+
+# View training status
+async def training_status(update, context):
+    player_id = str(update.effective_user.id)
+    training_queue = google_sheets.load_training_queue(player_id)
+
+    if not training_queue:
+        await update.message.reply_text(
+            "🛡️ No units currently in training.\nUse /train to start training!\n\n"
+            + render_status_panel(player_id)
+        )
+        return
+
     now = datetime.datetime.now()
+    status_messages = []
 
-    for resource, details in player_mining[player_id].items():
-        end_time = datetime.datetime.strptime(details["end_time"], "%Y-%m-%d %H:%M:%S")
+    for task_id, task in training_queue.items():
+        end_time = datetime.datetime.strptime(task['end_time'], "%Y-%m-%d %H:%M:%S")
         remaining = end_time - now
-
         if remaining.total_seconds() <= 0:
-            status_messages.append(f"✅ {resource.capitalize()} mining completed! Ready to claim.")
+            status_messages.append(f"✅ {task['amount']} {task['unit_name'].capitalize()} ready to claim!")
         else:
             minutes, seconds = divmod(int(remaining.total_seconds()), 60)
             status_messages.append(
-                f"⏳ {resource.capitalize()} mining in progress: {minutes}m {seconds}s remaining."
+                f"⏳ {task['amount']} {task['unit_name'].capitalize()} training: {minutes}m {seconds}s remaining."
             )
 
-    msg = "\n".join(status_messages)
+    msg = "🛡️ Training Status:\n\n" + "\n".join(status_messages)
     await update.message.reply_text(msg + "\n\n" + render_status_panel(player_id))
 
-# Claim mined resources
-async def claim_mining(update, context):
+# Claim completed training
+async def claim_training(update, context):
     player_id = str(update.effective_user.id)
+    training_queue = google_sheets.load_training_queue(player_id)
 
-    if player_id not in player_mining or not player_mining[player_id]:
+    if not training_queue:
         await update.message.reply_text(
-            "❌ You have no resources ready to claim.\n\n"
-            + render_status_panel(player_id)
+            "🛡️ No completed training to claim!\n\n" + render_status_panel(player_id)
         )
         return
 
-    claimed_resources = []
     now = datetime.datetime.now()
-    to_remove = []
+    claimed_units = {}
 
-    for resource, details in player_mining[player_id].items():
-        end_time = datetime.datetime.strptime(details["end_time"], "%Y-%m-%d %H:%M:%S")
+    for task_id, task in list(training_queue.items()):
+        end_time = datetime.datetime.strptime(task['end_time'], "%Y-%m-%d %H:%M:%S")
         if now >= end_time:
-            claimed_resources.append(f"{details['amount']} {resource.capitalize()}")
-            to_remove.append(resource)
+            claimed_units[task['unit_name']] = claimed_units.get(task['unit_name'], 0) + task['amount']
+            google_sheets.delete_training_task(task_id)
 
-    if not claimed_resources:
+    if not claimed_units:
         await update.message.reply_text(
-            "⏳ Mining still in progress. Please wait until completion.\n\n"
+            "⏳ Training still in progress. Please wait until completion.\n\n"
             + render_status_panel(player_id)
         )
         return
 
-    for resource in to_remove:
-        del player_mining[player_id][resource]
-    if not player_mining[player_id]:
-        del player_mining[player_id]
+    current_army = google_sheets.load_player_army(player_id)
+    for unit_name, amount in claimed_units.items():
+        current_army[unit_name] = current_army.get(unit_name, 0) + amount
+    google_sheets.save_player_army(player_id, current_army)
 
-    summary = "🎉 Mining Completed! You have claimed:\n\n" + "\n".join(f"🔹 {res}" for res in claimed_resources)
-    await update.message.reply_text(summary + "\n\n" + render_status_panel(player_id))
+    claimed_list = [f"🔹 {amount} {unit_name.capitalize()}" for unit_name, amount in claimed_units.items()]
+    msg = "🎉 Training Complete! You have claimed:\n\n" + "\n".join(claimed_list)
+    await update.message.reply_text(msg + "\n\n" + render_status_panel(player_id))
