@@ -5,6 +5,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 from systems import timer_system
 from utils.ui_helpers import render_status_panel
+from systems import timer_system, army_system
 
 # === Tutorial State Stores ===
 # Tracks the current tutorial step for each player
@@ -229,6 +230,30 @@ async def tutorial_train(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🏭 Amazing! Your Soldiers are training.\n"
         "🔍 Step 8: Check training progress with `/trainstatus`.\n\n"
+        f"{panel}"
+    )
+# === Part 8: Tutorial Training Status (/trainstatus) ===
+async def tutorial_trainstatus(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /trainstatus — Tutorial-guided training status check in step 8.
+    """
+    player_id = str(update.effective_user.id)
+    step = tutorial_progress.get(player_id, 0)
+
+    # If not in tutorial step 8, delegate to normal handler
+    if step != 8:
+        return await army_system.training_status(update, context)
+
+    # Show the normal training status
+    await army_system.training_status(update, context)
+
+    # Advance tutorial to step 9
+    tutorial_progress[player_id] = 9
+
+    panel = render_status_panel(player_id)
+    await update.message.reply_text(
+        "🔍 Nice! You’ve checked your training progress.\n"
+        "🎉 Step 9: Claim your trained Soldiers with `/claimtrain`.\n\n"
         f"{panel}"
     )
 
