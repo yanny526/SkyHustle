@@ -1,10 +1,9 @@
-# Battle system
 # battle_system.py
 
-import random
+import datetime
 from utils import google_sheets
 from systems import army_system
-from utils.army_combat import calculate_battle_outcome
+from utils.army_combat import calculate_battle_outcome, calculate_battle_rewards
 
 # Attack another player
 async def attack(update, context):
@@ -17,47 +16,53 @@ async def attack(update, context):
 
     target_id = args[0]
 
-    # Load player's and target's armies
+    # Load both armies
     player_army = google_sheets.load_player_army(player_id)
     target_army = google_sheets.load_player_army(target_id)
 
     if not player_army:
-        await update.message.reply_text("❌ Your army is empty.\nTrain units using /train.")
+        await update.message.reply_text("❌ Your army is empty. Train units with /train.")
         return
-
     if not target_army:
         await update.message.reply_text(f"❌ Player {target_id} has no army. Unable to attack.")
         return
 
-    # Calculate battle outcome
-    outcome = calculate_battle_outcome(player_army, target_army)
+    # Perform combat
+    outcome, battle_log = calculate_battle_outcome(player_army, target_army)
 
-    # Save battle result to Google Sheets (e.g., victory, defeat)
-    google_sheets.save_battle_result(player_id, target_id, outcome)
+    # Compute rewards/penalties
+    rewards = calculate_battle_rewards(outcome, player_army, target_army)
 
-    # Respond with battle result
-    await update.message.reply_text(f"⚔️ Battle Outcome: {outcome}")
-    
-# View battle status (past battles or ongoing)
+    # Record battle in sheet
+    now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    google_sheets.save_battle_result(
+        player_id, target_id, outcome, rewards, now_str, battle_log
+    )
+
+    # Send detailed report
+    await update.message.reply_text(
+        f"⚔️ Battle vs {target_id} — {outcome}!\n\n"
+        f"🎖️ Rewards: {rewards}\n\n"
+        f"📜 Battle Log:\n{battle_log}"
+    )
+
+# View battle history
 async def battle_status(update, context):
     player_id = str(update.effective_user.id)
+    history = google_sheets.load_battle_history(player_id)
 
-    # Load player's battle history
-    battle_history = google_sheets.load_battle_history(player_id)
-
-    if not battle_history:
-        await update.message.reply_text("❌ No recent battles.")
+    if not history:
+        await update.message.reply_text("❌ You have no battle history.")
         return
 
-    history_messages = []
-    for battle in battle_history:
-        history_messages.append(
-            f"🔹 Target: {battle['target_id']} - Outcome: {battle['outcome']} - Date: {battle['date']}"
+    lines = []
+    for b in history:
+        lines.append(
+            f"• [{b['date']}] vs {b['target_id']} — {b['outcome']} | Rewards: {b['rewards']}"
         )
+    await update.message.reply_text("🛡️ Battle History:\n\n" + "\n".join(lines))
 
-    await update.message.reply_text("🛡️ Your Battle History:\n\n" + "\n".join(history_messages))
-
-# Spy on another player's army
+# Spy another player's army
 async def spy(update, context):
     player_id = str(update.effective_user.id)
     args = context.args
@@ -67,16 +72,13 @@ async def spy(update, context):
         return
 
     target_id = args[0]
-
-    # Load the target's army details
     target_army = google_sheets.load_player_army(target_id)
 
     if not target_army:
         await update.message.reply_text(f"❌ Player {target_id} has no army to spy on.")
         return
 
-    spy_report = f"🕵️‍♂️ Spy Report on Player {target_id}:\n"
-    for unit, count in target_army.items():
-        spy_report += f"🔹 {unit.capitalize()}: {count} units\n"
-
-    await update.message.reply_text(spy_report)
+    report = [f"🕵️‍♂️ Spy Report — Player {target_id}:"]
+    for unit, qty in target_army.items():
+        report.append(f"- {unit.capitalize()}: {qty}")
+    await update.message.reply_text("\n".join(report))
