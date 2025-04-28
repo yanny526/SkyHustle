@@ -5,6 +5,7 @@ import json
 import base64
 from datetime import datetime
 import gspread
+from gspread.exceptions import WorksheetNotFound
 from oauth2client.service_account import ServiceAccountCredentials
 
 # === Environment-driven Google Sheets Setup ===
@@ -29,27 +30,48 @@ creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_info, scope)
 client = gspread.authorize(creds)
 sheet = client.open_by_key(SHEET_ID)
 
-# === Worksheet Names ===
+# === Worksheet Names & Headers ===
 WORKSHEETS = {
-    'army':           'army',
-    'training':       'training',
-    'battle_history': 'battle_history',
-    'missions':       'player_missions',
-    'resources':      'resources',
-    'buildings':      'buildings',
-    'purchases':      'purchases',
-    'building_queue': 'building_queue'
+    'army':            'army',
+    'training':        'training',
+    'battle_history':  'battle_history',
+    'missions':        'player_missions',
+    'resources':       'resources',
+    'buildings':       'buildings',
+    'purchases':       'purchases',
+    'building_queue':  'building_queue'
 }
 
+HEADERS = {
+    'army':            ['player_id','unit_name','quantity'],
+    'training':        ['player_id','unit_name','amount','end_time','start_time'],
+    'battle_history':  ['player_id','target_id','outcome','rewards','date','battle_log'],
+    'missions':        ['player_id','mission_id','type','date','progress','claimed'],
+    'resources':       ['player_id','metal','fuel','crystal','xp','level'],
+    'buildings':       ['player_id','building_name','level'],
+    'purchases':       ['player_id','shop_type','item_id','timestamp'],
+    'building_queue':  ['player_id','building_name','start_time','end_time']
+}
+
+def get_ws(key):
+    """Get or create worksheet with correct headers."""
+    title = WORKSHEETS[key]
+    try:
+        ws = sheet.worksheet(title)
+    except WorksheetNotFound:
+        ws = sheet.add_worksheet(title=title, rows="100", cols=str(len(HEADERS[key])))
+        ws.append_row(HEADERS[key])
+    return ws
+
 # === Worksheet Handles ===
-army_ws           = sheet.worksheet(WORKSHEETS['army'])
-training_ws       = sheet.worksheet(WORKSHEETS['training'])
-battle_ws         = sheet.worksheet(WORKSHEETS['battle_history'])
-missions_ws       = sheet.worksheet(WORKSHEETS['missions'])
-resources_ws      = sheet.worksheet(WORKSHEETS['resources'])
-buildings_ws      = sheet.worksheet(WORKSHEETS['buildings'])
-purchases_ws      = sheet.worksheet(WORKSHEETS['purchases'])
-building_queue_ws = sheet.worksheet(WORKSHEETS['building_queue'])
+army_ws           = get_ws('army')
+training_ws       = get_ws('training')
+battle_ws         = get_ws('battle_history')
+missions_ws       = get_ws('missions')
+resources_ws      = get_ws('resources')
+buildings_ws      = get_ws('buildings')
+purchases_ws      = get_ws('purchases')
+building_queue_ws = get_ws('building_queue')
 
 # === Army Helpers ===
 
@@ -89,7 +111,7 @@ def load_resources(player_id):
                     'xp':      int(row.get('xp', 0)),
                     'level':   int(row.get('level', 1))
                 }
-        default = {'metal':0, 'fuel':0, 'crystal':0, 'xp':0, 'level':1}
+        default = {'metal':0,'fuel':0,'crystal':0,'xp':0,'level':1}
         resources_ws.append_row([
             player_id,
             default['metal'], default['fuel'], default['crystal'],
@@ -98,7 +120,7 @@ def load_resources(player_id):
         return default
     except Exception as e:
         print("load_resources error:", e)
-        return {'metal':0, 'fuel':0, 'crystal':0, 'xp':0, 'level':1}
+        return {'metal':0,'fuel':0,'crystal':0,'xp':0,'level':1}
 
 def save_resources(player_id, res):
     try:
@@ -119,7 +141,7 @@ def save_resources(player_id, res):
     except Exception as e:
         print("save_resources error:", e)
 
-# === Purchases & Black Market Helpers ===
+# === Purchase & Black Market Helpers ===
 
 def save_purchase(player_id, shop_type, item_id, timestamp=None):
     try:
@@ -240,7 +262,7 @@ def get_player_missions(player_id, mission_type, date=None):
                     'progress':   int(row['progress']),
                     'claimed':    row['claimed'],
                     'rewards':    row['rewards'],
-                    'description':row.get('description', '')
+                    'description':row.get('description','')
                 })
         return out
     except Exception as e:
