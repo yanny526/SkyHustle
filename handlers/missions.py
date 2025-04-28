@@ -1,58 +1,43 @@
+# handlers/missions.py
+
 from telegram import Update
 from telegram.ext import ContextTypes
-import json
 import utils.db as db
 
-# Load missions from JSON
-def load_missions():
-    with open("data/missions.json", "r") as f:
-        data = json.load(f)
-    return data["missions"]
-
 async def missions(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show all available missions."""
-    all_missions = load_missions()
+    """Show available missions."""
+    telegram_id = update.effective_user.id
+    row = db.find_player(telegram_id)
 
-    mission_text = "🎯 **Today's Missions** 🎯\n\n"
-    for mission in all_missions:
-        mission_text += (
-            f"🆔 {mission['id']}\n"
-            f"📜 {mission['description']}\n"
-            f"🏆 Rewards: {mission['reward_gold']} Gold, {mission['reward_stone']} Stone, {mission['reward_iron']} Iron\n\n"
-        )
+    if not row:
+        return await update.message.reply_text("⚠️ You don't have a SkyHustle profile yet! Use /start first!")
 
-    await update.message.reply_text(mission_text)
+    mission_sheet = db.missions
+    missions_data = mission_sheet.get_all_values()
+
+    if not missions_data or len(missions_data) <= 1:
+        return await update.message.reply_text("🎯 No missions available at the moment!")
+
+    missions_text = "🎯 **Available Missions** 🎯\n\n"
+
+    for mission in missions_data[1:]:  # Skip header
+        try:
+            if len(mission) >= 3:
+                mission_name = mission[0]
+                objective = mission[1]
+                reward = mission[2]
+                missions_text += (
+                    f"• 🛡️ *{mission_name}*\n"
+                    f"   ➔ 🎯 Objective: {objective}\n"
+                    f"   ➔ 💰 Reward: {reward} Gold\n\n"
+                )
+        except Exception as e:
+            print(f"Error parsing mission: {e}")
+
+    missions_text += "✨ Complete missions daily to build your empire faster! ✨"
+
+    await update.message.reply_text(missions_text, parse_mode="Markdown")
 
 async def claim(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Claim a mission reward by mission ID."""
-    telegram_id = update.effective_user.id
-
-    if len(context.args) != 1:
-        return await update.message.reply_text("🎯 Usage: /claim <mission_id>")
-
-    mission_id = context.args[0].upper()
-    all_missions = load_missions()
-
-    # Find the mission
-    selected_mission = None
-    for mission in all_missions:
-        if mission["id"].upper() == mission_id:
-            selected_mission = mission
-            break
-
-    if not selected_mission:
-        return await update.message.reply_text("🎯 Mission ID not found!")
-
-    # 🔥 For now: assume player always completed the mission
-    db.update_player_resources(
-        telegram_id,
-        gold_delta=selected_mission["reward_gold"],
-        stone_delta=selected_mission["reward_stone"],
-        iron_delta=selected_mission["reward_iron"]
-    )
-
-    await update.message.reply_text(
-        f"🎯 Mission {mission_id} completed!\n"
-        f"🏆 Rewards collected: +{selected_mission['reward_gold']} Gold, "
-        f"+{selected_mission['reward_stone']} Stone, +{selected_mission['reward_iron']} Iron!"
-    )
+    """Placeholder for claiming missions (coming soon)."""
+    await update.message.reply_text("🎁 Mission claiming feature coming soon!")
