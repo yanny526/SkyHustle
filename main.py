@@ -1,3 +1,5 @@
+# main.py
+
 from telegram.ext import Application, CommandHandler
 import handlers.start as start
 import handlers.player as player
@@ -8,8 +10,8 @@ import handlers.combat as combat
 import handlers.research as research
 import handlers.missions as missions
 import handlers.ranking as ranking
-import handlers.admin as admin  # 🔥 NEW import for Admin Tools
-import handlers.economy as economy  # 🔥 New import for store/blackmarket
+import handlers.admin as admin
+import handlers.economy as economy
 
 import os
 
@@ -17,9 +19,10 @@ TOKEN = os.getenv("BOT_TOKEN")
 
 app = Application.builder().token(TOKEN).build()
 
-# Existing Handlers
+# Player & Basic Handlers
 app.add_handler(CommandHandler("start", start.start))
 app.add_handler(CommandHandler("status", player.status))
+app.add_handler(CommandHandler("setname", player.setname))  # 🔥 Added for /setname
 app.add_handler(CommandHandler("daily", resource.daily))
 app.add_handler(CommandHandler("mine", resource.mine))
 app.add_handler(CommandHandler("collect", resource.collect))
@@ -50,12 +53,12 @@ app.add_handler(CommandHandler("claimmission", missions.claim))
 # Ranking Handler
 app.add_handler(CommandHandler("rank", ranking.rank))
 
-# 🔥 Admin Tools Handlers
+# Admin Tools
 app.add_handler(CommandHandler("givegold", admin.givegold))
 app.add_handler(CommandHandler("wipeplayer", admin.wipeplayer))
 app.add_handler(CommandHandler("shieldforce", admin.shieldforce))
 
-# Economy Handlers
+# Economy Handlers (Store & Black Market)
 app.add_handler(CommandHandler("store", economy.store))
 app.add_handler(CommandHandler("blackmarket", economy.blackmarket))
 app.add_handler(CommandHandler("buy", economy.buy))
