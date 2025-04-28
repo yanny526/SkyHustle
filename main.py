@@ -2,8 +2,8 @@
 
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
-from systems import timer_system, army_system, battle_system  # Import battle system
-from utils import google_sheets  # Needed to initialize Google Sheets connection
+from systems import timer_system, army_system, battle_system
+from utils import google_sheets
 
 # -------------- BOT TOKEN (Replace with your real token) --------------
 BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN_HERE"
@@ -20,7 +20,7 @@ LORE_TEXT = (
     "The skies belong to the strong. Welcome to SKYHUSTLE."
 )
 
-# -------------- /start command (Short cinematic intro) --------------
+# -------------- /start command --------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🛰️ Welcome Commander!\n\n"
@@ -36,10 +36,14 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "- /status — View your Empire Status (coming soon)\n"
         "- /army — View Your Army\n"
         "- /train [unit] [amount] — Train New Units\n"
+        "- /trainstatus — Check Training Progress\n"
+        "- /claimtrain — Claim Completed Training\n"
         "- /mine [resource] [amount] — Start Mining\n"
         "- /minestatus — View Mining Progress\n"
         "- /claimmine — Claim Completed Mining\n"
-        "- /attack — Attack an Enemy\n"
+        "- /attack [player_id] — Launch an Attack\n"
+        "- /battle_status — View Battle History\n"
+        "- /spy [player_id] — Spy on an Enemy\n"
         "- /missions — View Daily Missions (coming soon)\n"
         "- /shop — Open Normal Store (coming soon)\n"
         "- /blackmarket — Open Elite Store (coming soon)\n"
@@ -59,28 +63,28 @@ async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    # Core Commands
+    # Core
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("lore", lore_command))
 
-    # Timer System Commands
+    # Timer System
     app.add_handler(CommandHandler("mine", timer_system.start_mining))
     app.add_handler(CommandHandler("minestatus", timer_system.mining_status))
     app.add_handler(CommandHandler("claimmine", timer_system.claim_mining))
 
-    # Army System Commands
+    # Army System
     app.add_handler(CommandHandler("train", army_system.train_units))
     app.add_handler(CommandHandler("army", army_system.view_army))
-    app.add_handler(CommandHandler("trainstatus", army_system.training_status))  # New Command
-    app.add_handler(CommandHandler("claimtrain", army_system.claim_training))    # New Command
+    app.add_handler(CommandHandler("trainstatus", army_system.training_status))
+    app.add_handler(CommandHandler("claimtrain", army_system.claim_training))
 
-    # Battle System Commands
-    app.add_handler(CommandHandler("attack", battle_system.attack))  # New Command
-    app.add_handler(CommandHandler("battle_status", battle_system.battle_status))  # New Command
-    app.add_handler(CommandHandler("spy", battle_system.spy))  # New Command
+    # Battle System
+    app.add_handler(CommandHandler("attack", battle_system.attack))
+    app.add_handler(CommandHandler("battle_status", battle_system.battle_status))
+    app.add_handler(CommandHandler("spy", battle_system.spy))
 
-    # Catch unknown /commands
+    # Fallback
     app.add_handler(CommandHandler(None, unknown_command))
 
     app.run_polling()
