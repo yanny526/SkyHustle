@@ -27,6 +27,7 @@ buildings = sheet.worksheet("Buildings")
 research = sheet.worksheet("Research")
 missions = sheet.worksheet("Missions")
 inventory = sheet.worksheet("Inventory")
+mission_progress = sheet.worksheet("MissionProgress")
 
 # ---------------------- PLAYER SYSTEM ----------------------
 
