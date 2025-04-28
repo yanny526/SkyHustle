@@ -79,6 +79,11 @@ def main():
     app.add_handler(CommandHandler("trainstatus", army_system.training_status))
     app.add_handler(CommandHandler("claimtrain", army_system.claim_training))
 
+    app.add_handler(CommandHandler("missions", mission_system.missions))
+    app.add_handler(CommandHandler("storymissions", mission_system.storymissions))
+    app.add_handler(CommandHandler("epicmissions", mission_system.epicmissions))
+    app.add_handler(CommandHandler("claimmission", mission_system.claimmission))
+  
     # Battle System
     app.add_handler(CommandHandler("attack", battle_system.attack))
     app.add_handler(CommandHandler("battle_status", battle_system.battle_status))
