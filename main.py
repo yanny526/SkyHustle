@@ -2,7 +2,13 @@
 
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
-from systems import timer_system, army_system, battle_system
+from systems import (
+    timer_system,
+    army_system,
+    battle_system,
+    mission_system,
+    shop_system
+)
 from utils import google_sheets
 
 # -------------- BOT TOKEN (Replace with your real token) --------------
@@ -44,9 +50,15 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "- /attack [player_id] — Launch an Attack\n"
         "- /battle_status — View Battle History\n"
         "- /spy [player_id] — Spy on an Enemy\n"
-        "- /missions — View Daily Missions (coming soon)\n"
-        "- /shop — Open Normal Store (coming soon)\n"
-        "- /blackmarket — Open Elite Store (coming soon)\n"
+        "- /missions — View Daily Missions\n"
+        "- /storymissions — View Story Missions\n"
+        "- /epicmissions — View Epic Missions\n"
+        "- /claimmission — Claim Mission Rewards\n"
+        "- /shop — Open Normal Shop\n"
+        "- /buy [item_id] — Purchase from Normal Shop\n"
+        "- /unlockblackmarket — Unlock Black Market (R200)\n"
+        "- /blackmarket — Browse Black Market\n"
+        "- /bmbuy [item_id] — Purchase from Black Market\n"
         "- /lore — Read the SkyHustle Backstory"
     )
     await update.message.reply_text(help_text)
@@ -79,15 +91,23 @@ def main():
     app.add_handler(CommandHandler("trainstatus", army_system.training_status))
     app.add_handler(CommandHandler("claimtrain", army_system.claim_training))
 
+    # Mission System
     app.add_handler(CommandHandler("missions", mission_system.missions))
     app.add_handler(CommandHandler("storymissions", mission_system.storymissions))
     app.add_handler(CommandHandler("epicmissions", mission_system.epicmissions))
     app.add_handler(CommandHandler("claimmission", mission_system.claimmission))
-  
+
     # Battle System
     app.add_handler(CommandHandler("attack", battle_system.attack))
     app.add_handler(CommandHandler("battle_status", battle_system.battle_status))
     app.add_handler(CommandHandler("spy", battle_system.spy))
+
+    # Shop System
+    app.add_handler(CommandHandler("shop", shop_system.shop))
+    app.add_handler(CommandHandler("buy", shop_system.buy))
+    app.add_handler(CommandHandler("unlockblackmarket", shop_system.unlock_blackmarket))
+    app.add_handler(CommandHandler("blackmarket", shop_system.blackmarket))
+    app.add_handler(CommandHandler("bmbuy", shop_system.bmbuy))
 
     # Fallback
     app.add_handler(CommandHandler(None, unknown_command))
