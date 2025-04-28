@@ -1,5 +1,6 @@
 # main.py
 
+import os
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
@@ -17,8 +18,10 @@ from systems import (
 )
 from utils import google_sheets
 
-# -------------- BOT TOKEN (Replace with your real token) --------------
-BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN_HERE"
+# -------------- BOT TOKEN (from env var) --------------
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
+if not BOT_TOKEN:
+    raise RuntimeError("Missing BOT_TOKEN environment variable")
 
 # -------------- Backstory Text --------------
 LORE_TEXT = (
