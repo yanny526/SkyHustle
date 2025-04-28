@@ -10,14 +10,14 @@ with open("config/army_stats.json", "r") as file:
 # Max army size base settings (expand later based on Command Center level)
 BASE_MAX_ARMY_SIZE = 1000
 
-# Train units with a timer
 async def train_units(update, context):
     player_id = str(update.effective_user.id)
     args = context.args
 
     if len(args) != 2:
         await update.message.reply_text(
-            "🛡️ Usage: /train [unit] [amount]\nExample: /train soldier 50\n\n"
+            "🛡️ Usage: /train [unit] [amount]\n"
+            "Example: /train soldier 50\n\n"
             + render_status_panel(player_id)
         )
         return
@@ -27,13 +27,14 @@ async def train_units(update, context):
         amount = int(args[1])
     except ValueError:
         await update.message.reply_text(
-            "⚡ Amount must be a number.\n\n" + render_status_panel(player_id)
+            "⚡ Amount must be a number.\n\n"
+            + render_status_panel(player_id)
         )
         return
 
     if unit_name not in UNIT_STATS:
         await update.message.reply_text(
-            f"❌ Invalid unit. Available units: {', '.join(UNIT_STATS.keys())}\n\n"
+            f"❌ Invalid unit. Available: {', '.join(UNIT_STATS.keys())}\n\n"
             + render_status_panel(player_id)
         )
         return
@@ -46,130 +47,110 @@ async def train_units(update, context):
 
     if current_total + total_in_training + amount > BASE_MAX_ARMY_SIZE:
         await update.message.reply_text(
-            f"⚡ Not enough army capacity!\n"
+            f"⚡ Not enough capacity!\n"
             f"Current Army: {current_total}/{BASE_MAX_ARMY_SIZE}\n"
             f"In Training: {total_in_training}\n"
-            f"Trying to add: {amount}\n"
+            f"Ordering: {amount}\n"
             f"Space Left: {BASE_MAX_ARMY_SIZE - (current_total + total_in_training)}\n\n"
             + render_status_panel(player_id)
         )
         return
 
     # Calculate training time
-    per_unit_minutes = UNIT_STATS[unit_name]["training_time"]
-    total_training_time = datetime.timedelta(minutes=per_unit_minutes * amount)
-    end_time = datetime.datetime.now() + total_training_time
+    per_min = UNIT_STATS[unit_name]["training_time"]
+    total_time = datetime.timedelta(minutes=per_min * amount)
+    ready_at = datetime.datetime.now() + total_time
 
-    # Save training task to Google Sheets
-    google_sheets.save_training_task(player_id, unit_name, amount, end_time)
+    # Save to Google Sheets
+    google_sheets.save_training_task(player_id, unit_name, amount, ready_at)
 
-    msg = (
+    await update.message.reply_text(
         f"🛡️ Training Started!\n\n"
-        f"Units: {amount} {unit_name.capitalize()}\n"
-        f"Ready In: {int(per_unit_minutes * amount)} minutes\n"
-        f"Completion Time: {end_time.strftime('%Y-%m-%d %H:%M:%S')}"
+        f"{amount}× {unit_name.capitalize()} — ready in {int(per_min*amount)}m\n"
+        f"({ready_at.strftime('%Y-%m-%d %H:%M:%S')})\n\n"
+        + render_status_panel(player_id)
     )
-    await update.message.reply_text(msg + "\n\n" + render_status_panel(player_id))
-
-# View current army
 async def view_army(update, context):
     player_id = str(update.effective_user.id)
     player_army = google_sheets.load_player_army(player_id)
 
     if not player_army:
         await update.message.reply_text(
-            "🛡️ Your army is empty.\nUse /train to build your forces.\n\n"
+            "🛡️ Your army is empty.\nUse /train to build forces.\n\n"
             + render_status_panel(player_id)
         )
         return
 
-    army_list = []
-    total_power = 0
-    total_defense = 0
-    total_hp = 0
+    lines = []
+    atk, defe, hp = 0, 0, 0
 
-    for unit, count in player_army.items():
+    for unit, qty in player_army.items():
         stats = UNIT_STATS.get(unit, {})
-        attack = stats.get("attack", 0)
-        defense = stats.get("defense", 0)
-        hp = stats.get("hp", 0)
-        unit_power = attack * count
-        unit_def = defense * count
-        unit_hp = hp * count
-        total_power += unit_power
-        total_defense += unit_def
-        total_hp += unit_hp
-        army_list.append(
-            f"🔹 {unit.capitalize()}: {count} units (Atk:{unit_power} Def:{unit_def} HP:{unit_hp})"
-        )
+        a, d, h = stats.get("attack",0), stats.get("defense",0), stats.get("hp",0)
+        lines.append(f"🔹 {unit.capitalize()}: {qty} units (Atk:{a*qty} Def:{d*qty} HP:{h*qty})")
+        atk += a*qty; defe += d*qty; hp += h*qty
 
     summary = (
-        "🛡️ Your Current Army:\n\n" + "\n".join(army_list) +
-        f"\n\n⚡ Total Attack Power: {total_power} | Total Defense: {total_defense} | Total HP: {total_hp}"
+        "🛡️ Your Army:\n\n" +
+        "\n".join(lines) +
+        f"\n\n⚔️ Total Atk: {atk} | 🛡️ Def: {defe} | ❤️ HP: {hp}"
     )
     await update.message.reply_text(summary + "\n\n" + render_status_panel(player_id))
-
-# View training status
 async def training_status(update, context):
     player_id = str(update.effective_user.id)
-    training_queue = google_sheets.load_training_queue(player_id)
+    queue = google_sheets.load_training_queue(player_id)
 
-    if not training_queue:
+    if not queue:
         await update.message.reply_text(
-            "🛡️ No units currently in training.\nUse /train to start training!\n\n"
+            "🛡️ No units in training.\nUse /train to start.\n\n"
             + render_status_panel(player_id)
         )
         return
 
     now = datetime.datetime.now()
-    status_messages = []
-
-    for task_id, task in training_queue.items():
-        end_time = datetime.datetime.strptime(task['end_time'], "%Y-%m-%d %H:%M:%S")
-        remaining = end_time - now
-        if remaining.total_seconds() <= 0:
-            status_messages.append(f"✅ {task['amount']} {task['unit_name'].capitalize()} ready to claim!")
+    msgs = []
+    for row_idx, task in queue.items():
+        end = datetime.datetime.strptime(task['end_time'], "%Y-%m-%d %H:%M:%S")
+        rem = end - now
+        if rem.total_seconds() <= 0:
+            msgs.append(f"✅ {task['amount']}× {task['unit_name'].capitalize()} ready!")
         else:
-            minutes, seconds = divmod(int(remaining.total_seconds()), 60)
-            status_messages.append(
-                f"⏳ {task['amount']} {task['unit_name'].capitalize()} training: {minutes}m {seconds}s remaining."
-            )
+            m, s = divmod(int(rem.total_seconds()),60)
+            msgs.append(f"⏳ {task['amount']}× {task['unit_name'].capitalize()}: {m}m{s}s left")
 
-    msg = "🛡️ Training Status:\n\n" + "\n".join(status_messages)
-    await update.message.reply_text(msg + "\n\n" + render_status_panel(player_id))
-
-# Claim completed training
+    output = "🛡️ Training Status:\n\n" + "\n".join(msgs)
+    await update.message.reply_text(output + "\n\n" + render_status_panel(player_id))
 async def claim_training(update, context):
     player_id = str(update.effective_user.id)
-    training_queue = google_sheets.load_training_queue(player_id)
+    queue = google_sheets.load_training_queue(player_id)
 
-    if not training_queue:
+    if not queue:
         await update.message.reply_text(
-            "🛡️ No completed training to claim!\n\n" + render_status_panel(player_id)
+            "🛡️ Nothing to claim!\n\n" + render_status_panel(player_id)
         )
         return
 
     now = datetime.datetime.now()
-    claimed_units = {}
+    claimed = {}
+    for row_idx, task in list(queue.items()):
+        end = datetime.datetime.strptime(task['end_time'], "%Y-%m-%d %H:%M:%S")
+        if now >= end:
+            claimed[task['unit_name']] = claimed.get(task['unit_name'],0) + task['amount']
+            google_sheets.delete_training_task(row_idx)
 
-    for task_id, task in list(training_queue.items()):
-        end_time = datetime.datetime.strptime(task['end_time'], "%Y-%m-%d %H:%M:%S")
-        if now >= end_time:
-            claimed_units[task['unit_name']] = claimed_units.get(task['unit_name'], 0) + task['amount']
-            google_sheets.delete_training_task(task_id)
-
-    if not claimed_units:
+    if not claimed:
         await update.message.reply_text(
-            "⏳ Training still in progress. Please wait until completion.\n\n"
+            "⏳ Still training—nothing ready yet.\n\n"
             + render_status_panel(player_id)
         )
         return
 
-    current_army = google_sheets.load_player_army(player_id)
-    for unit_name, amount in claimed_units.items():
-        current_army[unit_name] = current_army.get(unit_name, 0) + amount
-    google_sheets.save_player_army(player_id, current_army)
+    # Add to army
+    army = google_sheets.load_player_army(player_id)
+    for unit, amt in claimed.items():
+        army[unit] = army.get(unit,0) + amt
+    google_sheets.save_player_army(player_id, army)
 
-    claimed_list = [f"🔹 {amount} {unit_name.capitalize()}" for unit_name, amount in claimed_units.items()]
-    msg = "🎉 Training Complete! You have claimed:\n\n" + "\n".join(claimed_list)
+    lines = [f"🔹 {amt}× {unit.capitalize()}" for unit,amt in claimed.items()]
+    msg = "🎉 Claimed:\n\n" + "\n".join(lines)
     await update.message.reply_text(msg + "\n\n" + render_status_panel(player_id))
