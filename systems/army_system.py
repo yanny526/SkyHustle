@@ -1,3 +1,94 @@
+# army_system.py
+
+import json
+import datetime
+from utils import google_sheets
+
+# Load army unit stats from JSON config
+with open("config/army_stats.json", "r") as file:
+    UNIT_STATS = json.load(file)
+
+# Max army size base settings (expand later based on Command Center level)
+BASE_MAX_ARMY_SIZE = 1000
+
+# Train units with a timer
+async def train_units(update, context):
+    player_id = str(update.effective_user.id)
+    args = context.args
+
+    if len(args) != 2:
+        await update.message.reply_text("🛡️ Usage: /train [unit] [amount]\nExample: /train soldier 50")
+        return
+
+    unit_name = args[0].lower()
+    try:
+        amount = int(args[1])
+    except ValueError:
+        await update.message.reply_text("⚡ Amount must be a number.")
+        return
+
+    if unit_name not in UNIT_STATS:
+        await update.message.reply_text(f"❌ Invalid unit. Available units: {', '.join(UNIT_STATS.keys())}")
+        return
+
+    # Load current training queue
+    training_queue = google_sheets.load_training_queue(player_id)
+
+    # Check if already training too much
+    total_in_training = sum(item['amount'] for item in training_queue.values())
+    current_army = google_sheets.load_player_army(player_id)
+    current_total = sum(current_army.values())
+
+    if current_total + total_in_training + amount > BASE_MAX_ARMY_SIZE:
+        await update.message.reply_text(
+            f"⚡ Not enough army capacity!\n"
+            f"Current Army: {current_total}/{BASE_MAX_ARMY_SIZE}\n"
+            f"In Training: {total_in_training}\n"
+            f"Trying to add: {amount}\n"
+            f"Space Left: {BASE_MAX_ARMY_SIZE - (current_total + total_in_training)}"
+        )
+        return
+
+    # Calculate training time
+    per_unit_minutes = UNIT_STATS[unit_name]["training_time"]
+    total_training_time = datetime.timedelta(minutes=per_unit_minutes * amount)
+    end_time = datetime.datetime.now() + total_training_time
+
+    # Save training task to Google Sheets
+    google_sheets.save_training_task(player_id, unit_name, amount, end_time)
+
+    await update.message.reply_text(
+        f"🛡️ Training Started!\n\n"
+        f"Units: {amount} {unit_name.capitalize()}\n"
+        f"Ready In: {int(per_unit_minutes * amount)} minutes\n"
+        f"Completion Time: {end_time.strftime('%Y-%m-%d %H:%M:%S')}"
+    )
+
+# View current army
+async def view_army(update, context):
+    player_id = str(update.effective_user.id)
+
+    # Load army from Google Sheets
+    player_army = google_sheets.load_player_army(player_id)
+
+    if not player_army:
+        await update.message.reply_text("🛡️ Your army is empty.\nUse /train to build your forces.")
+        return
+
+    army_list = []
+    total_power = 0
+
+    for unit, count in player_army.items():
+        stats = UNIT_STATS.get(unit, {})
+        unit_power = stats.get("attack", 0) * count
+        total_power += unit_power
+        army_list.append(f"🔹 {unit.capitalize()}: {count} units (Power: {unit_power})")
+
+    await update.message.reply_text(
+        "🛡️ Your Current Army:\n\n" +
+        "\n".join(army_list) +
+        f"\n\n⚡ Total Army Strength: {total_power} ⚡"
+    )
 # View training status
 async def training_status(update, context):
     player_id = str(update.effective_user.id)
