@@ -1,7 +1,13 @@
 # main.py
 
 from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    MessageHandler,
+    ContextTypes,
+    filters,
+)
 from systems import (
     timer_system,
     army_system,
@@ -109,8 +115,8 @@ def main():
     app.add_handler(CommandHandler("blackmarket", shop_system.blackmarket))
     app.add_handler(CommandHandler("bmbuy", shop_system.bmbuy))
 
-    # Fallback
-    app.add_handler(CommandHandler(None, unknown_command))
+    # Fallback for any other /command
+    app.add_handler(MessageHandler(filters.COMMAND, unknown_command))
 
     app.run_polling()
 
