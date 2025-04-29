@@ -1,15 +1,19 @@
 import datetime
 from typing import List, Tuple
 
-from utils.google_sheets import load_resources, load_player_army, load_training_queue
+from utils.google_sheets import (
+    load_resources,
+    load_player_army,
+    load_training_queue,
+)
 from systems import timer_system, tutorial_system
 
-# Maximum storage capacities (adjust as needed)
+# Maximum storage capacities
 MAX_STORAGE = {
     "metal": 5000,
     "fuel": 2500,
     "crystal": 1000,
-    "credits": 500
+    "credits": 500,
 }
 
 # Icons for unit types
@@ -24,7 +28,7 @@ UNIT_ICONS = {
 # Icons for timers
 TIMER_ICONS = {
     "mine": "⛏️",
-    "train": "🏭"
+    "train": "🏭",
 }
 
 
@@ -44,92 +48,59 @@ def _format_timedelta(delta: datetime.timedelta) -> str:
 
 def render_status_panel(player_id: str) -> str:
     """
-    Returns a two-line status panel showing current resources and army composition.
-    """
-    # Lazy import to avoid circular dependencies
-    from systems.army_system import get_max_army_size
-
-    # Load player data
-    res = load_resources(player_id)
-    army = load_player_army(player_id)
-
-    # Build resource line
-    metal = res.get('metal', 0)
-    fuel = res.get('fuel', 0)
-    crystal = res.get('crystal', 0)
-    resource_line = f"⚙️ Resources — Metal: {metal} | Fuel: {fuel} | Crystal: {crystal}"
-
-    # Build army line with capacity
-    max_cap = get_max_army_size(player_id)
-    total_units = sum(army.values())
-    if army:
-        parts = []
-        for unit_key, qty in army.items():
-            icon = UNIT_ICONS.get(unit_key, '')
-            name = unit_key.replace('_', ' ').title()
-            parts.append(f"{icon} {name}: {qty}")
-        army_line = (
-            f"🛡️ Army — {total_units}/{max_cap} | "
-            + " | ".join(parts)
-        )
-    else:
-        army_line = f"🛡️ Army — 0/{max_cap} (no units)"
-
-    return resource_line + "\n" + army_line
-
-
-def render_full_status_panel(player_id: str) -> str:
-    """
-    Returns a detailed status panel:
+    Returns a multi-line status panel:
       1. Commander name
       2. Resources (current/max)
-      3. Army (used/max + top 3 units)
-      4. Up to 2 active timers
+      3. Army (used/max + up to 3 top units)
+      4. Up to 2 soonest active timers
       5. Active Shield (if any)
     """
-    # Lazy import to avoid circular dependencies
-    from systems.army_system import get_max_army_size
-
-    now = datetime.datetime.now()
-
-    # Commander
+    # Commander name
     commander = tutorial_system.player_names.get(player_id, "Commander")
 
-    # Resources line
+    # Resources with max storage
     res = load_resources(player_id)
     res_line = "⚙️ Resources — " + " | ".join(
-        f"{k.capitalize()}: {res.get(k,0)}/{MAX_STORAGE.get(k,0)}"
+        f"{k.capitalize()}: {res.get(k,0)}/{MAX_STORAGE[k]}"
         for k in ["metal", "fuel", "crystal", "credits"]
     )
 
-    # Army line
+    # Army used vs capacity + top 3 units
+    from systems.army_system import get_max_army_size  # lazy import to avoid circular
     army = load_player_army(player_id)
     used = sum(army.values())
     cap = get_max_army_size(player_id)
-    # top 3
     top_units: List[Tuple[str,int]] = sorted(army.items(), key=lambda x: x[1], reverse=True)[:3]
-    parts = [f"{UNIT_ICONS.get(u,'')} {count}" for u, count in top_units]
-    army_line = f"🛡️ Army — {used}/{cap}" + (" | " + " | ".join(parts) if parts else "")
+    unit_parts = [
+        f"{UNIT_ICONS.get(u,'')} {u.replace('_',' ').title()}: {cnt}"
+        for u, cnt in top_units
+    ]
+    army_line = f"🛡️ Army — {used}/{cap}"
+    if unit_parts:
+        army_line += " | " + " | ".join(unit_parts)
 
-    # Active timers
-    mining = []
-    for resource, details in getattr(timer_system, 'player_mining', {}).get(player_id, {}).items():
-        end = datetime.datetime.strptime(details['end_time'], "%Y-%m-%d %H:%M:%S")
+    # Build timer lines (mining + training), pick two soonest
+    now = datetime.datetime.now()
+    timers: List[Tuple[datetime.timedelta,str]] = []
+
+    # Mining timers (in-memory)
+    for resource, details in timer_system.player_mining.get(player_id, {}).items():
+        end = datetime.datetime.strptime(details["end_time"], "%Y-%m-%d %H:%M:%S")
         rem = end - now
         if rem.total_seconds() > 0:
-            mining.append((rem, f"{TIMER_ICONS['mine']} Mining {resource.capitalize()}: {_format_timedelta(rem)}"))
-    training = []
-    queue = load_training_queue(player_id)
-    for task in queue.values():
-        end = datetime.datetime.strptime(task['end_time'], "%Y-%m-%d %H:%M:%S")
+            timers.append((rem, f"{TIMER_ICONS['mine']} Mining {resource.capitalize()}: {_format_timedelta(rem)}"))
+
+    # Training timers (Google Sheets)
+    for task in load_training_queue(player_id).values():
+        end = datetime.datetime.strptime(task["end_time"], "%Y-%m-%d %H:%M:%S")
         rem = end - now
         if rem.total_seconds() > 0:
-            training.append((rem, f"{TIMER_ICONS['train']} Training {task['amount']} {task['unit_name'].capitalize()}: {_format_timedelta(rem)}"))
-    # pick soonest two
-    timer_msgs = [msg for _,msg in sorted(mining+training, key=lambda x: x[0])[:2]]
-    timer_line = ("⏳ " + " | ".join(timer_msgs)) if timer_msgs else ""
+            timers.append((rem, f"{TIMER_ICONS['train']} Training {task['amount']} {task['unit_name'].capitalize()}: {_format_timedelta(rem)}"))
 
-    # Shield
+    timers.sort(key=lambda x: x[0])
+    timer_lines = [msg for _, msg in timers[:2]]
+
+    # Shield line if active
     shield_line = ""
     exp = tutorial_system.shield_expirations.get(player_id)
     if exp:
@@ -137,10 +108,14 @@ def render_full_status_panel(player_id: str) -> str:
         if rem.total_seconds() > 0:
             shield_line = f"🛡️ Shield Active: {_format_timedelta(rem)}"
 
-    # Assemble lines
-    lines = [f"👤 Commander: {commander}", res_line, army_line]
-    if timer_line:
-        lines.append(timer_line)
+    # Assemble all parts
+    lines = [
+        f"👤 Commander: {commander}",
+        res_line,
+        army_line,
+    ]
+    if timer_lines:
+        lines.append("⏳ " + " | ".join(timer_lines))
     if shield_line:
         lines.append(shield_line)
 
