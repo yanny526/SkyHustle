@@ -220,7 +220,7 @@ async def building_upgrade_callback(update: Update, context: ContextTypes.DEFAUL
     await building_detail_callback(update, context)
 
 # ────────────────────────────────────────────────────────────────────────────────
-# Main menu router for reply‐keyboard
+# Main menu router for reply-keyboard
 async def menu_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
     pid  = str(update.effective_user.id)
@@ -241,7 +241,13 @@ async def menu_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await status(update, context)
 
     if text == "📜 Missions":
-        return await update.message.reply_text("Use /missions to view missions.", reply_markup=MENU_MARKUP)
+        # Hijack reply_text so mission_system.missions always re-attach the menu
+        orig = update.message.reply_text
+        async def reply_with_menu(txt, **kwargs):
+            kwargs.setdefault("reply_markup", MENU_MARKUP)
+            return await orig(txt, **kwargs)
+        update.message.reply_text = reply_with_menu  # monkey-patch just for this call
+        return await mission_system.missions(update, context)
 
     if text == "🛒 Shop":
         return await update.message.reply_text("Use /shop to browse.", reply_markup=MENU_MARKUP)
@@ -263,7 +269,7 @@ def main():
     app.add_handler(CommandHandler("lore",   lore))
     app.add_handler(CommandHandler("status", status))
 
-    # Reply‐keyboard menu
+    # Reply-keyboard menu
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, menu_router))
 
     # Inline building callbacks
