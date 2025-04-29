@@ -1,8 +1,5 @@
-# main.py
-
 import os
-from telegram import Update
-from telegram.constants import ParseMode
+from telegram import Update, ParseMode
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -19,7 +16,7 @@ from systems import (
     shop_system,
 )
 from utils import google_sheets
-from utils.ui_helpers import render_status_panel  # unified status panel
+from utils.ui_helpers import render_status_panel  # unified HTML-styled panel
 
 # -------------- BOT TOKEN (from env var) --------------
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
@@ -30,14 +27,12 @@ if not BOT_TOKEN:
 LORE_TEXT = (
     "🌌 Year 3137.\n"
     "Humanity shattered into warring factions.\n"
-    "The planet's surface is dead. Survivors now live aboard colossal flying\n"
-    "fortresses known as SkyHustles.\n\n"
+    "The planet's surface is dead. Survivors now live aboard colossal flying fortresses known as SkyHustles.\n\n"
     "🛡️ As Commander, you lead your SkyHustle to survival.\n"
     "Mine rare resources, build your forces, and conquer the skies.\n\n"
-    "🕶️ Rumors speak of a forbidden Black Market — where power can be bought,\n"
-    "but destiny must still be earned.\n\n"
-    "⚔️ Fight bravely, Commander. The skies belong to the strong.\n"
-    "Welcome to SKYHUSTLE."
+    "🕶️ Rumors speak of a forbidden Black Market — where power can be bought, but destiny must still be earned.\n\n"
+    "⚔️ Fight bravely, Commander.\n"
+    "The skies belong to the strong. Welcome to SKYHUSTLE."
 )
 
 # -------------- /start --------------
@@ -78,15 +73,14 @@ async def lore_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # -------------- /status --------------
 async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    /status — Show your full empire status panel in a monospace block.
+    /status — Show your full empire status panel.
     """
     player_id = str(update.effective_user.id)
     panel = render_status_panel(player_id)
-    formatted = f"<pre>{panel}</pre>"
     await update.message.reply_text(
-        formatted,
+        panel,
         parse_mode=ParseMode.HTML,
-        disable_web_page_preview=True,
+        disable_web_page_preview=True
     )
 
 # -------------- Catch unknown commands --------------
