@@ -97,7 +97,8 @@ def main():
     app.add_handler(CommandHandler("start",       start))
     app.add_handler(CommandHandler("help",        help_command))
     app.add_handler(CommandHandler("lore",        lore_command))
-
+    app.add_handler(CommandHandler("status", status_system.status))
+    
     # --- Timer System (fallback) ---
     app.add_handler(CommandHandler("mine",        timer_system.start_mining))
     app.add_handler(CommandHandler("minestatus",  timer_system.mining_status))
