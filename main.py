@@ -88,9 +88,9 @@ def main():
     app.add_handler(CommandHandler("claimmine",  tutorial_system.tutorial_claim_mine))
     app.add_handler(CommandHandler("train",      tutorial_system.tutorial_train))
     app.add_handler(CommandHandler("trainstatus",tutorial_system.tutorial_trainstatus))
-    # when Part 9 is ready, you’ll add:
-    # app.add_handler(CommandHandler("claimtrain", tutorial_system.tutorial_claim_train))
-
+    app.add_handler(CommandHandler("claimtrain", tutorial_system.tutorial_claim_train))
+    app.add_handler(CommandHandler("shop", tutorial_system.tutorial_shop))
+    
     # --- Core Bot Commands ---
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
