@@ -1,5 +1,3 @@
-# main.py
-
 import os
 import logging
 from datetime import datetime
@@ -35,7 +33,7 @@ from utils.google_sheets import (
 )
 from utils.ui_helpers import render_status_panel
 
-# ———————————————————————————————————————————————————————————————————————————
+# ────────────────────────────────────────────────────────────────────────────────
 # Logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -43,11 +41,9 @@ logger = logging.getLogger(__name__)
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
     logger.exception("Unhandled exception:")
     if hasattr(update, "message") and update.message:
-        await update.message.reply_text(
-            "❌ Oops, something went wrong. Please try again later."
-        )
+        await update.message.reply_text("❌ Oops, something went wrong.")
 
-# ———————————————————————————————————————————————————————————————————————————
+# ────────────────────────────────────────────────────────────────────────────────
 # Persistent Reply Keyboard
 MAIN_MENU = [
     [KeyboardButton("🏗 Buildings"), KeyboardButton("🛡️ Army")],
@@ -56,13 +52,13 @@ MAIN_MENU = [
 ]
 MENU_MARKUP = ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True)
 
-# ———————————————————————————————————————————————————————————————————————————
+# ────────────────────────────────────────────────────────────────────────────────
 # Bot Token
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 if not BOT_TOKEN:
     raise RuntimeError("Missing BOT_TOKEN env var")
 
-# ———————————————————————————————————————————————————————————————————————————
+# ────────────────────────────────────────────────────────────────────────────────
 # /start, /help, /lore, /status
 LORE_TEXT = (
     "🌌 Year 3137.\n"
@@ -72,7 +68,7 @@ LORE_TEXT = (
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "🛰️ Welcome Commander!\n\nUse the menu below to navigate.",
+        "🛰️ Welcome Commander!\nUse the menu below to navigate.",
         reply_markup=MENU_MARKUP
     )
 
@@ -94,7 +90,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         panel, parse_mode=ParseMode.HTML, reply_markup=MENU_MARKUP
     )
 
-# ———————————————————————————————————————————————————————————————————————————
+# ────────────────────────────────────────────────────────────────────────────────
 # Tutorial flows (highest priority)
 TUTORIAL_HANDLERS = [
     CommandHandler("tutorial",    tutorial_system.tutorial),
@@ -109,30 +105,32 @@ TUTORIAL_HANDLERS = [
     CommandHandler("claimtrain",  tutorial_system.tutorial_claim_train),
 ]
 
-# ———————————————————————————————————————————————————————————————————————————
-# Buildings Inline Menu
-async def send_building_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show inline keyboard of all buildings."""
-    pid = str(update.effective_user.id)
+# ────────────────────────────────────────────────────────────────────────────────
+# BUILDING LIST & DETAILS
+
+def _make_building_list(pid: str):
+    """Return (text, markup) for the building list menu."""
     queue = load_building_queue(pid)
     buttons = []
     for key in building_system.BUILDINGS:
-        lvl = get_building_level(pid, key)
+        lvl  = get_building_level(pid, key)
         busy = any(t['building_name']==key for t in queue.values())
         label = f"{key.replace('_',' ').title()} (Lv {lvl})" + (" ⏳" if busy else "")
         buttons.append([InlineKeyboardButton(label, callback_data=f"BUILDING:{key}")])
-    await update.message.reply_text(
-        "🏗 <b>Your Buildings</b>\nChoose one for details:",
-        parse_mode=ParseMode.HTML,
-        reply_markup=InlineKeyboardMarkup(buttons)
-    )
+    text = "🏗 <b>Your Buildings</b>\nChoose one for details:"
+    return text, InlineKeyboardMarkup(buttons)
+
+async def send_building_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    pid = str(update.effective_user.id)
+    text, markup = _make_building_list(pid)
+    await update.message.reply_text(text, parse_mode=ParseMode.HTML, reply_markup=markup)
 
 async def building_detail_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show info for a single building when its button is tapped."""
     query = update.callback_query
     await query.answer()
     pid = str(query.from_user.id)
     key = query.data.split(":",1)[1]
+
     cur = get_building_level(pid, key)
     nxt = cur + 1
     cost = building_system.BUILDINGS[key]["resource_cost"](nxt)
@@ -149,25 +147,39 @@ async def building_detail_callback(update: Update, context: ContextTypes.DEFAULT
         f"• Next Lv:    {nxt}\n"
         f"• Cost:       {cost_str}\n"
         f"• Effect:     {eff_str}\n\n"
-        "Use <code>/buildinfo</code> to see this again, or <code>/build</code> to upgrade."
+        "Use <code>/buildinfo</code> to revisit, or tap ⬆️ to upgrade."
     )
-    back = InlineKeyboardMarkup([[
-        InlineKeyboardButton("« Back to list", callback_data="BUILDING:__back__")
-    ]])
-    await query.edit_message_text(text, parse_mode=ParseMode.HTML, reply_markup=back)
+    markup = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("⬆️ Upgrade", callback_data=f"BUILDING_UPGRADE:{key}"),
+            InlineKeyboardButton("« Back",    callback_data="BUILDING:__back__"),
+        ]
+    ])
+    await query.edit_message_text(text, parse_mode=ParseMode.HTML, reply_markup=markup)
 
 async def building_back_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Return to the building list."""
     query = update.callback_query
     await query.answer()
-    # re-send the list
-    await send_building_list(update, context)
+    pid = str(query.from_user.id)
+    text, markup = _make_building_list(pid)
+    await query.edit_message_text(text, parse_mode=ParseMode.HTML, reply_markup=markup)
 
-# ———————————————————————————————————————————————————————————————————————————
-# Main menu router for reply-keyboard
+async def building_upgrade_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    key = query.data.split(":",1)[1]
+    # monkey‐patch args/message so building_system.build works:
+    context.args = [key]
+    update.message = query.message
+    await building_system.build(update, context)
+    # refresh details inline:
+    await building_detail_callback(update, context)
+
+# ────────────────────────────────────────────────────────────────────────────────
+# Main menu router for reply‐keyboard
 async def menu_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
-    pid = str(update.effective_user.id)
+    pid  = str(update.effective_user.id)
 
     if text == "🏗 Buildings":
         return await send_building_list(update, context)
@@ -175,7 +187,7 @@ async def menu_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if text == "🛡️ Army":
         army = load_player_army(pid)
         if not army:
-            msg = "🛡️ Your army is empty.\nUse /train [unit] [amount] to recruit."
+            msg = "🛡️ Your army is empty.\nUse /train [unit] [amount]."
         else:
             lines = [f"• {u.title()}: {q}" for u,q in army.items()]
             msg = "<b>🛡️ Your Army</b>\n" + "\n".join(lines)
@@ -185,39 +197,37 @@ async def menu_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await status(update, context)
 
     if text == "📜 Missions":
-        return await update.message.reply_text("Use /missions to view your tasks.", reply_markup=MENU_MARKUP)
+        return await update.message.reply_text("Use /missions to view missions.", reply_markup=MENU_MARKUP)
 
     if text == "🛒 Shop":
-        return await update.message.reply_text("Use /shop to browse the market.", reply_markup=MENU_MARKUP)
+        return await update.message.reply_text("Use /shop to browse.", reply_markup=MENU_MARKUP)
 
     if text == "⚔️ Battle":
-        return await update.message.reply_text("Use /attack or /battle_status to fight.", reply_markup=MENU_MARKUP)
+        return await update.message.reply_text("Use /attack or /battle_status.", reply_markup=MENU_MARKUP)
 
-    # let other handlers pick it up
-
-# ———————————————————————————————————————————————————————————————————————————
-# Build the app
+# ────────────────────────────────────────────────────────────────────────────────
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    # tutorial
-    for handler in TUTORIAL_HANDLERS:
-        app.add_handler(handler)
+    # Tutorial
+    for h in TUTORIAL_HANDLERS:
+        app.add_handler(h)
 
-    # core
+    # Core
     app.add_handler(CommandHandler("start",  start))
     app.add_handler(CommandHandler("help",   help_cmd))
     app.add_handler(CommandHandler("lore",   lore))
     app.add_handler(CommandHandler("status", status))
 
-    # reply-keyboard menu
+    # Reply‐keyboard menu
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, menu_router))
 
-    # inline building callbacks
+    # Inline building callbacks
     app.add_handler(CallbackQueryHandler(building_detail_callback, pattern="^BUILDING:[^_].+"))
     app.add_handler(CallbackQueryHandler(building_back_callback,   pattern="^BUILDING:__back__$"))
+    app.add_handler(CallbackQueryHandler(building_upgrade_callback,pattern="^BUILDING_UPGRADE:.+"))
 
-    # fallback commands
+    # Fallback commands
     app.add_handler(CommandHandler("build",       building_system.build))
     app.add_handler(CommandHandler("buildinfo",   building_system.buildinfo))
     app.add_handler(CommandHandler("buildstatus", building_system.buildstatus))
@@ -241,12 +251,9 @@ def main():
     app.add_handler(CommandHandler("blackmarket",       shop_system.blackmarket))
     app.add_handler(CommandHandler("bmbuy",             shop_system.bmbuy))
 
-    # unknown /fallback
+    # Unknown /fallback
     app.add_handler(MessageHandler(filters.COMMAND,
-        lambda u,c: u.message.reply_text(
-            "❓ Unknown—use the menu below.",
-            reply_markup=MENU_MARKUP
-        )
+        lambda u,c: u.message.reply_text("❓ Unknown—use the menu below.", reply_markup=MENU_MARKUP)
     ))
 
     app.add_error_handler(error_handler)
