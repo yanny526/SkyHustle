@@ -1,112 +1,1264 @@
 {
   "daily_templates": [
     {
-      "id": "train_50_soldiers",
-      "description": "Train 50 Soldiers",
-      "type": "train",
-      "amount": 50,
-      "rewards": {
-        "xp": 200,
-        "crystals": 100,
-        "speedup": "small"
-      }
-    },
-    {
-      "id": "mine_5000_metal",
-      "description": "Mine 5000 Metal",
+      "id": "daily_mine_metal_500",
+      "description": "Mine 500 Metal",
       "type": "mine",
       "resource": "metal",
-      "amount": 5000,
+      "amount": 500,
       "rewards": {
-        "xp": 150,
-        "crystals": 50
+        "crystal": 5,
+        "xp": 20
       }
     },
     {
-      "id": "attack_1_player",
-      "description": "Attack 1 enemy player",
+      "id": "daily_mine_fuel_300",
+      "description": "Mine 300 Fuel",
+      "type": "mine",
+      "resource": "fuel",
+      "amount": 300,
+      "rewards": {
+        "crystal": 4,
+        "xp": 18
+      }
+    },
+    {
+      "id": "daily_mine_crystal_100",
+      "description": "Mine 100 Crystal",
+      "type": "mine",
+      "resource": "crystal",
+      "amount": 100,
+      "rewards": {
+        "crystal": 6,
+        "xp": 22
+      }
+    },
+    {
+      "id": "daily_train_soldier_10",
+      "description": "Train 10 Soldiers",
+      "type": "train",
+      "unit": "soldier",
+      "amount": 10,
+      "rewards": {
+        "crystal": 5,
+        "xp": 20
+      }
+    },
+    {
+      "id": "daily_train_drone_5",
+      "description": "Train 5 Drones",
+      "type": "train",
+      "unit": "drone",
+      "amount": 5,
+      "rewards": {
+        "crystal": 6,
+        "xp": 22
+      }
+    },
+    {
+      "id": "daily_attack_3",
+      "description": "Attack 3 Players",
       "type": "attack",
-      "amount": 1,
+      "amount": 3,
       "rewards": {
-        "xp": 250,
-        "crystals": 75,
-        "speedup": "medium"
+        "crystal": 7,
+        "xp": 25
       }
     },
     {
-      "id": "upgrade_any_building",
-      "description": "Upgrade any building once",
-      "type": "upgrade",
-      "amount": 1,
+      "id": "daily_attack_5",
+      "description": "Attack 5 Players",
+      "type": "attack",
+      "amount": 5,
       "rewards": {
-        "xp": 200,
-        "crystals": 100
+        "crystal": 10,
+        "xp": 30
+      }
+    },
+    {
+      "id": "daily_win_1",
+      "description": "Win 1 Battle",
+      "type": "battle",
+      "requirement": {
+        "battle_wins": 1
+      },
+      "rewards": {
+        "crystal": 8,
+        "xp": 24
+      }
+    },
+    {
+      "id": "daily_win_3",
+      "description": "Win 3 Battles",
+      "type": "battle",
+      "requirement": {
+        "battle_wins": 3
+      },
+      "rewards": {
+        "crystal": 12,
+        "xp": 36
+      }
+    },
+    {
+      "id": "daily_upgrade_barracks_2",
+      "description": "Upgrade Barracks to Lv2",
+      "type": "upgrade",
+      "requirement": {
+        "building": "barracks",
+        "level": 2
+      },
+      "rewards": {
+        "crystal": 10,
+        "xp": 30
+      }
+    },
+    {
+      "id": "daily_upgrade_mine_3",
+      "description": "Upgrade Metal Mine to Lv3",
+      "type": "upgrade",
+      "requirement": {
+        "building": "metal_mine",
+        "level": 3
+      },
+      "rewards": {
+        "crystal": 12,
+        "xp": 36
+      }
+    },
+    {
+      "id": "daily_mine_metal_1000",
+      "description": "Mine 1000 Metal",
+      "type": "mine",
+      "resource": "metal",
+      "amount": 1000,
+      "rewards": {
+        "crystal": 10,
+        "xp": 30
+      }
+    },
+    {
+      "id": "daily_train_vehicle_2",
+      "description": "Train 2 Vehicles",
+      "type": "train",
+      "unit": "vehicle",
+      "amount": 2,
+      "rewards": {
+        "crystal": 15,
+        "xp": 40
+      }
+    },
+    {
+      "id": "daily_attack_10",
+      "description": "Attack 10 Players",
+      "type": "attack",
+      "amount": 10,
+      "rewards": {
+        "crystal": 15,
+        "xp": 40
+      }
+    },
+    {
+      "id": "daily_mine_fuel_600",
+      "description": "Mine 600 Fuel",
+      "type": "mine",
+      "resource": "fuel",
+      "amount": 600,
+      "rewards": {
+        "crystal": 8,
+        "xp": 24
+      }
+    },
+    {
+      "id": "daily_win_5",
+      "description": "Win 5 Battles",
+      "type": "battle",
+      "requirement": {
+        "battle_wins": 5
+      },
+      "rewards": {
+        "crystal": 20,
+        "xp": 60
+      }
+    },
+    {
+      "id": "daily_upgrade_warehouse_2",
+      "description": "Upgrade Warehouse to Lv2",
+      "type": "upgrade",
+      "requirement": {
+        "building": "warehouse",
+        "level": 2
+      },
+      "rewards": {
+        "crystal": 15,
+        "xp": 45
+      }
+    },
+    {
+      "id": "daily_train_soldier_25",
+      "description": "Train 25 Soldiers",
+      "type": "train",
+      "unit": "soldier",
+      "amount": 25,
+      "rewards": {
+        "crystal": 20,
+        "xp": 60
+      }
+    },
+    {
+      "id": "daily_mine_crystal_200",
+      "description": "Mine 200 Crystal",
+      "type": "mine",
+      "resource": "crystal",
+      "amount": 200,
+      "rewards": {
+        "crystal": 12,
+        "xp": 36
+      }
+    },
+    {
+      "id": "daily_attack_15",
+      "description": "Attack 15 Players",
+      "type": "attack",
+      "amount": 15,
+      "rewards": {
+        "crystal": 25,
+        "xp": 75
       }
     }
   ],
   "story_missions": [
     {
-      "level_required": 1,
-      "id": "cc_level_2",
-      "description": "Upgrade Command Center to Level 2",
+      "id": "story_command_center_lv2",
+      "description": "Reach Command Center Lv2",
+      "type": "upgrade",
+      "level_required": 2,
       "requirement": {
         "building": "command_center",
         "level": 2
       },
       "rewards": {
-        "xp": 500,
-        "crystals": 200
+        "crystal": 40,
+        "xp": 120
       }
     },
     {
-      "level_required": 3,
-      "id": "train_100_soldiers",
-      "description": "Train 100 Soldiers",
-      "requirement": {
-        "train": {
-          "unit": "soldier",
-          "amount": 100
-        }
-      },
-      "rewards": {
-        "xp": 1000,
-        "speedup": "medium"
-      }
-    },
-    {
+      "id": "story_command_center_lv5",
+      "description": "Reach Command Center Lv5",
+      "type": "upgrade",
       "level_required": 5,
-      "id": "win_3_battles",
-      "description": "Win 3 Battles",
       "requirement": {
-        "battle_wins": 3
+        "building": "command_center",
+        "level": 5
       },
       "rewards": {
-        "xp": 1500,
-        "crystals": 500
+        "crystal": 100,
+        "xp": 300
+      }
+    },
+    {
+      "id": "story_command_center_lv10",
+      "description": "Reach Command Center Lv10",
+      "type": "upgrade",
+      "level_required": 10,
+      "requirement": {
+        "building": "command_center",
+        "level": 10
+      },
+      "rewards": {
+        "crystal": 200,
+        "xp": 600
+      }
+    },
+    {
+      "id": "story_metal_mine_lv2",
+      "description": "Reach Metal Mine Lv2",
+      "type": "upgrade",
+      "level_required": 2,
+      "requirement": {
+        "building": "metal_mine",
+        "level": 2
+      },
+      "rewards": {
+        "crystal": 40,
+        "xp": 120
+      }
+    },
+    {
+      "id": "story_metal_mine_lv5",
+      "description": "Reach Metal Mine Lv5",
+      "type": "upgrade",
+      "level_required": 5,
+      "requirement": {
+        "building": "metal_mine",
+        "level": 5
+      },
+      "rewards": {
+        "crystal": 100,
+        "xp": 300
+      }
+    },
+    {
+      "id": "story_metal_mine_lv10",
+      "description": "Reach Metal Mine Lv10",
+      "type": "upgrade",
+      "level_required": 10,
+      "requirement": {
+        "building": "metal_mine",
+        "level": 10
+      },
+      "rewards": {
+        "crystal": 200,
+        "xp": 600
+      }
+    },
+    {
+      "id": "story_fuel_refinery_lv2",
+      "description": "Reach Fuel Refinery Lv2",
+      "type": "upgrade",
+      "level_required": 2,
+      "requirement": {
+        "building": "fuel_refinery",
+        "level": 2
+      },
+      "rewards": {
+        "crystal": 40,
+        "xp": 120
+      }
+    },
+    {
+      "id": "story_fuel_refinery_lv5",
+      "description": "Reach Fuel Refinery Lv5",
+      "type": "upgrade",
+      "level_required": 5,
+      "requirement": {
+        "building": "fuel_refinery",
+        "level": 5
+      },
+      "rewards": {
+        "crystal": 100,
+        "xp": 300
+      }
+    },
+    {
+      "id": "story_fuel_refinery_lv10",
+      "description": "Reach Fuel Refinery Lv10",
+      "type": "upgrade",
+      "level_required": 10,
+      "requirement": {
+        "building": "fuel_refinery",
+        "level": 10
+      },
+      "rewards": {
+        "crystal": 200,
+        "xp": 600
+      }
+    },
+    {
+      "id": "story_crystal_synthesizer_lv2",
+      "description": "Reach Crystal Synthesizer Lv2",
+      "type": "upgrade",
+      "level_required": 2,
+      "requirement": {
+        "building": "crystal_synthesizer",
+        "level": 2
+      },
+      "rewards": {
+        "crystal": 40,
+        "xp": 120
+      }
+    },
+    {
+      "id": "story_crystal_synthesizer_lv5",
+      "description": "Reach Crystal Synthesizer Lv5",
+      "type": "upgrade",
+      "level_required": 5,
+      "requirement": {
+        "building": "crystal_synthesizer",
+        "level": 5
+      },
+      "rewards": {
+        "crystal": 100,
+        "xp": 300
+      }
+    },
+    {
+      "id": "story_crystal_synthesizer_lv10",
+      "description": "Reach Crystal Synthesizer Lv10",
+      "type": "upgrade",
+      "level_required": 10,
+      "requirement": {
+        "building": "crystal_synthesizer",
+        "level": 10
+      },
+      "rewards": {
+        "crystal": 200,
+        "xp": 600
+      }
+    },
+    {
+      "id": "story_warehouse_lv2",
+      "description": "Reach Warehouse Lv2",
+      "type": "upgrade",
+      "level_required": 2,
+      "requirement": {
+        "building": "warehouse",
+        "level": 2
+      },
+      "rewards": {
+        "crystal": 40,
+        "xp": 120
+      }
+    },
+    {
+      "id": "story_warehouse_lv5",
+      "description": "Reach Warehouse Lv5",
+      "type": "upgrade",
+      "level_required": 5,
+      "requirement": {
+        "building": "warehouse",
+        "level": 5
+      },
+      "rewards": {
+        "crystal": 100,
+        "xp": 300
+      }
+    },
+    {
+      "id": "story_warehouse_lv10",
+      "description": "Reach Warehouse Lv10",
+      "type": "upgrade",
+      "level_required": 10,
+      "requirement": {
+        "building": "warehouse",
+        "level": 10
+      },
+      "rewards": {
+        "crystal": 200,
+        "xp": 600
+      }
+    },
+    {
+      "id": "story_barracks_lv2",
+      "description": "Reach Barracks Lv2",
+      "type": "upgrade",
+      "level_required": 2,
+      "requirement": {
+        "building": "barracks",
+        "level": 2
+      },
+      "rewards": {
+        "crystal": 40,
+        "xp": 120
+      }
+    },
+    {
+      "id": "story_barracks_lv5",
+      "description": "Reach Barracks Lv5",
+      "type": "upgrade",
+      "level_required": 5,
+      "requirement": {
+        "building": "barracks",
+        "level": 5
+      },
+      "rewards": {
+        "crystal": 100,
+        "xp": 300
+      }
+    },
+    {
+      "id": "story_barracks_lv10",
+      "description": "Reach Barracks Lv10",
+      "type": "upgrade",
+      "level_required": 10,
+      "requirement": {
+        "building": "barracks",
+        "level": 10
+      },
+      "rewards": {
+        "crystal": 200,
+        "xp": 600
+      }
+    },
+    {
+      "id": "story_vehicle_factory_lv2",
+      "description": "Reach Vehicle Factory Lv2",
+      "type": "upgrade",
+      "level_required": 2,
+      "requirement": {
+        "building": "vehicle_factory",
+        "level": 2
+      },
+      "rewards": {
+        "crystal": 40,
+        "xp": 120
+      }
+    },
+    {
+      "id": "story_vehicle_factory_lv5",
+      "description": "Reach Vehicle Factory Lv5",
+      "type": "upgrade",
+      "level_required": 5,
+      "requirement": {
+        "building": "vehicle_factory",
+        "level": 5
+      },
+      "rewards": {
+        "crystal": 100,
+        "xp": 300
+      }
+    },
+    {
+      "id": "story_vehicle_factory_lv10",
+      "description": "Reach Vehicle Factory Lv10",
+      "type": "upgrade",
+      "level_required": 10,
+      "requirement": {
+        "building": "vehicle_factory",
+        "level": 10
+      },
+      "rewards": {
+        "crystal": 200,
+        "xp": 600
+      }
+    },
+    {
+      "id": "story_drone_hangar_lv2",
+      "description": "Reach Drone Hangar Lv2",
+      "type": "upgrade",
+      "level_required": 2,
+      "requirement": {
+        "building": "drone_hangar",
+        "level": 2
+      },
+      "rewards": {
+        "crystal": 40,
+        "xp": 120
+      }
+    },
+    {
+      "id": "story_drone_hangar_lv5",
+      "description": "Reach Drone Hangar Lv5",
+      "type": "upgrade",
+      "level_required": 5,
+      "requirement": {
+        "building": "drone_hangar",
+        "level": 5
+      },
+      "rewards": {
+        "crystal": 100,
+        "xp": 300
+      }
+    },
+    {
+      "id": "story_drone_hangar_lv10",
+      "description": "Reach Drone Hangar Lv10",
+      "type": "upgrade",
+      "level_required": 10,
+      "requirement": {
+        "building": "drone_hangar",
+        "level": 10
+      },
+      "rewards": {
+        "crystal": 200,
+        "xp": 600
+      }
+    },
+    {
+      "id": "story_research_lab_lv2",
+      "description": "Reach Research Lab Lv2",
+      "type": "upgrade",
+      "level_required": 2,
+      "requirement": {
+        "building": "research_lab",
+        "level": 2
+      },
+      "rewards": {
+        "crystal": 40,
+        "xp": 120
+      }
+    },
+    {
+      "id": "story_research_lab_lv5",
+      "description": "Reach Research Lab Lv5",
+      "type": "upgrade",
+      "level_required": 5,
+      "requirement": {
+        "building": "research_lab",
+        "level": 5
+      },
+      "rewards": {
+        "crystal": 100,
+        "xp": 300
+      }
+    },
+    {
+      "id": "story_research_lab_lv10",
+      "description": "Reach Research Lab Lv10",
+      "type": "upgrade",
+      "level_required": 10,
+      "requirement": {
+        "building": "research_lab",
+        "level": 10
+      },
+      "rewards": {
+        "crystal": 200,
+        "xp": 600
+      }
+    },
+    {
+      "id": "story_shield_generator_lv2",
+      "description": "Reach Shield Generator Lv2",
+      "type": "upgrade",
+      "level_required": 2,
+      "requirement": {
+        "building": "shield_generator",
+        "level": 2
+      },
+      "rewards": {
+        "crystal": 40,
+        "xp": 120
+      }
+    },
+    {
+      "id": "story_shield_generator_lv5",
+      "description": "Reach Shield Generator Lv5",
+      "type": "upgrade",
+      "level_required": 5,
+      "requirement": {
+        "building": "shield_generator",
+        "level": 5
+      },
+      "rewards": {
+        "crystal": 100,
+        "xp": 300
+      }
+    },
+    {
+      "id": "story_shield_generator_lv10",
+      "description": "Reach Shield Generator Lv10",
+      "type": "upgrade",
+      "level_required": 10,
+      "requirement": {
+        "building": "shield_generator",
+        "level": 10
+      },
+      "rewards": {
+        "crystal": 200,
+        "xp": 600
+      }
+    },
+    {
+      "id": "story_laser_turrets_lv2",
+      "description": "Reach Laser Turrets Lv2",
+      "type": "upgrade",
+      "level_required": 2,
+      "requirement": {
+        "building": "laser_turrets",
+        "level": 2
+      },
+      "rewards": {
+        "crystal": 40,
+        "xp": 120
+      }
+    },
+    {
+      "id": "story_laser_turrets_lv5",
+      "description": "Reach Laser Turrets Lv5",
+      "type": "upgrade",
+      "level_required": 5,
+      "requirement": {
+        "building": "laser_turrets",
+        "level": 5
+      },
+      "rewards": {
+        "crystal": 100,
+        "xp": 300
+      }
+    },
+    {
+      "id": "story_laser_turrets_lv10",
+      "description": "Reach Laser Turrets Lv10",
+      "type": "upgrade",
+      "level_required": 10,
+      "requirement": {
+        "building": "laser_turrets",
+        "level": 10
+      },
+      "rewards": {
+        "crystal": 200,
+        "xp": 600
+      }
+    },
+    {
+      "id": "story_missile_silos_lv2",
+      "description": "Reach Missile Silos Lv2",
+      "type": "upgrade",
+      "level_required": 2,
+      "requirement": {
+        "building": "missile_silos",
+        "level": 2
+      },
+      "rewards": {
+        "crystal": 40,
+        "xp": 120
+      }
+    },
+    {
+      "id": "story_missile_silos_lv5",
+      "description": "Reach Missile Silos Lv5",
+      "type": "upgrade",
+      "level_required": 5,
+      "requirement": {
+        "building": "missile_silos",
+        "level": 5
+      },
+      "rewards": {
+        "crystal": 100,
+        "xp": 300
+      }
+    },
+    {
+      "id": "story_missile_silos_lv10",
+      "description": "Reach Missile Silos Lv10",
+      "type": "upgrade",
+      "level_required": 10,
+      "requirement": {
+        "building": "missile_silos",
+        "level": 10
+      },
+      "rewards": {
+        "crystal": 200,
+        "xp": 600
+      }
+    },
+    {
+      "id": "story_radar_station_lv2",
+      "description": "Reach Radar Station Lv2",
+      "type": "upgrade",
+      "level_required": 2,
+      "requirement": {
+        "building": "radar_station",
+        "level": 2
+      },
+      "rewards": {
+        "crystal": 40,
+        "xp": 120
+      }
+    },
+    {
+      "id": "story_radar_station_lv5",
+      "description": "Reach Radar Station Lv5",
+      "type": "upgrade",
+      "level_required": 5,
+      "requirement": {
+        "building": "radar_station",
+        "level": 5
+      },
+      "rewards": {
+        "crystal": 100,
+        "xp": 300
+      }
+    },
+    {
+      "id": "story_radar_station_lv10",
+      "description": "Reach Radar Station Lv10",
+      "type": "upgrade",
+      "level_required": 10,
+      "requirement": {
+        "building": "radar_station",
+        "level": 10
+      },
+      "rewards": {
+        "crystal": 200,
+        "xp": 600
+      }
+    },
+    {
+      "id": "story_orbital_shipyard_lv2",
+      "description": "Reach Orbital Shipyard Lv2",
+      "type": "upgrade",
+      "level_required": 2,
+      "requirement": {
+        "building": "orbital_shipyard",
+        "level": 2
+      },
+      "rewards": {
+        "crystal": 40,
+        "xp": 120
+      }
+    },
+    {
+      "id": "story_orbital_shipyard_lv5",
+      "description": "Reach Orbital Shipyard Lv5",
+      "type": "upgrade",
+      "level_required": 5,
+      "requirement": {
+        "building": "orbital_shipyard",
+        "level": 5
+      },
+      "rewards": {
+        "crystal": 100,
+        "xp": 300
+      }
+    },
+    {
+      "id": "story_orbital_shipyard_lv10",
+      "description": "Reach Orbital Shipyard Lv10",
+      "type": "upgrade",
+      "level_required": 10,
+      "requirement": {
+        "building": "orbital_shipyard",
+        "level": 10
+      },
+      "rewards": {
+        "crystal": 200,
+        "xp": 600
+      }
+    },
+    {
+      "id": "story_trade_hub_lv2",
+      "description": "Reach Trade Hub Lv2",
+      "type": "upgrade",
+      "level_required": 2,
+      "requirement": {
+        "building": "trade_hub",
+        "level": 2
+      },
+      "rewards": {
+        "crystal": 40,
+        "xp": 120
+      }
+    },
+    {
+      "id": "story_trade_hub_lv5",
+      "description": "Reach Trade Hub Lv5",
+      "type": "upgrade",
+      "level_required": 5,
+      "requirement": {
+        "building": "trade_hub",
+        "level": 5
+      },
+      "rewards": {
+        "crystal": 100,
+        "xp": 300
+      }
+    },
+    {
+      "id": "story_trade_hub_lv10",
+      "description": "Reach Trade Hub Lv10",
+      "type": "upgrade",
+      "level_required": 10,
+      "requirement": {
+        "building": "trade_hub",
+        "level": 10
+      },
+      "rewards": {
+        "crystal": 200,
+        "xp": 600
+      }
+    },
+    {
+      "id": "story_black_market_lv2",
+      "description": "Reach Black Market Lv2",
+      "type": "upgrade",
+      "level_required": 2,
+      "requirement": {
+        "building": "black_market",
+        "level": 2
+      },
+      "rewards": {
+        "crystal": 40,
+        "xp": 120
+      }
+    },
+    {
+      "id": "story_black_market_lv5",
+      "description": "Reach Black Market Lv5",
+      "type": "upgrade",
+      "level_required": 5,
+      "requirement": {
+        "building": "black_market",
+        "level": 5
+      },
+      "rewards": {
+        "crystal": 100,
+        "xp": 300
+      }
+    },
+    {
+      "id": "story_black_market_lv10",
+      "description": "Reach Black Market Lv10",
+      "type": "upgrade",
+      "level_required": 10,
+      "requirement": {
+        "building": "black_market",
+        "level": 10
+      },
+      "rewards": {
+        "crystal": 200,
+        "xp": 600
+      }
+    },
+    {
+      "id": "story_nanite_forge_lv2",
+      "description": "Reach Nanite Forge Lv2",
+      "type": "upgrade",
+      "level_required": 2,
+      "requirement": {
+        "building": "nanite_forge",
+        "level": 2
+      },
+      "rewards": {
+        "crystal": 40,
+        "xp": 120
+      }
+    },
+    {
+      "id": "story_nanite_forge_lv5",
+      "description": "Reach Nanite Forge Lv5",
+      "type": "upgrade",
+      "level_required": 5,
+      "requirement": {
+        "building": "nanite_forge",
+        "level": 5
+      },
+      "rewards": {
+        "crystal": 100,
+        "xp": 300
+      }
+    },
+    {
+      "id": "story_nanite_forge_lv10",
+      "description": "Reach Nanite Forge Lv10",
+      "type": "upgrade",
+      "level_required": 10,
+      "requirement": {
+        "building": "nanite_forge",
+        "level": 10
+      },
+      "rewards": {
+        "crystal": 200,
+        "xp": 600
       }
     }
   ],
   "epic_missions": [
     {
-      "id": "win_1000_battles",
-      "description": "Win 1000 Battles",
+      "id": "epic_research_lv10",
+      "description": "Upgrade Research Lab to Lv10",
+      "type": "upgrade",
       "requirement": {
-        "battle_wins": 1000
+        "building": "research_lab",
+        "level": 10
       },
       "rewards": {
-        "badge": "Legendary Commander",
-        "crystals": 10000
+        "crystal": 500,
+        "xp": 1500
       }
     },
     {
-      "id": "defend_100_attacks",
-      "description": "Defend against 100 attacks",
+      "id": "epic_barracks_lv15",
+      "description": "Upgrade Barracks to Lv15",
+      "type": "upgrade",
       "requirement": {
-        "defenses": 100
+        "building": "barracks",
+        "level": 15
       },
       "rewards": {
-        "badge": "Master Defender",
-        "xp": 5000
+        "crystal": 600,
+        "xp": 1800
+      }
+    },
+    {
+      "id": "epic_orbital_lv5",
+      "description": "Upgrade Orbital Shipyard to Lv5",
+      "type": "upgrade",
+      "requirement": {
+        "building": "orbital_shipyard",
+        "level": 5
+      },
+      "rewards": {
+        "crystal": 700,
+        "xp": 2100
+      }
+    },
+    {
+      "id": "epic_blackmarket_lv5",
+      "description": "Upgrade Black Market to Lv5",
+      "type": "upgrade",
+      "requirement": {
+        "building": "black_market",
+        "level": 5
+      },
+      "rewards": {
+        "crystal": 800,
+        "xp": 2400
+      }
+    },
+    {
+      "id": "epic_train_soldier_500",
+      "description": "Train 500 Soldiers",
+      "type": "train",
+      "unit": "soldier",
+      "amount": 500,
+      "rewards": {
+        "crystal": 300,
+        "xp": 900
+      }
+    },
+    {
+      "id": "epic_train_vehicle_100",
+      "description": "Train 100 Vehicles",
+      "type": "train",
+      "unit": "vehicle",
+      "amount": 100,
+      "rewards": {
+        "crystal": 350,
+        "xp": 1050
+      }
+    },
+    {
+      "id": "epic_mine_metal_10000",
+      "description": "Mine 10000 Metal",
+      "type": "mine",
+      "resource": "metal",
+      "amount": 10000,
+      "rewards": {
+        "crystal": 300,
+        "xp": 900
+      }
+    },
+    {
+      "id": "epic_mine_crystal_2000",
+      "description": "Mine 2000 Crystal",
+      "type": "mine",
+      "resource": "crystal",
+      "amount": 2000,
+      "rewards": {
+        "crystal": 320,
+        "xp": 960
+      }
+    },
+    {
+      "id": "epic_attack_100",
+      "description": "Attack 100 Players",
+      "type": "attack",
+      "amount": 100,
+      "rewards": {
+        "crystal": 400,
+        "xp": 1200
+      }
+    },
+    {
+      "id": "epic_win_50",
+      "description": "Win 50 Battles",
+      "type": "battle",
+      "requirement": {
+        "battle_wins": 50
+      },
+      "rewards": {
+        "crystal": 450,
+        "xp": 1350
+      }
+    },
+    {
+      "id": "epic_custom_11",
+      "description": "Complete epic quest #11",
+      "type": "attack",
+      "amount": 31,
+      "rewards": {
+        "crystal": 310,
+        "xp": 930
+      }
+    },
+    {
+      "id": "epic_custom_12",
+      "description": "Complete epic quest #12",
+      "type": "attack",
+      "amount": 32,
+      "rewards": {
+        "crystal": 320,
+        "xp": 960
+      }
+    },
+    {
+      "id": "epic_custom_13",
+      "description": "Complete epic quest #13",
+      "type": "attack",
+      "amount": 33,
+      "rewards": {
+        "crystal": 330,
+        "xp": 990
+      }
+    },
+    {
+      "id": "epic_custom_14",
+      "description": "Complete epic quest #14",
+      "type": "attack",
+      "amount": 34,
+      "rewards": {
+        "crystal": 340,
+        "xp": 1020
+      }
+    },
+    {
+      "id": "epic_custom_15",
+      "description": "Complete epic quest #15",
+      "type": "attack",
+      "amount": 35,
+      "rewards": {
+        "crystal": 350,
+        "xp": 1050
+      }
+    },
+    {
+      "id": "epic_custom_16",
+      "description": "Complete epic quest #16",
+      "type": "attack",
+      "amount": 36,
+      "rewards": {
+        "crystal": 360,
+        "xp": 1080
+      }
+    },
+    {
+      "id": "epic_custom_17",
+      "description": "Complete epic quest #17",
+      "type": "attack",
+      "amount": 37,
+      "rewards": {
+        "crystal": 370,
+        "xp": 1110
+      }
+    },
+    {
+      "id": "epic_custom_18",
+      "description": "Complete epic quest #18",
+      "type": "attack",
+      "amount": 38,
+      "rewards": {
+        "crystal": 380,
+        "xp": 1140
+      }
+    },
+    {
+      "id": "epic_custom_19",
+      "description": "Complete epic quest #19",
+      "type": "attack",
+      "amount": 39,
+      "rewards": {
+        "crystal": 390,
+        "xp": 1170
+      }
+    },
+    {
+      "id": "epic_custom_20",
+      "description": "Complete epic quest #20",
+      "type": "attack",
+      "amount": 40,
+      "rewards": {
+        "crystal": 400,
+        "xp": 1200
+      }
+    },
+    {
+      "id": "epic_custom_21",
+      "description": "Complete epic quest #21",
+      "type": "attack",
+      "amount": 41,
+      "rewards": {
+        "crystal": 410,
+        "xp": 1230
+      }
+    },
+    {
+      "id": "epic_custom_22",
+      "description": "Complete epic quest #22",
+      "type": "attack",
+      "amount": 42,
+      "rewards": {
+        "crystal": 420,
+        "xp": 1260
+      }
+    },
+    {
+      "id": "epic_custom_23",
+      "description": "Complete epic quest #23",
+      "type": "attack",
+      "amount": 43,
+      "rewards": {
+        "crystal": 430,
+        "xp": 1290
+      }
+    },
+    {
+      "id": "epic_custom_24",
+      "description": "Complete epic quest #24",
+      "type": "attack",
+      "amount": 44,
+      "rewards": {
+        "crystal": 440,
+        "xp": 1320
+      }
+    },
+    {
+      "id": "epic_custom_25",
+      "description": "Complete epic quest #25",
+      "type": "attack",
+      "amount": 45,
+      "rewards": {
+        "crystal": 450,
+        "xp": 1350
+      }
+    },
+    {
+      "id": "epic_custom_26",
+      "description": "Complete epic quest #26",
+      "type": "attack",
+      "amount": 46,
+      "rewards": {
+        "crystal": 460,
+        "xp": 1380
+      }
+    },
+    {
+      "id": "epic_custom_27",
+      "description": "Complete epic quest #27",
+      "type": "attack",
+      "amount": 47,
+      "rewards": {
+        "crystal": 470,
+        "xp": 1410
+      }
+    },
+    {
+      "id": "epic_custom_28",
+      "description": "Complete epic quest #28",
+      "type": "attack",
+      "amount": 48,
+      "rewards": {
+        "crystal": 480,
+        "xp": 1440
+      }
+    },
+    {
+      "id": "epic_custom_29",
+      "description": "Complete epic quest #29",
+      "type": "attack",
+      "amount": 49,
+      "rewards": {
+        "crystal": 490,
+        "xp": 1470
+      }
+    },
+    {
+      "id": "epic_custom_30",
+      "description": "Complete epic quest #30",
+      "type": "attack",
+      "amount": 50,
+      "rewards": {
+        "crystal": 500,
+        "xp": 1500
       }
     }
   ]
