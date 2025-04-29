@@ -1,6 +1,6 @@
 import os
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from telegram import (
     Update,
     KeyboardButton,
@@ -30,6 +30,8 @@ from utils.google_sheets import (
     load_player_army,
     load_building_queue,
     get_building_level,
+    load_resources,     # ← added
+    save_resources,     # ← added
 )
 from utils.ui_helpers import render_status_panel
 
@@ -147,7 +149,7 @@ async def building_detail_callback(update: Update, context: ContextTypes.DEFAULT
         f"• Next Lv:    {nxt}\n"
         f"• Cost:       {cost_str}\n"
         f"• Effect:     {eff_str}\n\n"
-        "Use <code>/buildinfo</code> to revisit, or tap ⬆️ to upgrade."
+        "Tap ⬆️ to upgrade or « Back to return."
     )
     markup = InlineKeyboardMarkup([
         [
@@ -167,12 +169,39 @@ async def building_back_callback(update: Update, context: ContextTypes.DEFAULT_T
 async def building_upgrade_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+    pid = str(query.from_user.id)
     key = query.data.split(":",1)[1]
-    # monkey‐patch args/message so building_system.build works:
-    context.args = [key]
-    update.message = query.message
-    await building_system.build(update, context)
-    # refresh details inline:
+
+    # —— inline build logic ——
+    cur_lv = get_building_level(pid, key)
+    nxt_lv = cur_lv + 1
+    cost   = building_system.BUILDINGS[key]["resource_cost"](nxt_lv)
+    res    = load_resources(pid)
+
+    # Check resources
+    for r, amt in cost.items():
+        if res.get(r, 0) < amt:
+            return await query.answer(
+                f"❌ Not enough {r.title()}: need {amt}, have {res.get(r,0)}",
+                show_alert=True
+            )
+
+    # Deduct & save
+    for r, amt in cost.items():
+        res[r] -= amt
+    save_resources(pid, res)
+
+    # Schedule upgrade
+    base    = building_system.BUILDINGS[key]["base_time"]
+    mult    = building_system.BUILDINGS[key]["time_mult"]
+    minutes = int(base * (mult ** cur_lv))
+    ready_at = datetime.now() + timedelta(minutes=minutes)
+    building_system.save_building_task(pid, key, datetime.now(), ready_at)
+
+    # Acknowledge
+    await query.answer(f"🔨 Upgrading to Lv {nxt_lv}!")
+
+    # Refresh detail panel
     await building_detail_callback(update, context)
 
 # ────────────────────────────────────────────────────────────────────────────────
