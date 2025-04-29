@@ -2,6 +2,7 @@
 
 import os
 from telegram import Update
+from telegram.constants import ParseMode
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -18,7 +19,7 @@ from systems import (
     shop_system,
 )
 from utils import google_sheets
-from utils.ui_helpers import render_status_panel  # now the single unified status panel
+from utils.ui_helpers import render_status_panel  # unified status panel
 
 # -------------- BOT TOKEN (from env var) --------------
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
@@ -77,11 +78,16 @@ async def lore_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # -------------- /status --------------
 async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    /status — Show your full empire status panel.
+    /status — Show your full empire status panel in a monospace block.
     """
     player_id = str(update.effective_user.id)
     panel = render_status_panel(player_id)
-    await update.message.reply_text(panel)
+    formatted = f"<pre>{panel}</pre>"
+    await update.message.reply_text(
+        formatted,
+        parse_mode=ParseMode.HTML,
+        disable_web_page_preview=True,
+    )
 
 # -------------- Catch unknown commands --------------
 async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
