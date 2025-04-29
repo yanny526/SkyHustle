@@ -8,6 +8,7 @@ from telegram import (
     ReplyKeyboardMarkup,
     KeyboardButton,
 )
+from telegram.constants import ParseMode
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -24,6 +25,7 @@ from systems import (
     shop_system,
     building_system,
 )
+from utils.google_sheets import load_player_army, load_building_queue, get_building_level
 from utils.ui_helpers import render_status_panel
 
 # ———————————————————————————————————————————————————————————————————————————
@@ -68,7 +70,7 @@ LORE_TEXT = (
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🛰️ Welcome Commander!\n\n"
-        "Use the buttons below to navigate the SkyHustle UI.",
+        "Use the menu buttons below to navigate.",
         reply_markup=MENU_MARKUP
     )
 
@@ -77,7 +79,7 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "🔹 /tutorial — Guided setup\n"
         "🔹 /status   — Empire snapshot\n"
         "🔹 /lore     — Backstory\n\n"
-        "Or just tap the buttons below:",
+        "Or tap the menu below:",
         reply_markup=MENU_MARKUP
     )
 
@@ -86,59 +88,81 @@ async def lore(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     panel = render_status_panel(str(update.effective_user.id))
-    await update.message.reply_text(panel, parse_mode="HTML", reply_markup=MENU_MARKUP)
+    await update.message.reply_text(panel, parse_mode=ParseMode.HTML, reply_markup=MENU_MARKUP)
 
 # ———————————————————————————————————————————————————————————————————————————
-# /tutorial and tutorial flows
+# Tutorial flows (highest priority)
 # ———————————————————————————————————————————————————————————————————————————
-app_tutorial = [
-    CommandHandler("tutorial", tutorial_system.tutorial),
-    CommandHandler("setname",  tutorial_system.setname),
-    CommandHandler("ready",    tutorial_system.ready),
-    CommandHandler("build",    tutorial_system.build),
-    CommandHandler("mine",     tutorial_system.tutorial_mine),
+for handler in [
+    CommandHandler("tutorial",   tutorial_system.tutorial),
+    CommandHandler("setname",    tutorial_system.setname),
+    CommandHandler("ready",      tutorial_system.ready),
+    CommandHandler("build",      tutorial_system.build),
+    CommandHandler("mine",       tutorial_system.tutorial_mine),
     CommandHandler("minestatus", tutorial_system.tutorial_mine_status),
-    CommandHandler("claimmine", tutorial_system.tutorial_claim_mine),
-    CommandHandler("train",    tutorial_system.tutorial_train),
-    CommandHandler("trainstatus", tutorial_system.tutorial_trainstatus),
-    CommandHandler("claimtrain",  tutorial_system.tutorial_claim_train),
-]
+    CommandHandler("claimmine",  tutorial_system.tutorial_claim_mine),
+    CommandHandler("train",      tutorial_system.tutorial_train),
+    CommandHandler("trainstatus",tutorial_system.tutorial_trainstatus),
+    CommandHandler("claimtrain", tutorial_system.tutorial_claim_train),
+]:
+    pass  # will add below in main()
 
 # ———————————————————————————————————————————————————————————————————————————
-# Fallback menu‐button handler
+# Menu button router
 # ———————————————————————————————————————————————————————————————————————————
 async def button_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
     pid = str(update.effective_user.id)
 
     if text == "🏗 Buildings":
-        # builds up a pretty HTML list of all buildings
-        html = building_system.menu_buildings(pid)
-        await update.message.reply_text(html, parse_mode="HTML", reply_markup=MENU_MARKUP)
+        # list each building with its current level
+        bld_q = load_building_queue(pid)
+        lines = []
+        for key in building_system.BUILDINGS:
+            lvl = get_building_level(pid, key)
+            # if it's upgrading, show "(upgrading)"
+            suffix = " (upgrading)" if any(t['building_name']==key for t in bld_q.values()) else ""
+            lines.append(f"• {key.title()}: Lv {lvl}{suffix}")
+        msg = "<b>🏗 Buildings</b>\n" + "\n".join(lines) + "\n\n" \
+              "Use /buildinfo [name] for details or /build [name] to upgrade."
+        await update.message.reply_text(msg, parse_mode=ParseMode.HTML, reply_markup=MENU_MARKUP)
 
     elif text == "🛡️ Army":
-        html = army_system.menu_army(pid)
-        await update.message.reply_text(html, parse_mode="HTML", reply_markup=MENU_MARKUP)
+        army = load_player_army(pid)
+        if not army:
+            msg = "🛡️ Your army is empty.\nUse /train [unit] [amt] to recruit."
+        else:
+            parts = [f"• {unit.title()}: {qty}" for unit, qty in army.items()]
+            msg = "<b>🛡️ Army</b>\n" + "\n".join(parts) + "\n\n" \
+                  "Use /army for full stats."
+        await update.message.reply_text(msg, parse_mode=ParseMode.HTML, reply_markup=MENU_MARKUP)
 
     elif text == "⚙️ Status":
-        html = render_status_panel(pid)
-        await update.message.reply_text(html, parse_mode="HTML", reply_markup=MENU_MARKUP)
+        panel = render_status_panel(pid)
+        await update.message.reply_text(panel, parse_mode=ParseMode.HTML, reply_markup=MENU_MARKUP)
 
     elif text == "📜 Missions":
-        html = mission_system.menu_missions(pid)
-        await update.message.reply_text(html, parse_mode="HTML", reply_markup=MENU_MARKUP)
+        await update.message.reply_text(
+            "Use /missions to view and claim today's missions.",
+            reply_markup=MENU_MARKUP
+        )
 
     elif text == "🛒 Shop":
-        html = shop_system.menu_shop(pid)
-        await update.message.reply_text(html, parse_mode="HTML", reply_markup=MENU_MARKUP)
+        await update.message.reply_text(
+            "Use /shop to browse the normal shop\n"
+            "Or /unlockblackmarket to unlock the Black Market.",
+            reply_markup=MENU_MARKUP
+        )
 
     elif text == "⚔️ Battle":
-        html = battle_system.menu_battle(pid)
-        await update.message.reply_text(html, parse_mode="HTML", reply_markup=MENU_MARKUP)
+        await update.message.reply_text(
+            "Use /attack [player_id] to strike\n"
+            "Use /battle_status to see your battles\n"
+            "Use /spy [player_id] to recon.",
+            reply_markup=MENU_MARKUP
+        )
 
-    else:
-        # pass through to real commands if they matched
-        return
+    # anything else just falls through to regular command handlers
 
 # ———————————————————————————————————————————————————————————————————————————
 # Main setup
@@ -146,27 +170,38 @@ async def button_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    # tutorial handlers (first)
-    for h in app_tutorial:
+    # Tutorial handlers
+    for h in [
+        CommandHandler("tutorial",   tutorial_system.tutorial),
+        CommandHandler("setname",    tutorial_system.setname),
+        CommandHandler("ready",      tutorial_system.ready),
+        CommandHandler("build",      tutorial_system.build),
+        CommandHandler("mine",       tutorial_system.tutorial_mine),
+        CommandHandler("minestatus", tutorial_system.tutorial_mine_status),
+        CommandHandler("claimmine",  tutorial_system.tutorial_claim_mine),
+        CommandHandler("train",      tutorial_system.tutorial_train),
+        CommandHandler("trainstatus",tutorial_system.tutorial_trainstatus),
+        CommandHandler("claimtrain", tutorial_system.tutorial_claim_train),
+    ]:
         app.add_handler(h)
 
-    # core commands
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("help",  help_cmd))
-    app.add_handler(CommandHandler("lore",  lore))
-    app.add_handler(CommandHandler("status",status))
+    # Core commands
+    app.add_handler(CommandHandler("start",   start))
+    app.add_handler(CommandHandler("help",    help_cmd))
+    app.add_handler(CommandHandler("lore",    lore))
+    app.add_handler(CommandHandler("status",  status))
 
-    # button router for our menu
+    # Menu router for button presses
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, button_router))
 
-    # fallback to your existing systems
-    app.add_handler(CommandHandler("build",     building_system.build))
-    app.add_handler(CommandHandler("buildinfo", building_system.buildinfo))
+    # Fallback to existing systems
+    app.add_handler(CommandHandler("build",      building_system.build))
+    app.add_handler(CommandHandler("buildinfo",  building_system.buildinfo))
     app.add_handler(CommandHandler("buildstatus",building_system.buildstatus))
 
-    app.add_handler(CommandHandler("mine",      timer_system.start_mining))
-    app.add_handler(CommandHandler("minestatus",timer_system.mining_status))
-    app.add_handler(CommandHandler("claimmine", timer_system.claim_mining))
+    app.add_handler(CommandHandler("mine",       timer_system.start_mining))
+    app.add_handler(CommandHandler("minestatus", timer_system.mining_status))
+    app.add_handler(CommandHandler("claimmine",  timer_system.claim_mining))
 
     app.add_handler(CommandHandler("train",      army_system.train_units))
     app.add_handler(CommandHandler("army",       army_system.view_army))
@@ -188,12 +223,12 @@ def main():
     app.add_handler(CommandHandler("blackmarket",        shop_system.blackmarket))
     app.add_handler(CommandHandler("bmbuy",               shop_system.bmbuy))
 
-    # unknown‐command fallback
+    # Unknown slash
     async def unknown(update: Update, context: ContextTypes.DEFAULT_TYPE):
-        await update.message.reply_text("❓ I don’t recognize that. Try the buttons below.", reply_markup=MENU_MARKUP)
+        await update.message.reply_text("❓ I don’t recognize that. Try the menu below.", reply_markup=MENU_MARKUP)
     app.add_handler(MessageHandler(filters.COMMAND, unknown))
 
-    # global error handler
+    # Global error handler
     app.add_error_handler(error_handler)
 
     app.run_polling()
