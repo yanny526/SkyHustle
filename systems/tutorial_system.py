@@ -4,6 +4,7 @@ import datetime
 from telegram import Update
 from telegram.ext import ContextTypes
 from systems import timer_system, army_system
+from systems import mission_system
 from utils.ui_helpers import render_status_panel
 
 # === Tutorial State Stores ===
@@ -243,6 +244,31 @@ async def tutorial_army(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "🛡️ Excellent! You’re familiar with your forces.\n"
         "📜 **Step 11**: View your missions with `/missions`.\n\n"
         + render_status_panel(player_id)
+    )
+
+# === Part 11: Tutorial Missions (/missions) ===
+async def tutorial_missions(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /missions — Tutorial-guided daily missions view in step 11.
+    """
+    player_id = str(update.effective_user.id)
+    step = tutorial_progress.get(player_id, 0)
+
+    # If not in tutorial step 11, hand off to normal handler
+    if step != 11:
+        return await mission_system.missions(update, context)
+
+    # Show the normal missions list
+    await mission_system.missions(update, context)
+
+    # Advance tutorial to step 12
+    tutorial_progress[player_id] = 12
+
+    # Prompt next action
+    await update.message.reply_text(
+        "📜 Well done! These are your Daily Missions.\n"
+        "🛒 **Step 12**: Open the shop with `/shop` to see what you can buy.\n\n"
+        f"{render_status_panel(player_id)}"
     )
 
     
