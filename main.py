@@ -17,6 +17,7 @@ from systems import (
     battle_system,
     mission_system,
     shop_system,
+    building_system
 )
 from utils import google_sheets
 from utils.ui_helpers import render_status_panel  # unified HTML panel
@@ -123,6 +124,12 @@ def main():
     app.add_handler(CommandHandler("unlockblackmarket", shop_system.unlock_blackmarket))
     app.add_handler(CommandHandler("blackmarket",       shop_system.blackmarket))
     app.add_handler(CommandHandler("bmbuy",              shop_system.bmbuy))
+
+        # --- Building System ---
+    app.add_handler(CommandHandler("build",      building_system.build))
+    app.add_handler(CommandHandler("buildinfo",  building_system.buildinfo))
+    app.add_handler(CommandHandler("buildstatus",building_system.buildstatus))
+
 
     # Catch-all for unknown slash commands
     app.add_handler(MessageHandler(filters.COMMAND, unknown_command))
