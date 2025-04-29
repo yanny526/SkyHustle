@@ -3,7 +3,7 @@ from typing import List, Tuple
 
 from utils.google_sheets import load_resources, load_player_army, load_training_queue
 from systems import timer_system, tutorial_system
-from systems.army_system import get_max_army_size
+
 
 # Maximum storage capacities (adjust as needed)
 MAX_STORAGE = {
@@ -44,6 +44,40 @@ def _format_timedelta(delta: datetime.timedelta) -> str:
 
 
 def render_status_panel(player_id: str) -> str:
+    """
+    Returns a two-line status panel showing current resources and army composition, including capacity.
+    """
+    # Lazy import to avoid circular dependencies
+    from systems.army_system import get_max_army_size
+
+    # Load player data
+    res = load_resources(player_id)
+    army = load_player_army(player_id)
+
+    # Build resource line
+    metal = res.get('metal', 0)
+    fuel = res.get('fuel', 0)
+    crystal = res.get('crystal', 0)
+    resource_line = f"⚙️ Resources — Metal: {metal} | Fuel: {fuel} | Crystal: {crystal}"
+
+    # Build army line with capacity
+    max_cap = get_max_army_size(player_id)
+    total_units = sum(army.values())
+    if army:
+        parts = []
+        for unit_key, qty in army.items():
+            icon = UNIT_ICONS.get(unit_key, '')
+            name = unit_key.replace('_', ' ').title()
+            parts.append(f"{icon} {name}: {qty}")
+        army_line = (
+            f"🛡️ Army — {total_units}/{max_cap} | "
+            + " | ".join(parts)
+        )
+    else:
+        army_line = f"🛡️ Army — 0/{max_cap} (no units)"
+
+    return resource_line + "
+" + army_line(player_id: str) -> str:
     """
     Returns a multi-line status panel:
       1. Commander name
