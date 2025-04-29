@@ -18,7 +18,7 @@ from systems import (
     shop_system
 )
 from utils import google_sheets
-from utils.ui_helpers import render_status_panel  # ← import the helper
+from utils.ui_helpers import render_full_status_panel  # ← full panel
 
 # -------------- BOT TOKEN (from env var) --------------
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
@@ -78,7 +78,7 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     /status — Show your full empire status panel.
     """
     player_id = str(update.effective_user.id)
-    panel = render_status_panel(player_id)
+    panel = render_full_status_panel(player_id)
     await update.message.reply_text(panel)
 
 # -------------- Catch unknown commands --------------
@@ -90,27 +90,27 @@ def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     # --- Tutorial Flow Handlers (highest priority) ---
-    app.add_handler(CommandHandler("tutorial",   tutorial_system.tutorial))
-    app.add_handler(CommandHandler("setname",    tutorial_system.setname))
-    app.add_handler(CommandHandler("ready",      tutorial_system.ready))
-    app.add_handler(CommandHandler("build",      tutorial_system.build))
-    app.add_handler(CommandHandler("mine",       tutorial_system.tutorial_mine))
-    app.add_handler(CommandHandler("minestatus", tutorial_system.tutorial_mine_status))
-    app.add_handler(CommandHandler("claimmine",  tutorial_system.tutorial_claim_mine))
-    app.add_handler(CommandHandler("train",      tutorial_system.tutorial_train))
-    app.add_handler(CommandHandler("trainstatus",tutorial_system.tutorial_trainstatus))
-    app.add_handler(CommandHandler("claimtrain", tutorial_system.tutorial_claim_train))
+    app.add_handler(CommandHandler("tutorial",    tutorial_system.tutorial))
+    app.add_handler(CommandHandler("setname",     tutorial_system.setname))
+    app.add_handler(CommandHandler("ready",       tutorial_system.ready))
+    app.add_handler(CommandHandler("build",       tutorial_system.build))
+    app.add_handler(CommandHandler("mine",        tutorial_system.tutorial_mine))
+    app.add_handler(CommandHandler("minestatus",  tutorial_system.tutorial_mine_status))
+    app.add_handler(CommandHandler("claimmine",   tutorial_system.tutorial_claim_mine))
+    app.add_handler(CommandHandler("train",       tutorial_system.tutorial_train))
+    app.add_handler(CommandHandler("trainstatus", tutorial_system.tutorial_trainstatus))
+    app.add_handler(CommandHandler("claimtrain",  tutorial_system.tutorial_claim_train))
 
     # --- Core Bot Commands ---
     app.add_handler(CommandHandler("start",   start))
     app.add_handler(CommandHandler("help",    help_command))
     app.add_handler(CommandHandler("lore",    lore_command))
-    app.add_handler(CommandHandler("status",  status_command))  # ← our new status
+    app.add_handler(CommandHandler("status",  status_command))
 
     # Timer System (fallback)
-    app.add_handler(CommandHandler("mine",      timer_system.start_mining))
-    app.add_handler(CommandHandler("minestatus",timer_system.mining_status))
-    app.add_handler(CommandHandler("claimmine", timer_system.claim_mining))
+    app.add_handler(CommandHandler("mine",       timer_system.start_mining))
+    app.add_handler(CommandHandler("minestatus", timer_system.mining_status))
+    app.add_handler(CommandHandler("claimmine",  timer_system.claim_mining))
 
     # Army System
     app.add_handler(CommandHandler("train",       army_system.train_units))
@@ -130,10 +130,10 @@ def main():
     app.add_handler(CommandHandler("spy",           battle_system.spy))
 
     # Shop System
-    app.add_handler(CommandHandler("shop",              shop_system.shop))
-    app.add_handler(CommandHandler("buy",               shop_system.buy))
-    app.add_handler(CommandHandler("unlockblackmarket", shop_system.unlock_blackmarket))
-    app.add_handler(CommandHandler("blackmarket",       shop_system.blackmarket))
+    app.add_handler(CommandHandler("shop",               shop_system.shop))
+    app.add_handler(CommandHandler("buy",                shop_system.buy))
+    app.add_handler(CommandHandler("unlockblackmarket",  shop_system.unlock_blackmarket))
+    app.add_handler(CommandHandler("blackmarket",        shop_system.blackmarket))
     app.add_handler(CommandHandler("bmbuy",              shop_system.bmbuy))
 
     # Fallback for any other /command
