@@ -1,146 +1,120 @@
-import os
-from telegram import Update, ParseMode
-from telegram.ext import (
-    ApplicationBuilder,
-    CommandHandler,
-    MessageHandler,
-    ContextTypes,
-    filters,
-)
-from systems import (
-    tutorial_system,
-    timer_system,
-    army_system,
-    battle_system,
-    mission_system,
-    shop_system,
-)
-from utils import google_sheets
-from utils.ui_helpers import render_status_panel  # unified HTML-tagged panel
+# utils/ui_helpers.py
 
-# -------------- BOT TOKEN (from env var) --------------
-BOT_TOKEN = os.environ.get("BOT_TOKEN")
-if not BOT_TOKEN:
-    raise RuntimeError("Missing BOT_TOKEN environment variable")
+import datetime
+from typing import List, Tuple
 
-# -------------- Backstory Text --------------
-LORE_TEXT = (
-    "🌌 Year 3137.\n"
-    "Humanity shattered into warring factions.\n"
-    "The planet's surface is dead. Survivors now live aboard colossal flying fortresses known as SkyHustles.\n\n"
-    "🛡️ As Commander, you lead your SkyHustle to survival.\n"
-    "Mine rare resources, build your forces, and conquer the skies.\n\n"
-    "🕶️ Rumors speak of a forbidden Black Market — where power can be bought, but destiny must still be earned.\n\n"
-    "⚔️ Fight bravely, Commander. The skies belong to the strong. Welcome to SKYHUSTLE."
-)
+from utils.google_sheets import load_resources, load_player_army, load_training_queue
+from systems.army_system import get_max_army_size
+import systems.timer_system as timer_system
+import systems.tutorial_system as tutorial_system
 
-# -------------- /start --------------
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "🛰️ Welcome Commander!\n\n"
-        "Type /tutorial for a quick guided setup—or /help to see all commands."
-    )
+# === Constants & Icons ===
+MAX_STORAGE = {
+    "metal": 5000,
+    "fuel": 2500,
+    "crystal": 1000,
+    "credits": 500
+}
 
-# -------------- /help --------------
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    help_text = (
-        "🛡️ SkyHustle Help Menu\n\n"
-        "Core Commands:\n"
-        "- /tutorial — First-time player walkthrough\n"
-        "- /status — View your Empire Status\n"
-        "- /army — View Your Army\n"
-        "- /train [unit] [amount] — Train New Units\n"
-        "- /trainstatus — Check Training Progress\n"
-        "- /claimtrain — Claim Completed Training\n"
-        "- /mine [resource] [amount] — Start Mining\n"
-        "- /minestatus — View Mining Progress\n"
-        "- /claimmine — Claim Completed Mining\n"
-        "- /attack [player_id] — Launch an Attack\n"
-        "- /battle_status — View Battle History\n"
-        "- /spy [player_id] — Spy on an Enemy\n"
-        "- /missions — View Daily Missions\n"
-        "- /shop — Open Normal Shop\n"
-        "- /unlockblackmarket — Unlock Black Market\n"
-        "- /lore — Read the SkyHustle Backstory"
-    )
-    await update.message.reply_text(help_text)
+UNIT_ICONS = {
+    "soldier": "👤",
+    "tank": "🚛",
+    "scout_drone": "🛰️",
+    "raider_mech_suit": "🤖",
+    "infinity_scout_vehicle": "🚀",
+}
 
-# -------------- /lore --------------
-async def lore_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(LORE_TEXT)
+TIMER_ICONS = {
+    "mine": "⛏️",
+    "train": "🏭"
+}
 
-# -------------- /status --------------
-async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def _format_timedelta(delta: datetime.timedelta) -> str:
+    seconds = int(delta.total_seconds())
+    days, seconds = divmod(seconds, 86400)
+    hours, seconds = divmod(seconds, 3600)
+    minutes, seconds = divmod(seconds, 60)
+    parts = []
+    if days:
+        parts.append(f"{days}d")
+    if hours:
+        parts.append(f"{hours}h")
+    parts.append(f"{minutes}m {seconds}s")
+    return " ".join(parts)
+
+def render_status_panel(player_id: str) -> str:
     """
-    /status — Show your full empire status panel.
+    Returns a multi-line HTML-formatted status panel including:
+      • Commander name
+      • Resources (current/max)
+      • Army (used/max + top units)
+      • Up to 2 soonest timers (mining/training)
+      • Active shield remaining
     """
-    player_id = str(update.effective_user.id)
-    panel = render_status_panel(player_id)
-    await update.message.reply_text(
-        panel,
-        parse_mode=ParseMode.HTML,
-        disable_web_page_preview=True
+
+    now = datetime.datetime.now()
+
+    # 1) Commander
+    commander = tutorial_system.player_names.get(player_id, "Commander")
+    line_commander = f"<b>Commander:</b> {commander}"
+
+    # 2) Resources
+    res = load_resources(player_id)
+    res_line = (
+        "⚙️ <b>Resources</b> — "
+        + " | ".join(
+            f"{k.capitalize()}: {res.get(k,0)}/{MAX_STORAGE[k]}"
+            for k in ("metal", "fuel", "crystal", "credits")
+        )
     )
 
-# -------------- Catch unknown commands --------------
-async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🤖 Unknown command. Type /help to see available commands.")
+    # 3) Army
+    army = load_player_army(player_id)
+    used = sum(army.values())
+    cap = get_max_army_size(player_id)
+    # show top 3 unit types by quantity
+    top_units: List[Tuple[str,int]] = sorted(army.items(), key=lambda x: x[1], reverse=True)[:3]
+    parts = [f"{UNIT_ICONS.get(u,'')} {cnt}" for u,cnt in top_units]
+    army_line = f"🛡️ <b>Army</b> — {used}/{cap}" + ((" | " + " | ".join(parts)) if parts else "")
 
-# -------------- Main Setup --------------
-def main():
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    # 4) Active Timers
+    timer_msgs: List[Tuple[datetime.timedelta,str]] = []
 
-    # --- Tutorial Flow Handlers (highest priority) ---
-    app.add_handler(CommandHandler("tutorial",   tutorial_system.tutorial))
-    app.add_handler(CommandHandler("setname",    tutorial_system.setname))
-    app.add_handler(CommandHandler("ready",      tutorial_system.ready))
-    app.add_handler(CommandHandler("build",      tutorial_system.build))
-    app.add_handler(CommandHandler("mine",       tutorial_system.tutorial_mine))
-    app.add_handler(CommandHandler("minestatus", tutorial_system.tutorial_mine_status))
-    app.add_handler(CommandHandler("claimmine",  tutorial_system.tutorial_claim_mine))
-    app.add_handler(CommandHandler("train",      tutorial_system.tutorial_train))
-    app.add_handler(CommandHandler("trainstatus",tutorial_system.tutorial_trainstatus))
-    app.add_handler(CommandHandler("claimtrain", tutorial_system.tutorial_claim_train))
+    # 4a) Mining timers
+    for res_key, details in getattr(timer_system, "player_mining", {}).get(player_id, {}).items():
+        end = datetime.datetime.strptime(details["end_time"], "%Y-%m-%d %H:%M:%S")
+        rem = end - now
+        if rem.total_seconds() > 0:
+            timer_msgs.append((rem, f"{TIMER_ICONS['mine']} Mining {res_key.capitalize()}: {_format_timedelta(rem)}"))
 
-    # --- Core Bot Commands ---
-    app.add_handler(CommandHandler("start",   start))
-    app.add_handler(CommandHandler("help",    help_command))
-    app.add_handler(CommandHandler("lore",    lore_command))
-    app.add_handler(CommandHandler("status",  status_command))
+    # 4b) Training timers
+    queue = load_training_queue(player_id)
+    for task in queue.values():
+        end = datetime.datetime.strptime(task["end_time"], "%Y-%m-%d %H:%M:%S")
+        rem = end - now
+        if rem.total_seconds() > 0:
+            timer_msgs.append((rem, f"{TIMER_ICONS['train']} Training {task['amount']}× {task['unit_name'].capitalize()}: {_format_timedelta(rem)}"))
 
-    # --- Timer System (fallback once tutorial passes) ---
-    app.add_handler(CommandHandler("mine",      timer_system.start_mining))
-    app.add_handler(CommandHandler("minestatus",timer_system.mining_status))
-    app.add_handler(CommandHandler("claimmine", timer_system.claim_mining))
+    # pick up to 2 soonest
+    timer_msgs.sort(key=lambda x: x[0])
+    timer_line = ""
+    if timer_msgs:
+        timer_line = "⏳ " + " | ".join(msg for _, msg in timer_msgs[:2])
 
-    # --- Army System ---
-    app.add_handler(CommandHandler("train",       army_system.train_units))
-    app.add_handler(CommandHandler("army",        army_system.view_army))
-    app.add_handler(CommandHandler("trainstatus", army_system.training_status))
-    app.add_handler(CommandHandler("claimtrain",  army_system.claim_training))
+    # 5) Shield status
+    shield_line = ""
+    exp = tutorial_system.shield_expirations.get(player_id)
+    if exp:
+        rem = exp - now
+        if rem.total_seconds() > 0:
+            shield_line = f"🛡️ Shield Active: {_format_timedelta(rem)}"
 
-    # --- Mission System ---
-    app.add_handler(CommandHandler("missions",      mission_system.missions))
-    app.add_handler(CommandHandler("storymissions", mission_system.storymissions))
-    app.add_handler(CommandHandler("epicmissions",  mission_system.epicmissions))
-    app.add_handler(CommandHandler("claimmission",  mission_system.claimmission))
+    # Assemble all lines
+    lines = [line_commander, res_line, army_line]
+    if timer_line:
+        lines.append(timer_line)
+    if shield_line:
+        lines.append(shield_line)
 
-    # --- Battle System ---
-    app.add_handler(CommandHandler("attack",        battle_system.attack))
-    app.add_handler(CommandHandler("battle_status", battle_system.battle_status))
-    app.add_handler(CommandHandler("spy",           battle_system.spy))
-
-    # --- Shop System ---
-    app.add_handler(CommandHandler("shop",              shop_system.shop))
-    app.add_handler(CommandHandler("buy",               shop_system.buy))
-    app.add_handler(CommandHandler("unlockblackmarket", shop_system.unlock_blackmarket))
-    app.add_handler(CommandHandler("blackmarket",       shop_system.blackmarket))
-    app.add_handler(CommandHandler("bmbuy",              shop_system.bmbuy))
-
-    # --- Fallback for any other /command ---
-    app.add_handler(MessageHandler(filters.COMMAND, unknown_command))
-
-    app.run_polling()
-
-if __name__ == "__main__":
-    main()
+    # Join with newlines and return HTML-ready string
+    return "\n".join(lines)
