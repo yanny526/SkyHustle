@@ -3,7 +3,7 @@
 import datetime
 from telegram import Update
 from telegram.ext import ContextTypes
-from systems import timer_system, army_system
+from systems import timer_system, army_system, mission_system, shop_system
 from systems import mission_system
 from utils.ui_helpers import render_status_panel
 
