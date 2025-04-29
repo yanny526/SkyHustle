@@ -8,7 +8,7 @@ from systems import (
     army_system,
     mission_system,
     shop_system,
-    building_system      # ← import your real building handlers
+    building_system,
 )
 from utils.ui_helpers import render_status_panel
 
@@ -84,13 +84,9 @@ async def build(update: Update, context: ContextTypes.DEFAULT_TYPE):
     player_id = str(update.effective_user.id)
     step = tutorial_progress.get(player_id, 0)
 
-    # If we're exactly at step 3, handle tutorial
     if step == 3:
         if context.args != ["command_center"]:
-            return await update.message.reply_text(
-                "⚙️ Usage: `/build command_center` to construct your HQ."
-            )
-
+            return await update.message.reply_text("⚙️ Usage: `/build command_center` to construct your HQ.")
         tutorial_progress[player_id] = 4
         return await update.message.reply_text(
             "🏗️ **Construction Complete!**\n\n"
@@ -100,7 +96,7 @@ async def build(update: Update, context: ContextTypes.DEFAULT_TYPE):
             + render_status_panel(player_id)
         )
 
-    # Otherwise, tutorial is not intercepting—delegate to your real building_system
+    # Delegate to your real building handlers
     return await building_system.build(update, context)
 
 # === Part 4: Tutorial Mining (/mine) ===
@@ -110,9 +106,7 @@ async def tutorial_mine(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await timer_system.start_mining(update, context)
 
     if context.args != ["metal", "500"]:
-        return await update.message.reply_text(
-            "⚙️ Tutorial: Type `/mine metal 500` to extract 500 Metal."
-        )
+        return await update.message.reply_text("⚙️ Tutorial: Type `/mine metal 500` to extract 500 Metal.")
 
     await timer_system.start_mining(update, context)
     tutorial_progress[player_id] = 5
@@ -157,9 +151,7 @@ async def tutorial_train(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await army_system.train_units(update, context)
 
     if context.args != ["soldier", "10"]:
-        return await update.message.reply_text(
-            "⚙️ Tutorial: Type `/train soldier 10` to enlist 10 Soldiers."
-        )
+        return await update.message.reply_text("⚙️ Tutorial: Type `/train soldier 10` to enlist 10 Soldiers.")
 
     await army_system.train_units(update, context)
     tutorial_progress[player_id] = 8
@@ -212,7 +204,7 @@ async def tutorial_army(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 # === Part 11: Tutorial Missions (/missions) ===
-async def tutorial_missions(update: Update, context: ContextTypes.DEFAULT_‍TYPE):
+async def tutorial_missions(update: Update, context: ContextTypes.DEFAULT_TYPE):
     player_id = str(update.effective_user.id)
     if not ensure_step(player_id, 11):
         return await mission_system.missions(update, context)
