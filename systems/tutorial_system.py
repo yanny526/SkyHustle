@@ -3,12 +3,17 @@
 import datetime
 from telegram import Update
 from telegram.ext import ContextTypes
-from systems import timer_system, army_system, mission_system, shop_system
-from systems import mission_system
+from systems import (
+    timer_system,
+    army_system,
+    mission_system,
+    shop_system,
+    building_system      # ← import your real building handlers
+)
 from utils.ui_helpers import render_status_panel
 
 # === Tutorial State Stores ===
-# player_id → current tutorial step (1–10)
+# player_id → current tutorial step (1–13)
 tutorial_progress: dict[str, int] = {}
 # player_id → chosen commander name
 player_names: dict[str, str] = {}
@@ -26,9 +31,6 @@ def ensure_step(player_id: str, step: int) -> bool:
 
 # === Part 1: Tutorial Initialization (/tutorial) ===
 async def tutorial(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    /tutorial — Start the first-time player tutorial.
-    """
     player_id = str(update.effective_user.id)
     tutorial_progress[player_id] = 1
     await update.message.reply_text(
@@ -39,18 +41,12 @@ async def tutorial(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # === Part 1.1: Set Commander Name (/setname) ===
 async def setname(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    /setname [name] — Let player choose their commander name.
-    """
     player_id = str(update.effective_user.id)
     if not ensure_step(player_id, 1):
-        return await update.message.reply_text(
-            "⚠️ Please start the tutorial first with `/tutorial`."
-        )
+        return await update.message.reply_text("⚠️ Please start the tutorial first with `/tutorial`.")
     if not context.args:
         return await update.message.reply_text("⚡ Usage: `/setname [Your Name]`")
 
-    # Save name and advance
     name = " ".join(context.args).strip()
     player_names[player_id] = name
     tutorial_progress[player_id] = 2
@@ -64,16 +60,10 @@ async def setname(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # === Part 2: Activate Starter Shield (/ready) ===
 async def ready(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    /ready — Activate your 4-day starter shield and prompt your first build.
-    """
     player_id = str(update.effective_user.id)
     if not ensure_step(player_id, 2):
-        return await update.message.reply_text(
-            "⚠️ You need to set your name first with `/setname [Your Name]`."
-        )
+        return await update.message.reply_text("⚠️ You need to set your name first with `/setname [Your Name]`.")
 
-    # Activate shield
     expiration = datetime.datetime.now() + datetime.timedelta(days=4)
     shield_expirations[player_id] = expiration
     tutorial_progress[player_id] = 3
@@ -88,35 +78,35 @@ async def ready(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # === Part 3: Build Command Center (/build) ===
 async def build(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    /build [building] — Construct your first tutorial building.
+    /build [building] — either run the tutorial step (if step 3)
+                        or hand off to the real building_system.
     """
     player_id = str(update.effective_user.id)
-    if not ensure_step(player_id, 3):
+    step = tutorial_progress.get(player_id, 0)
+
+    # If we're exactly at step 3, handle tutorial
+    if step == 3:
+        if context.args != ["command_center"]:
+            return await update.message.reply_text(
+                "⚙️ Usage: `/build command_center` to construct your HQ."
+            )
+
+        tutorial_progress[player_id] = 4
         return await update.message.reply_text(
-            "⚠️ You need to activate your shield first with `/ready`."
-        )
-    if context.args != ["command_center"]:
-        return await update.message.reply_text(
-            "⚙️ Usage: `/build command_center` to construct your HQ."
+            "🏗️ **Construction Complete!**\n\n"
+            "Your Command Center is now operational.\n"
+            "🎯 **Step 2**: Start mining resources!\n"
+            "Type `/mine metal 500` to begin extracting Metal.\n\n"
+            + render_status_panel(player_id)
         )
 
-    tutorial_progress[player_id] = 4
-    await update.message.reply_text(
-        "🏗️ **Construction Complete!**\n\n"
-        "Your Command Center is now operational.\n"
-        "🎯 **Step 2**: Start mining resources!\n"
-        "Type `/mine metal 500` to begin extracting Metal.\n\n"
-        + render_status_panel(player_id)
-    )
+    # Otherwise, tutorial is not intercepting—delegate to your real building_system
+    return await building_system.build(update, context)
 
 # === Part 4: Tutorial Mining (/mine) ===
 async def tutorial_mine(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    /mine — Tutorial-guided mining in step 4.
-    """
     player_id = str(update.effective_user.id)
     if not ensure_step(player_id, 4):
-        # Outside of tutorial step 4, run normal logic
         return await timer_system.start_mining(update, context)
 
     if context.args != ["metal", "500"]:
@@ -124,7 +114,6 @@ async def tutorial_mine(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "⚙️ Tutorial: Type `/mine metal 500` to extract 500 Metal."
         )
 
-    # Perform mining
     await timer_system.start_mining(update, context)
     tutorial_progress[player_id] = 5
     await update.message.reply_text(
@@ -135,14 +124,10 @@ async def tutorial_mine(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # === Part 5: Check Mining Status (/minestatus) ===
 async def tutorial_mine_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    /minestatus — Tutorial-guided status check in step 5.
-    """
     player_id = str(update.effective_user.id)
     if not ensure_step(player_id, 5):
         return await timer_system.mining_status(update, context)
 
-    # Show status
     await timer_system.mining_status(update, context)
     tutorial_progress[player_id] = 6
     await update.message.reply_text(
@@ -153,9 +138,6 @@ async def tutorial_mine_status(update: Update, context: ContextTypes.DEFAULT_TYP
 
 # === Part 6: Claim Mined Resources (/claimmine) ===
 async def tutorial_claim_mine(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    /claimmine — Tutorial-guided claim in step 6.
-    """
     player_id = str(update.effective_user.id)
     if not ensure_step(player_id, 6):
         return await timer_system.claim_mining(update, context)
@@ -170,9 +152,6 @@ async def tutorial_claim_mine(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 # === Part 7: Tutorial Training (/train) ===
 async def tutorial_train(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    /train — Tutorial-guided training in step 7.
-    """
     player_id = str(update.effective_user.id)
     if not ensure_step(player_id, 7):
         return await army_system.train_units(update, context)
@@ -192,9 +171,6 @@ async def tutorial_train(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # === Part 8: Tutorial Training Status (/trainstatus) ===
 async def tutorial_trainstatus(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    /trainstatus — Tutorial-guided status check in step 8.
-    """
     player_id = str(update.effective_user.id)
     if not ensure_step(player_id, 8):
         return await army_system.training_status(update, context)
@@ -209,9 +185,6 @@ async def tutorial_trainstatus(update: Update, context: ContextTypes.DEFAULT_TYP
 
 # === Part 9: Tutorial Claim Training (/claimtrain) ===
 async def tutorial_claim_train(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    /claimtrain — Tutorial-guided claim in step 9.
-    """
     player_id = str(update.effective_user.id)
     if not ensure_step(player_id, 9):
         return await army_system.claim_training(update, context)
@@ -223,23 +196,15 @@ async def tutorial_claim_train(update: Update, context: ContextTypes.DEFAULT_TYP
         "📜 **Step 10**: View your full army roster with `/army`.\n\n"
         + render_status_panel(player_id)
     )
+
 # === Part 10: Tutorial View Army (/army) ===
 async def tutorial_army(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    /army — Tutorial-guided army view in step 10.
-    """
     player_id = str(update.effective_user.id)
-    # Only intercept at step 10
-    if tutorial_progress.get(player_id, 0) != 10:
+    if not ensure_step(player_id, 10):
         return await army_system.view_army(update, context)
 
-    # Show the normal army view
     await army_system.view_army(update, context)
-
-    # Advance tutorial to step 11
     tutorial_progress[player_id] = 11
-
-    # Prompt the next step
     await update.message.reply_text(
         "🛡️ Excellent! You’re familiar with your forces.\n"
         "📜 **Step 11**: View your missions with `/missions`.\n\n"
@@ -247,51 +212,29 @@ async def tutorial_army(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 # === Part 11: Tutorial Missions (/missions) ===
-async def tutorial_missions(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    /missions — Tutorial-guided daily missions view in step 11.
-    """
+async def tutorial_missions(update: Update, context: ContextTypes.DEFAULT_‍TYPE):
     player_id = str(update.effective_user.id)
-    step = tutorial_progress.get(player_id, 0)
-
-    # If not in tutorial step 11, hand off to normal handler
-    if step != 11:
+    if not ensure_step(player_id, 11):
         return await mission_system.missions(update, context)
 
-    # Show the normal missions list
     await mission_system.missions(update, context)
-
-    # Advance tutorial to step 12
     tutorial_progress[player_id] = 12
-
-    # Prompt next action
     await update.message.reply_text(
         "📜 Well done! These are your Daily Missions.\n"
         "🛒 **Step 12**: Open the shop with `/shop` to see what you can buy.\n\n"
-        f"{render_status_panel(player_id)}"
+        + render_status_panel(player_id)
     )
+
 # === Part 12: Tutorial Shop (/shop) ===
 async def tutorial_shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    /shop — Tutorial-guided shop browse in step 12.
-    """
     player_id = str(update.effective_user.id)
-    step = tutorial_progress.get(player_id, 0)
-
-    # If not in tutorial step 12, hand off to normal shop handler
-    if step != 12:
+    if not ensure_step(player_id, 12):
         return await shop_system.shop(update, context)
 
-    # Show the normal shop list
     await shop_system.shop(update, context)
-
-    # Advance tutorial to step 13
     tutorial_progress[player_id] = 13
-
-    # Prompt next action
     await update.message.reply_text(
         "🛒 Great! These are the Normal Shop items.\n"
         "💡 **Step 13**: Purchase your first item with `/buy [item_id]`.\n\n"
-        f"{render_status_panel(player_id)}"
+        + render_status_panel(player_id)
     )
-    
