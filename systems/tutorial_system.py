@@ -222,3 +222,27 @@ async def tutorial_claim_train(update: Update, context: ContextTypes.DEFAULT_TYP
         "📜 **Step 10**: View your full army roster with `/army`.\n\n"
         + render_status_panel(player_id)
     )
+# === Part 10: Tutorial View Army (/army) ===
+async def tutorial_army(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /army — Tutorial-guided army view in step 10.
+    """
+    player_id = str(update.effective_user.id)
+    # Only intercept at step 10
+    if tutorial_progress.get(player_id, 0) != 10:
+        return await army_system.view_army(update, context)
+
+    # Show the normal army view
+    await army_system.view_army(update, context)
+
+    # Advance tutorial to step 11
+    tutorial_progress[player_id] = 11
+
+    # Prompt the next step
+    await update.message.reply_text(
+        "🛡️ Excellent! You’re familiar with your forces.\n"
+        "📜 **Step 11**: View your missions with `/missions`.\n\n"
+        + render_status_panel(player_id)
+    )
+
+    
