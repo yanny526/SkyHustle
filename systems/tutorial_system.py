@@ -270,5 +270,28 @@ async def tutorial_missions(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "🛒 **Step 12**: Open the shop with `/shop` to see what you can buy.\n\n"
         f"{render_status_panel(player_id)}"
     )
+# === Part 12: Tutorial Shop (/shop) ===
+async def tutorial_shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /shop — Tutorial-guided shop browse in step 12.
+    """
+    player_id = str(update.effective_user.id)
+    step = tutorial_progress.get(player_id, 0)
 
+    # If not in tutorial step 12, hand off to normal shop handler
+    if step != 12:
+        return await shop_system.shop(update, context)
+
+    # Show the normal shop list
+    await shop_system.shop(update, context)
+
+    # Advance tutorial to step 13
+    tutorial_progress[player_id] = 13
+
+    # Prompt next action
+    await update.message.reply_text(
+        "🛒 Great! These are the Normal Shop items.\n"
+        "💡 **Step 13**: Purchase your first item with `/buy [item_id]`.\n\n"
+        f"{render_status_panel(player_id)}"
+    )
     
