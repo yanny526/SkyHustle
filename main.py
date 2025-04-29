@@ -30,8 +30,8 @@ from utils.google_sheets import (
     load_player_army,
     load_building_queue,
     get_building_level,
-    load_resources,     # ← added
-    save_resources,     # ← added
+    load_resources,
+    save_resources,
 )
 from utils.ui_helpers import render_status_panel
 
@@ -133,6 +133,23 @@ async def building_detail_callback(update: Update, context: ContextTypes.DEFAULT
     pid = str(query.from_user.id)
     key = query.data.split(":",1)[1]
 
+    # — If already upgrading, show remaining time and only a Back button —
+    queue = load_building_queue(pid)
+    for task in queue.values():
+        if task['building_name'] == key:
+            end_time = datetime.strptime(task["end_time"], "%Y-%m-%d %H:%M:%S")
+            rem = building_system._format_timedelta(end_time - datetime.now())
+            text = (
+                f"🏗️ <b>{key.replace('_',' ').title()}</b>\n"
+                f"• Current Lv: {get_building_level(pid, key)} (Upgrading: {rem} left)\n\n"
+                "« Back to list"
+            )
+            markup = InlineKeyboardMarkup([
+                [ InlineKeyboardButton("« Back", callback_data="BUILDING:__back__") ]
+            ])
+            return await query.edit_message_text(text, parse_mode=ParseMode.HTML, reply_markup=markup)
+
+    # — Otherwise, show normal detail & Upgrade button —
     cur = get_building_level(pid, key)
     nxt = cur + 1
     cost = building_system.BUILDINGS[key]["resource_cost"](nxt)
@@ -172,7 +189,7 @@ async def building_upgrade_callback(update: Update, context: ContextTypes.DEFAUL
     pid = str(query.from_user.id)
     key = query.data.split(":",1)[1]
 
-    # —— inline build logic ——
+    # —— Inline build logic ——
     cur_lv = get_building_level(pid, key)
     nxt_lv = cur_lv + 1
     cost   = building_system.BUILDINGS[key]["resource_cost"](nxt_lv)
@@ -198,10 +215,8 @@ async def building_upgrade_callback(update: Update, context: ContextTypes.DEFAUL
     ready_at = datetime.now() + timedelta(minutes=minutes)
     building_system.save_building_task(pid, key, datetime.now(), ready_at)
 
-    # Acknowledge
+    # Acknowledge & refresh detail to show “Upgrading”
     await query.answer(f"🔨 Upgrading to Lv {nxt_lv}!")
-
-    # Refresh detail panel
     await building_detail_callback(update, context)
 
 # ────────────────────────────────────────────────────────────────────────────────
