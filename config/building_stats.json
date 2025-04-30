@@ -42,7 +42,7 @@
     }
   },
   "fuel_mine": {
-    "display_name": "Fuel Extractor",
+    "display_name": "Fuel Mine",
     "max_level": 5,
     "base_cost": {
       "metal": 60,
@@ -63,7 +63,7 @@
     }
   },
   "crystal_mine": {
-    "display_name": "Crystal Quarry",
+    "display_name": "Crystal Mine",
     "max_level": 5,
     "base_cost": {
       "metal": 80,
@@ -80,6 +80,232 @@
         120,
         240,
         480
+      ]
+    }
+  },
+  "warehouse": {
+    "display_name": "Warehouse",
+    "max_level": 5,
+    "base_cost": {
+      "metal": 150,
+      "fuel": 100,
+      "crystal": 50
+    },
+    "cost_multiplier": 1.6,
+    "base_time_min": 4,
+    "time_multiplier": 1.4,
+    "effects": {
+      "storage_boost": [
+        10,
+        20,
+        30,
+        40,
+        50
+      ]
+    }
+  },
+  "barracks": {
+    "display_name": "Barracks",
+    "max_level": 5,
+    "base_cost": {
+      "metal": 200,
+      "fuel": 100,
+      "crystal": 50
+    },
+    "cost_multiplier": 1.6,
+    "base_time_min": 4,
+    "time_multiplier": 1.4,
+    "effects": {
+      "train_speed": [
+        5,
+        10,
+        15,
+        20,
+        25
+      ]
+    }
+  },
+  "vehicle_factory": {
+    "display_name": "Vehicle Factory",
+    "max_level": 5,
+    "base_cost": {
+      "metal": 400,
+      "fuel": 200,
+      "crystal": 100
+    },
+    "cost_multiplier": 1.7,
+    "base_time_min": 6,
+    "time_multiplier": 1.5,
+    "effects": {
+      "vehicle_bonus": [
+        2,
+        4,
+        6,
+        8,
+        10
+      ]
+    }
+  },
+  "drone_hangar": {
+    "display_name": "Drone Hangar",
+    "max_level": 5,
+    "base_cost": {
+      "metal": 250,
+      "fuel": 150,
+      "crystal": 75
+    },
+    "cost_multiplier": 1.7,
+    "base_time_min": 5,
+    "time_multiplier": 1.4,
+    "effects": {
+      "drone_bonus": [
+        5,
+        10,
+        15,
+        20,
+        25
+      ]
+    }
+  },
+  "shield_generator": {
+    "display_name": "Shield Generator",
+    "max_level": 5,
+    "base_cost": {
+      "metal": 300,
+      "fuel": 100,
+      "crystal": 150
+    },
+    "cost_multiplier": 1.6,
+    "base_time_min": 6,
+    "time_multiplier": 1.5,
+    "effects": {
+      "damage_reduction": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ]
+    }
+  },
+  "laser_turrets": {
+    "display_name": "Laser Turrets",
+    "max_level": 5,
+    "base_cost": {
+      "metal": 400,
+      "fuel": 200
+    },
+    "cost_multiplier": 1.6,
+    "base_time_min": 5,
+    "time_multiplier": 1.5,
+    "effects": {
+      "turret_damage": [
+        5,
+        10,
+        15,
+        20,
+        25
+      ]
+    }
+  },
+  "missile_silos": {
+    "display_name": "Missile Silos",
+    "max_level": 5,
+    "base_cost": {
+      "metal": 500,
+      "fuel": 300
+    },
+    "cost_multiplier": 1.7,
+    "base_time_min": 7,
+    "time_multiplier": 1.6,
+    "effects": {
+      "missile_bonus": [
+        5,
+        10,
+        15,
+        20,
+        25
+      ]
+    }
+  },
+  "research_lab": {
+    "display_name": "Research Lab",
+    "max_level": 5,
+    "base_cost": {
+      "metal": 300,
+      "crystal": 200
+    },
+    "cost_multiplier": 1.6,
+    "base_time_min": 6,
+    "time_multiplier": 1.4,
+    "effects": {
+      "tech_speed": [
+        2,
+        4,
+        6,
+        8,
+        10
+      ]
+    }
+  },
+  "radar_station": {
+    "display_name": "Radar Station",
+    "max_level": 5,
+    "base_cost": {
+      "metal": 200,
+      "fuel": 150
+    },
+    "cost_multiplier": 1.5,
+    "base_time_min": 4,
+    "time_multiplier": 1.3,
+    "effects": {
+      "spy_accuracy": [
+        5,
+        10,
+        15,
+        20,
+        25
+      ]
+    }
+  },
+  "orbital_shipyard": {
+    "display_name": "Orbital Shipyard",
+    "max_level": 5,
+    "base_cost": {
+      "metal": 1000,
+      "crystal": 500
+    },
+    "cost_multiplier": 1.9,
+    "base_time_min": 10,
+    "time_multiplier": 1.5,
+    "effects": {
+      "ship_capacity": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ]
+    }
+  },
+  "trade_hub": {
+    "display_name": "Trade Hub",
+    "max_level": 5,
+    "base_cost": {
+      "metal": 600,
+      "fuel": 600,
+      "crystal": 300
+    },
+    "cost_multiplier": 1.6,
+    "base_time_min": 5,
+    "time_multiplier": 1.4,
+    "effects": {
+      "trade_slots": [
+        1,
+        2,
+        3,
+        4,
+        5
       ]
     }
   }
