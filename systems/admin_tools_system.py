@@ -1,13 +1,7 @@
-# admin_tools_system.py (Part 1)
+# admin_tools_system.py (Part 1 of X)
 
-import os
-import time
-from datetime import datetime
-from telegram import Update, ParseMode
-from telegram.ext import ContextTypes, CommandHandler, ApplicationBuilder
-from telegram.helpers import escape_markdown
-from telegram.error import BadRequest
-
+from telegram import Update
+from telegram.ext import ContextTypes
 from utils.google_sheets import (
     save_resources,
     load_resources,
@@ -15,17 +9,9 @@ from utils.google_sheets import (
     load_player_army,
     save_building_level,
     get_building_level,
-    load_building_queue,
-    buildings_ws,
-    army_ws,
-    resources_ws,
-    training_ws,
-    building_queue_ws,
-    purchases_ws,
-    get_worksheet,
 )
 
-# ── Admin Setup ─────────────────────────────────────────────────────
+# ── Admin Check ─────────────────────────────────────────────────────
 ADMIN_IDS = {
     "yanny": 7737016510  # Replace with your actual Telegram user ID
 }
@@ -35,51 +21,55 @@ def is_admin(user_id: int) -> bool:
 
 # ── Give Resources ───────────────────────────────────────────────────
 async def give_resources(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_admin(update.effective_user.id):
-        return await update.message.reply_text("❌ Unauthorized.")
+    user_id = update.effective_user.id
+    if not is_admin(user_id):
+        return await update.message.reply_text("❌ You are not authorized to use this command.")
 
-    if len(context.args) != 3:
-        return await update.message.reply_text("Usage: ,give_resource [player_id] [resource] [amount]")
+    args = context.args
+    if len(args) != 3:
+        return await update.message.reply_text("Usage: /give_resource [player_id] [resource] [amount]")
 
-    pid, resource, amount = context.args
+    pid, resource, amount = args
     try:
         amount = int(amount)
-        res = load_resources(pid)
-        res[resource] = res.get(resource, 0) + amount
-        save_resources(pid, res)
+        current = load_resources(pid)
+        current[resource] = current.get(resource, 0) + amount
+        save_resources(pid, current)
         await update.message.reply_text(f"✅ Gave {amount} {resource} to {pid}.")
     except Exception as e:
         await update.message.reply_text(f"❌ Error: {str(e)}")
 
 # ── Take Resources ───────────────────────────────────────────────────
 async def take_resources(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_admin(update.effective_user.id):
-        return await update.message.reply_text("❌ Unauthorized.")
+    user_id = update.effective_user.id
+    if not is_admin(user_id):
+        return await update.message.reply_text("❌ You are not authorized to use this command.")
 
-    if len(context.args) != 3:
-        return await update.message.reply_text("Usage: ,take_resource [player_id] [resource] [amount]")
+    args = context.args
+    if len(args) != 3:
+        return await update.message.reply_text("Usage: /take_resource [player_id] [resource] [amount]")
 
-    pid, resource, amount = context.args
+    pid, resource, amount = args
     try:
         amount = int(amount)
-        res = load_resources(pid)
-        res[resource] = max(0, res.get(resource, 0) - amount)
-        save_resources(pid, res)
+        current = load_resources(pid)
+        current[resource] = max(0, current.get(resource, 0) - amount)
+        save_resources(pid, current)
         await update.message.reply_text(f"✅ Took {amount} {resource} from {pid}.")
     except Exception as e:
         await update.message.reply_text(f"❌ Error: {str(e)}")
 
-# admin_tools_system.py (Part 2)
-
 # ── Give Units ──────────────────────────────────────────────────────
 async def give_units(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_admin(update.effective_user.id):
-        return await update.message.reply_text("❌ Unauthorized.")
+    user_id = update.effective_user.id
+    if not is_admin(user_id):
+        return await update.message.reply_text("❌ You are not authorized to use this command.")
 
-    if len(context.args) != 3:
-        return await update.message.reply_text("Usage: ,give_unit [player_id] [unit] [amount]")
+    args = context.args
+    if len(args) != 3:
+        return await update.message.reply_text("Usage: /give_unit [player_id] [unit] [amount]")
 
-    pid, unit, amount = context.args
+    pid, unit, amount = args
     try:
         amount = int(amount)
         army = load_player_army(pid)
@@ -88,16 +78,27 @@ async def give_units(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"✅ Gave {amount} {unit} to {pid}.")
     except Exception as e:
         await update.message.reply_text(f"❌ Error: {str(e)}")
+# admin_tools_system.py (Part 2 of X)
+
+from utils.google_sheets import (
+    buildings_ws,
+    army_ws,
+    resources_ws,
+    training_ws,
+    building_queue_ws,
+)
 
 # ── Set Building Level ──────────────────────────────────────────────
 async def set_building_level(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_admin(update.effective_user.id):
+    user_id = update.effective_user.id
+    if not is_admin(user_id):
         return await update.message.reply_text("❌ Unauthorized.")
 
-    if len(context.args) != 3:
-        return await update.message.reply_text("Usage: ,set_building [player_id] [building] [level]")
+    args = context.args
+    if len(args) != 3:
+        return await update.message.reply_text("Usage: /set_building [player_id] [building] [level]")
 
-    pid, building, level = context.args
+    pid, building, level = args
     try:
         level = int(level)
         save_building_level(pid, building, level)
@@ -105,7 +106,27 @@ async def set_building_level(update: Update, context: ContextTypes.DEFAULT_TYPE)
     except Exception as e:
         await update.message.reply_text(f"❌ Error: {str(e)}")
 
-# ── Wipe Player Data (Single Sheets) ────────────────────────────────
+# ── Wipe Player Data ────────────────────────────────────────────────
+async def wipe_player(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if not is_admin(user_id):
+        return await update.message.reply_text("❌ Unauthorized.")
+
+    if len(context.args) != 1:
+        return await update.message.reply_text("Usage: /wipe_player [player_id]")
+
+    pid = context.args[0]
+    try:
+        _wipe_from_ws(buildings_ws, pid, "player_id")
+        _wipe_from_ws(army_ws, pid, "player_id")
+        _wipe_from_ws(resources_ws, pid, "player_id")
+        _wipe_from_ws(training_ws, pid, "player_id")
+        _wipe_from_ws(building_queue_ws, pid, "player_id")
+
+        await update.message.reply_text(f"✅ Wiped all data for {pid}.")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Error wiping data: {str(e)}")
+
 def _wipe_from_ws(ws, pid: str, col_name: str = "player_id"):
     records = ws.get_all_records()
     col_idx = 1
@@ -117,31 +138,19 @@ def _wipe_from_ws(ws, pid: str, col_name: str = "player_id"):
     cells = ws.findall(pid, in_column=col_idx)
     for cell in reversed(cells):
         ws.delete_row(cell.row)
+# admin_tools_system.py (Part 3 of X)
 
-async def wipe_player(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_admin(update.effective_user.id):
-        return await update.message.reply_text("❌ Unauthorized.")
+# ── Give Premium Item ────────────────────────────────────────────────
+from utils.google_sheets import purchases_ws
+import time
 
-    if len(context.args) != 1:
-        return await update.message.reply_text("Usage: ,wipe_player [player_id]")
-
-    pid = context.args[0]
-    try:
-        for ws in [resources_ws, buildings_ws, army_ws, training_ws, building_queue_ws]:
-            _wipe_from_ws(ws, pid)
-        await update.message.reply_text(f"✅ Wiped all data for {pid}.")
-    except Exception as e:
-        await update.message.reply_text(f"❌ Error wiping data: {str(e)}")
-
-# admin_tools_system.py (Part 3)
-
-# ── Give Premium Item ───────────────────────────────────────────────
 async def give_premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_admin(update.effective_user.id):
+    user_id = update.effective_user.id
+    if not is_admin(user_id):
         return await update.message.reply_text("❌ Unauthorized.")
 
     if len(context.args) != 2:
-        return await update.message.reply_text("Usage: ,give_premium [player_id] [item_id]")
+        return await update.message.reply_text("Usage: /give_premium [player_id] [item_id]")
 
     pid, item_id = context.args
     try:
@@ -150,13 +159,14 @@ async def give_premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"❌ Failed to assign item: {str(e)}")
 
-# ── Reset Player Resources ──────────────────────────────────────────
+# ── Reset Player Resources ────────────────────────────────────────────
 async def reset_resources(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_admin(update.effective_user.id):
+    user_id = update.effective_user.id
+    if not is_admin(user_id):
         return await update.message.reply_text("❌ Unauthorized.")
 
     if len(context.args) != 1:
-        return await update.message.reply_text("Usage: ,reset_resources [player_id]")
+        return await update.message.reply_text("Usage: /reset_resources [player_id]")
 
     pid = context.args[0]
     try:
@@ -165,7 +175,14 @@ async def reset_resources(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"❌ Error resetting resources: {str(e)}")
 
-# ── List Players ────────────────────────────────────────────────────
+# ── Admin User Check ────────────────────────────────────────────────
+def is_admin(user_id: int) -> bool:
+    return str(user_id) in os.environ.get("ADMIN_IDS", "")
+# admin_tools_system.py (Part 4 of X)
+
+from telegram.helpers import escape_markdown
+
+# ── List All Players ────────────────────────────────────────────────
 async def list_players(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id):
         return await update.message.reply_text("❌ Unauthorized.")
@@ -182,21 +199,21 @@ async def list_players(update: Update, context: ContextTypes.DEFAULT_TYPE):
             credits = row.get("credits", 0)
             lines.append(f"• ID: {pid} | 💠 Metal: {metal} | 💳 Credits: {credits}")
 
-        message = "\n".join(lines[:50])
+        message = "\n".join(lines[:50])  # Limit display
         await update.message.reply_text(f"<b>📋 Player Summary:</b>\n{message}", parse_mode=ParseMode.HTML)
 
     except Exception as e:
         await update.message.reply_text(f"❌ Error listing players: {str(e)}")
 
-# admin_tools_system.py (Part 4)
+# ── Broadcast Message ────────────────────────────────────────────────
+from telegram.error import BadRequest
 
-# ── Broadcast Message ───────────────────────────────────────────────
 async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id):
         return await update.message.reply_text("❌ Unauthorized.")
 
     if not context.args:
-        return await update.message.reply_text("Usage: ,broadcast [message]")
+        return await update.message.reply_text("Usage: /broadcast [message]")
 
     msg = " ".join(context.args)
     rows = resources_ws.get_all_records()
@@ -211,31 +228,35 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
             fail += 1
 
     await update.message.reply_text(f"✅ Broadcast sent to {success} users. ❌ Failed: {fail}")
+# admin_tools_system.py (Part 5 of X)
 
-# ── Wipe All Player Data (All Sheets) ───────────────────────────────
+from telegram.ext import CommandHandler
+
+# ── Wipe Player Data ────────────────────────────────────────────────
 async def wipe_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id):
         return await update.message.reply_text("❌ Unauthorized.")
     if len(context.args) != 1:
-        return await update.message.reply_text("Usage: ,wipe [player_id]")
+        return await update.message.reply_text("Usage: /wipe [player_id]")
 
     target_id = context.args[0]
     deleted = 0
     try:
-        for ws in [resources_ws, buildings_ws, training_ws, army_ws, building_queue_ws, purchases_ws]:
+        for ws in [resources_ws, buildings_ws, training_ws, army_ws, building_queue_ws, missions_ws, purchases_ws]:
             for cell in ws.findall(str(target_id)):
                 ws.delete_row(cell.row)
                 deleted += 1
-        await update.message.reply_text(f"✅ Wiped player {target_id} ({deleted} entries removed)")
+        await update.message.reply_text(f"✅ Data wiped for player {target_id} ({deleted} entries removed)")
     except Exception as e:
         await update.message.reply_text(f"❌ Error wiping data: {str(e)}")
 
-# ── Inspect Player ──────────────────────────────────────────────────
+
+# ── Inspect Player ───────────────────────────────────────────────────
 async def inspect_player(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id):
         return await update.message.reply_text("❌ Unauthorized.")
     if len(context.args) != 1:
-        return await update.message.reply_text("Usage: ,inspect [player_id]")
+        return await update.message.reply_text("Usage: /inspect [player_id]")
 
     pid = context.args[0]
     try:
@@ -250,27 +271,23 @@ async def inspect_player(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
     except Exception as e:
         await update.message.reply_text(f"❌ Error inspecting player: {str(e)}")
-# admin_tools_system.py (Part 5)
 
-# ── Register Admin Tools ────────────────────────────────────────────
+# admin_tools_system.py (Part 6 of X)
+
+from telegram.ext import ApplicationBuilder
+
+# ── Register Admin Commands ─────────────────────────────────────────
 def register_admin_tools(app: ApplicationBuilder):
-    app.add_handler(CommandHandler("give_resource", give_resources))
-    app.add_handler(CommandHandler("take_resource", take_resources))
-    app.add_handler(CommandHandler("give_unit", give_units))
-    app.add_handler(CommandHandler("set_building", set_building_level))
-    app.add_handler(CommandHandler("give_premium", give_premium))
-    app.add_handler(CommandHandler("reset_resources", reset_resources))
-    app.add_handler(CommandHandler("wipe_player", wipe_player))
-    app.add_handler(CommandHandler("list_players", list_players))
-    app.add_handler(CommandHandler("broadcast", broadcast))
+    app.add_handler(CommandHandler("give", give_item))
+    app.add_handler(CommandHandler("take", take_item))
     app.add_handler(CommandHandler("wipe", wipe_data))
     app.add_handler(CommandHandler("inspect", inspect_player))
 
-# ── Admin Audit Logger ──────────────────────────────────────────────
+# ── Optional: Admin Audit Logger ─────────────────────────────────────
 def log_admin_action(admin_id, action: str, target_id: str, details: str = ""):
     try:
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        audit_ws = get_worksheet("admin_audit")
+        audit_ws = get_worksheet("admin_audit")  # optional worksheet
         audit_ws.append_row([admin_id, action, target_id, details, timestamp])
     except Exception as e:
-        print(f"⚠️ Audit log failed: {e}")
+        logger.warning(f"Audit log failed: {e}")
