@@ -133,7 +133,6 @@ async def building_detail_callback(update: Update, context: ContextTypes.DEFAULT
     key = query.data.split(":",1)[1]
 
     queue = load_building_queue(pid)
-    # If already upgrading
     for task in queue.values():
         if task['building_name'] == key:
             end_time = datetime.strptime(task["end_time"], "%Y-%m-%d %H:%M:%S")
@@ -148,7 +147,6 @@ async def building_detail_callback(update: Update, context: ContextTypes.DEFAULT
             ])
             return await query.edit_message_text(text, parse_mode=ParseMode.HTML, reply_markup=markup)
 
-    # Normal detail
     cur = get_building_level(pid, key)
     nxt = cur + 1
     cost = building_system.BUILDINGS[key]["resource_cost"](nxt)
@@ -193,7 +191,6 @@ async def building_upgrade_callback(update: Update, context: ContextTypes.DEFAUL
     cost   = building_system.BUILDINGS[key]["resource_cost"](nxt_lv)
     res    = load_resources(pid)
 
-    # Check resources
     for r, amt in cost.items():
         if res.get(r, 0) < amt:
             return await query.answer(
@@ -201,12 +198,10 @@ async def building_upgrade_callback(update: Update, context: ContextTypes.DEFAUL
                 show_alert=True
             )
 
-    # Deduct & save
     for r, amt in cost.items():
         res[r] -= amt
     save_resources(pid, res)
 
-    # Schedule upgrade
     base    = building_system.BUILDINGS[key]["base_time"]
     mult    = building_system.BUILDINGS[key]["time_mult"]
     minutes = int(base * (mult ** cur_lv))
@@ -249,19 +244,52 @@ async def menu_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    # Tutorial
     for h in TUTORIAL_HANDLERS:
         app.add_handler(h)
 
-    # Core
     app.add_handler(CommandHandler("start",  start))
     app.add_handler(CommandHandler("help",   help_cmd))
     app.add_handler(CommandHandler("lore",   lore))
     app.add_handler(CommandHandler("status", status))
 
-    # Reply‐keyboard menu
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, menu_router))
 
-    # Inline building callbacks
     app.add_handler(CallbackQueryHandler(building_detail_callback, pattern="^BUILDING:[^_].+"))
-    app.add_handler(CallbackQueryHandler(building_back_callback,   pattern="^BUILDING:__back__$
+    app.add_handler(CallbackQueryHandler(building_back_callback,   pattern="^BUILDING:__back__""))
+    app.add_handler(CallbackQueryHandler(building_upgrade_callback,pattern="^BUILDING_UPGRADE:.+"))
+
+    # Mission inline callback
+    app.add_handler(CallbackQueryHandler(mission_system.claim_callback, pattern="^MISSION_CLAIM:.+"))
+
+    app.add_handler(CommandHandler("build",       building_system.build))
+    app.add_handler(CommandHandler("buildinfo",   building_system.buildinfo))
+    app.add_handler(CommandHandler("buildstatus", building_system.buildstatus))
+    app.add_handler(CommandHandler("mine",        timer_system.start_mining))
+    app.add_handler(CommandHandler("minestatus",  timer_system.mining_status))
+    app.add_handler(CommandHandler("claimmine",   timer_system.claim_mining))
+    app.add_handler(CommandHandler("train",       army_system.train_units))
+    app.add_handler(CommandHandler("army",        army_system.view_army))
+    app.add_handler(CommandHandler("trainstatus", army_system.training_status))
+    app.add_handler(CommandHandler("claimtrain",  army_system.claim_training))
+    app.add_handler(CommandHandler("missions",      mission_system.missions))
+    app.add_handler(CommandHandler("storymissions", mission_system.storymissions))
+    app.add_handler(CommandHandler("epicmissions",  mission_system.epicmissions))
+    app.add_handler(CommandHandler("claimmission",  mission_system.claimmission))
+    app.add_handler(CommandHandler("attack",         battle_system.attack))
+    app.add_handler(CommandHandler("battle_status",  battle_system.battle_status))
+    app.add_handler(CommandHandler("spy",            battle_system.spy))
+    app.add_handler(CommandHandler("shop",            shop_system.shop))
+    app.add_handler(CommandHandler("buy",             shop_system.buy))
+    app.add_handler(CommandHandler("unlockblackmarket", shop_system.unlock_blackmarket))
+    app.add_handler(CommandHandler("blackmarket",       shop_system.blackmarket))
+    app.add_handler(CommandHandler("bmbuy",             shop_system.bmbuy))
+
+    app.add_handler(MessageHandler(filters.COMMAND,
+        lambda u,c: u.message.reply_text("❓ Unknown—use the menu below.", reply_markup=MENU_MARKUP)
+    ))
+
+    app.add_error_handler(error_handler)
+    app.run_polling()
+
+if __name__ == "__main__":
+    main()
