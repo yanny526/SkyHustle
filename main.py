@@ -156,8 +156,8 @@ async def building_detail_callback(update: Update, context: ContextTypes.DEFAULT
 
     cur = get_building_level(pid, key)
     nxt = cur + 1
-    cost = building_system.BUILDINGS[key]["resource_cost"](nxt)
-    eff = building_system.BUILDINGS[key]["effect"](nxt) or {}
+    cost = building_system.BUILDINGS[key]["resource_cost"]
+    eff = building_system.BUILDINGS[key].get("effects", {})
 
     cost_str = " | ".join(f"{k.capitalize()}: {v}" for k, v in cost.items())
     eff_str = ", ".join(
@@ -194,7 +194,7 @@ async def upgrade_building_callback(update: Update, context: ContextTypes.DEFAUL
 
     cur = get_building_level(pid, key)
     nxt = cur + 1
-    cost = building_system.BUILDINGS[key]["resource_cost"](nxt)
+    cost = building_system.BUILDINGS[key]["resource_cost"]
     base = building_system.BUILDINGS[key]["base_time_min"]
     mult = building_system.BUILDINGS[key]["time_multiplier"]
     upgrade_time = base * (mult ** cur)
@@ -277,7 +277,7 @@ def register_handlers(app: ApplicationBuilder):
         app.add_handler(handler)
 
     # Buildings
-    app.add_handler(MessageHandler(filters.TEXT & filters.Regex("🏗️ Buildings"), send_building_list))
+    app.add_handler(MessageHandler(filters.TEXT & filters.regex("🏗️ Buildings"), send_building_list))
     app.add_handler(CallbackQueryHandler(building_detail_callback, pattern="^BUILDING:"))
     app.add_handler(CallbackQueryHandler(upgrade_building_callback, pattern="^UPGRADE:"))
     app.add_handler(CallbackQueryHandler(send_building_list, pattern="^BUILDINGS"))
@@ -285,7 +285,7 @@ def register_handlers(app: ApplicationBuilder):
     app.add_handler(CommandHandler("buildinfo", building_system.buildinfo))
 
     # Army
-    app.add_handler(MessageHandler(filters.TEXT & filters.Regex("🛡️ Army"), send_army_list))
+    app.add_handler(MessageHandler(filters.TEXT & filters.regex("🛡️ Army"), send_army_list))
     app.add_handler(CallbackQueryHandler(main_menu_callback, pattern="^MAIN_MENU"))
     app.add_handler(CommandHandler("train", army_system.train_units))
     app.add_handler(CommandHandler("army", army_system.view_army))
