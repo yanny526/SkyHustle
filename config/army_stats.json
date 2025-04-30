@@ -1,20 +1,47 @@
 {
-    "soldier": {
-        "attack": 10,
-        "defense": 5,
-        "hp": 50,
-        "training_time": 1
-    },
-    "tank": {
-        "attack": 40,
-        "defense": 30,
-        "hp": 200,
-        "training_time": 5
-    },
-    "vehicle": {
-        "attack": 25,
-        "defense": 15,
-        "hp": 100,
-        "training_time": 3
-    }
+  "soldier": {
+    "display_name": "Soldier",
+    "attack": 10,
+    "defense": 5,
+    "hp": 50,
+    "speed": 10,
+    "role": "infantry",
+    "training_time": 1
+  },
+  "tank": {
+    "display_name": "Tank",
+    "attack": 40,
+    "defense": 30,
+    "hp": 200,
+    "speed": 5,
+    "role": "heavy",
+    "training_time": 5
+  },
+  "drone": {
+    "display_name": "Drone",
+    "attack": 25,
+    "defense": 15,
+    "hp": 100,
+    "speed": 15,
+    "role": "ranged",
+    "training_time": 3
+  },
+  "artillery": {
+    "display_name": "Artillery",
+    "attack": 50,
+    "defense": 10,
+    "hp": 80,
+    "speed": 3,
+    "role": "siege",
+    "training_time": 7
+  },
+  "scout": {
+    "display_name": "Scout",
+    "attack": 5,
+    "defense": 20,
+    "hp": 60,
+    "speed": 20,
+    "role": "recon",
+    "training_time": 2
+  }
 }
