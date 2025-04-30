@@ -244,23 +244,25 @@ async def menu_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
+    # Tutorial
     for h in TUTORIAL_HANDLERS:
         app.add_handler(h)
 
+    # Core
     app.add_handler(CommandHandler("start",  start))
     app.add_handler(CommandHandler("help",   help_cmd))
     app.add_handler(CommandHandler("lore",   lore))
     app.add_handler(CommandHandler("status", status))
 
+    # Reply-keyboard menu
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, menu_router))
 
+    # Inline building callbacks
     app.add_handler(CallbackQueryHandler(building_detail_callback, pattern="^BUILDING:[^_].+"))
-    app.add_handler(CallbackQueryHandler(building_back_callback,   pattern="^BUILDING:__back__""))
+    app.add_handler(CallbackQueryHandler(building_back_callback,   pattern="^BUILDING:__back__$"))
     app.add_handler(CallbackQueryHandler(building_upgrade_callback,pattern="^BUILDING_UPGRADE:.+"))
 
-    # Mission inline callback
-    app.add_handler(CallbackQueryHandler(mission_system.claim_callback, pattern="^MISSION_CLAIM:.+"))
-
+    # Fallback commands
     app.add_handler(CommandHandler("build",       building_system.build))
     app.add_handler(CommandHandler("buildinfo",   building_system.buildinfo))
     app.add_handler(CommandHandler("buildstatus", building_system.buildstatus))
@@ -284,6 +286,7 @@ def main():
     app.add_handler(CommandHandler("blackmarket",       shop_system.blackmarket))
     app.add_handler(CommandHandler("bmbuy",             shop_system.bmbuy))
 
+    # Unknown /fallback
     app.add_handler(MessageHandler(filters.COMMAND,
         lambda u,c: u.message.reply_text("❓ Unknown—use the menu below.", reply_markup=MENU_MARKUP)
     ))
