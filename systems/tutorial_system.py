@@ -1,5 +1,3 @@
-# systems/tutorial_system.py
-
 import datetime
 from telegram import Update
 from telegram.ext import ContextTypes
@@ -13,11 +11,8 @@ from systems import (
 from utils.ui_helpers import render_status_panel
 
 # === Tutorial State Stores ===
-# player_id → current tutorial step (1–13)
 tutorial_progress: dict[str, int] = {}
-# player_id → chosen commander name
 player_names: dict[str, str] = {}
-# player_id → datetime when starter shield expires
 shield_expirations: dict[str, datetime.datetime] = {}
 
 # === Helpers ===
@@ -43,7 +38,9 @@ async def tutorial(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def setname(update: Update, context: ContextTypes.DEFAULT_TYPE):
     player_id = str(update.effective_user.id)
     if not ensure_step(player_id, 1):
-        return await update.message.reply_text("⚠️ Please start the tutorial first with `/tutorial`.")
+        return await update.message.reply_text(
+            "⚠️ Please start the tutorial first with `/tutorial`."
+        )
     if not context.args:
         return await update.message.reply_text("⚡ Usage: `/setname [Your Name]`")
 
@@ -62,7 +59,9 @@ async def setname(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def ready(update: Update, context: ContextTypes.DEFAULT_TYPE):
     player_id = str(update.effective_user.id)
     if not ensure_step(player_id, 2):
-        return await update.message.reply_text("⚠️ You need to set your name first with `/setname [Your Name]`.")
+        return await update.message.reply_text(
+            "⚠️ You need to set your name first with `/setname [Your Name]`."
+        )
 
     expiration = datetime.datetime.now() + datetime.timedelta(days=4)
     shield_expirations[player_id] = expiration
@@ -79,14 +78,16 @@ async def ready(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def build(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     /build [building] — either run the tutorial step (if step 3)
-                        or hand off to the real building_system.
+    or delegate to the real building_system.
     """
     player_id = str(update.effective_user.id)
     step = tutorial_progress.get(player_id, 0)
 
     if step == 3:
         if context.args != ["command_center"]:
-            return await update.message.reply_text("⚙️ Usage: `/build command_center` to construct your HQ.")
+            return await update.message.reply_text(
+                "⚙️ Usage: `/build command_center` to construct your HQ."
+            )
         tutorial_progress[player_id] = 4
         return await update.message.reply_text(
             "🏗️ **Construction Complete!**\n\n"
@@ -96,7 +97,6 @@ async def build(update: Update, context: ContextTypes.DEFAULT_TYPE):
             + render_status_panel(player_id)
         )
 
-    # Delegate to your real building handlers
     return await building_system.build(update, context)
 
 # === Part 4: Tutorial Mining (/mine) ===
@@ -106,90 +106,91 @@ async def tutorial_mine(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await timer_system.start_mining(update, context)
 
     if context.args != ["metal", "500"]:
-        return await update.message.reply_text("⚙️ Tutorial: Type `/mine metal 500` to extract 500 Metal.")
+        return await update.message.reply_text(
+            "⛏️ Usage: `/mine metal 500` to mine 500 Metal."
+        )
 
-    await timer_system.start_mining(update, context)
     tutorial_progress[player_id] = 5
-    await update.message.reply_text(
-        "⛏️ Excellent! Your Metal mining has begun.\n"
-        "🔎 **Step 5**: Check your mining progress with `/minestatus`.\n\n"
+    return await update.message.reply_text(
+        "⛏️ Mining Metal...\n"
+        "Use `/minestatus` to check progress, and `/claimmine` to collect the resources.\n\n"
+        "⏳ _(This will take a few seconds in the tutorial, but longer in the real game.)_\n\n"
         + render_status_panel(player_id)
     )
 
-# === Part 5: Check Mining Status (/minestatus) ===
+# === Part 5: Tutorial Mining Status (/minestatus) ===
 async def tutorial_mine_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     player_id = str(update.effective_user.id)
     if not ensure_step(player_id, 5):
         return await timer_system.mining_status(update, context)
 
-    await timer_system.mining_status(update, context)
     tutorial_progress[player_id] = 6
-    await update.message.reply_text(
-        "🔎 Great! You’ve checked your mining progress.\n"
-        "⏳ **Step 6**: Claim your mined Metal with `/claimmine`.\n\n"
+    return await update.message.reply_text(
+        "⛏️ Metal mining complete!\n"
+        "Use `/claimmine` to collect the resources.\n\n"
         + render_status_panel(player_id)
     )
 
-# === Part 6: Claim Mined Resources (/claimmine) ===
+# === Part 6: Tutorial Claim Mining (/claimmine) ===
 async def tutorial_claim_mine(update: Update, context: ContextTypes.DEFAULT_TYPE):
     player_id = str(update.effective_user.id)
     if not ensure_step(player_id, 6):
         return await timer_system.claim_mining(update, context)
 
-    await timer_system.claim_mining(update, context)
     tutorial_progress[player_id] = 7
-    await update.message.reply_text(
-        "🎉 Well done — your Metal is now in your stores!\n"
-        "🏭 **Step 7**: Train your first Soldiers with `/train soldier 10`.\n\n"
+    return await update.message.reply_text(
+        "💰 500 Metal added to your storage!\n\n"
+        "⚔️ **Step 3**: Train your first army unit.\n"
+        "Type `/train soldier 10` to recruit 10 Soldiers.\n\n"
         + render_status_panel(player_id)
     )
 
-# === Part 7: Tutorial Training (/train) ===
+# === Part 7: Tutorial Train (/train) ===
 async def tutorial_train(update: Update, context: ContextTypes.DEFAULT_TYPE):
     player_id = str(update.effective_user.id)
     if not ensure_step(player_id, 7):
         return await army_system.train_units(update, context)
 
     if context.args != ["soldier", "10"]:
-        return await update.message.reply_text("⚙️ Tutorial: Type `/train soldier 10` to enlist 10 Soldiers.")
+        return await update.message.reply_text(
+            "⚔️ Usage: `/train soldier 10` to train 10 Soldiers."
+        )
 
-    await army_system.train_units(update, context)
     tutorial_progress[player_id] = 8
-    await update.message.reply_text(
-        "🏭 Amazing! Your Soldiers are training.\n"
-        "🔍 **Step 8**: Check training progress with `/trainstatus`.\n\n"
+    return await update.message.reply_text(
+        "⚔️ Training Soldiers...\n"
+        "Use `/trainstatus` to check progress, and `/claimtrain` to add them to your army.\n\n"
+        "⏳ _(This will take a few seconds in the tutorial, but longer in the real game.)_\n\n"
         + render_status_panel(player_id)
     )
 
-# === Part 8: Tutorial Training Status (/trainstatus) ===
+# === Part 8: Tutorial Train Status (/trainstatus) ===
 async def tutorial_trainstatus(update: Update, context: ContextTypes.DEFAULT_TYPE):
     player_id = str(update.effective_user.id)
     if not ensure_step(player_id, 8):
         return await army_system.training_status(update, context)
 
-    await army_system.training_status(update, context)
     tutorial_progress[player_id] = 9
-    await update.message.reply_text(
-        "🔍 Nice! You’ve checked your training progress.\n"
-        "🎉 **Step 9**: Claim your trained Soldiers with `/claimtrain`.\n\n"
+    return await update.message.reply_text(
+        "⚔️ Soldier training complete!\n"
+        "Use `/claimtrain` to add them to your army.\n\n"
         + render_status_panel(player_id)
     )
 
-# === Part 9: Tutorial Claim Training (/claimtrain) ===
+# === Part 9: Tutorial Claim Train (/claimtrain) ===
 async def tutorial_claim_train(update: Update, context: ContextTypes.DEFAULT_TYPE):
     player_id = str(update.effective_user.id)
     if not ensure_step(player_id, 9):
         return await army_system.claim_training(update, context)
 
-    await army_system.claim_training(update, context)
     tutorial_progress[player_id] = 10
-    await update.message.reply_text(
-        "🎉 Congratulations! You’ve claimed your first Soldiers.\n"
-        "📜 **Step 10**: View your full army roster with `/army`.\n\n"
+    return await update.message.reply_text(
+        "👤 10 Soldiers added to your army!\n\n"
+        "🛡️ **Step 10**: View your army with `/army`.\n\n"
         + render_status_panel(player_id)
     )
 
-# === Part 10: Tutorial View Army (/army) ===
+# === Part 10: Tutorial Army (/army) ===
 async def tutorial_army(update: Update, context: ContextTypes.DEFAULT_TYPE):
     player_id = str(update.effective_user.id)
     if not ensure_step(player_id, 10):
@@ -226,7 +227,8 @@ async def tutorial_shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await shop_system.shop(update, context)
     tutorial_progress[player_id] = 13
     await update.message.reply_text(
-        "🛒 Great! These are the Normal Shop items.\n"
-        "💡 **Step 13**: Purchase your first item with `/buy [item_id]`.\n\n"
+        "🛒 Great! This is the shop where you can spend your Crystals.\n\n"
+        "🎉 **Tutorial Complete!**\n"
+        "You're now ready to play the full game. Good luck, Commander!\n\n"
         + render_status_panel(player_id)
     )
