@@ -88,17 +88,19 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         save_inbox_message(user_id, "Welcome", "Welcome to SkyHustle!")
 
     await update.message.reply_text(
-        "🌍 *Welcome to SkyHustle!*
+    "🌍 *Welcome to SkyHustle!*\n\n"
+    "A Telegram strategy game where you:\n"
+    "🛠 Build your base\n"
+    "⚔️ Attack rivals\n"
+    "📍 Control zones\n"
+    "🧬 Unlock tech\n"
+    "💎 Buy from the Black Market\n\n"
+    "👉 Type `/setname YourName` to begin\n"
+    "👉 View `/profile`, `/status`, `/zones`, `/build`\n"
+    "Claim free resources with `/daily`!",
+    parse_mode="Markdown"
+)
 
-"
-        "Use /setname <your_name> to begin.
-"
-        "Then explore /profile, /zones, /status, and /build.
-
-"
-        "Rise, conquer, and become the most feared commander.",
-        parse_mode="Markdown"
-    )
 
 # Add your full handler logic here...
 
