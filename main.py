@@ -36,7 +36,6 @@ from utils.google_sheets import (
 from utils.ui_helpers import render_status_panel
 
 # ────────────────────────────────────────────────────────────────────────────────
-# Logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -46,7 +45,6 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Oops, something went wrong.")
 
 # ────────────────────────────────────────────────────────────────────────────────
-# Persistent Reply Keyboard
 MAIN_MENU = [
     [KeyboardButton("🏗 Buildings"), KeyboardButton("🛡️ Army")],
     [KeyboardButton("⚙️ Status"),    KeyboardButton("📜 Missions")],
@@ -54,14 +52,10 @@ MAIN_MENU = [
 ]
 MENU_MARKUP = ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True)
 
-# ────────────────────────────────────────────────────────────────────────────────
-# Bot Token
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 if not BOT_TOKEN:
     raise RuntimeError("Missing BOT_TOKEN env var")
 
-# ────────────────────────────────────────────────────────────────────────────────
-# /start, /help, /lore, /status
 LORE_TEXT = (
     "🌌 Year 3137.\n"
     "Humanity shattered into warring factions...\n"
@@ -92,8 +86,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         panel, parse_mode=ParseMode.HTML, reply_markup=MENU_MARKUP
     )
 
-# ────────────────────────────────────────────────────────────────────────────────
-# Tutorial flows (highest priority)
+# Tutorial handlers
 TUTORIAL_HANDLERS = [
     CommandHandler("tutorial",    tutorial_system.tutorial),
     CommandHandler("setname",     tutorial_system.setname),
@@ -107,9 +100,7 @@ TUTORIAL_HANDLERS = [
     CommandHandler("claimtrain",  tutorial_system.tutorial_claim_train),
 ]
 
-# ────────────────────────────────────────────────────────────────────────────────
-# BUILDING LIST & DETAILS
-
+# Building menu
 def _make_building_list(pid: str):
     queue = load_building_queue(pid)
     buttons = []
@@ -211,7 +202,7 @@ async def building_upgrade_callback(update: Update, context: ContextTypes.DEFAUL
     await query.answer(f"🔨 Upgrading to Lv {nxt_lv}!")
     await building_detail_callback(update, context)
 
-# ────────────────────────────────────────────────────────────────────────────────
+# Main menu router
 async def menu_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
     pid  = str(update.effective_user.id)
@@ -240,27 +231,33 @@ async def menu_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if text == "⚔️ Battle":
         return await update.message.reply_text("Use /attack or /battle_status.", reply_markup=MENU_MARKUP)
 
-# ────────────────────────────────────────────────────────────────────────────────
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    # Tutorial
+    # Tutorial first
     for h in TUTORIAL_HANDLERS:
         app.add_handler(h)
 
-    # Core
+    # Core commands
     app.add_handler(CommandHandler("start",  start))
     app.add_handler(CommandHandler("help",   help_cmd))
     app.add_handler(CommandHandler("lore",   lore))
     app.add_handler(CommandHandler("status", status))
+    app.add_handler(CommandHandler("missions",      mission_system.missions))
+    app.add_handler(CommandHandler("storymissions", mission_system.storymissions))
+    app.add_handler(CommandHandler("epicmissions",  mission_system.epicmissions))
+    # ✂️ remove the broken `/claimmission` handler
 
-    # Reply-keyboard menu
+    # Reply‐keyboard menu
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, menu_router))
 
     # Inline building callbacks
     app.add_handler(CallbackQueryHandler(building_detail_callback, pattern="^BUILDING:[^_].+"))
     app.add_handler(CallbackQueryHandler(building_back_callback,   pattern="^BUILDING:__back__$"))
     app.add_handler(CallbackQueryHandler(building_upgrade_callback,pattern="^BUILDING_UPGRADE:.+"))
+
+    # Inline mission‐claim callback
+    app.add_handler(CallbackQueryHandler(mission_system.claim_callback, pattern="^MISSION_CLAIM:.+"))
 
     # Fallback commands
     app.add_handler(CommandHandler("build",       building_system.build))
@@ -273,10 +270,6 @@ def main():
     app.add_handler(CommandHandler("army",        army_system.view_army))
     app.add_handler(CommandHandler("trainstatus", army_system.training_status))
     app.add_handler(CommandHandler("claimtrain",  army_system.claim_training))
-    app.add_handler(CommandHandler("missions",      mission_system.missions))
-    app.add_handler(CommandHandler("storymissions", mission_system.storymissions))
-    app.add_handler(CommandHandler("epicmissions",  mission_system.epicmissions))
-    app.add_handler(CommandHandler("claimmission",  mission_system.claimmission))
     app.add_handler(CommandHandler("attack",         battle_system.attack))
     app.add_handler(CommandHandler("battle_status",  battle_system.battle_status))
     app.add_handler(CommandHandler("spy",            battle_system.spy))
@@ -286,7 +279,7 @@ def main():
     app.add_handler(CommandHandler("blackmarket",       shop_system.blackmarket))
     app.add_handler(CommandHandler("bmbuy",             shop_system.bmbuy))
 
-    # Unknown /fallback
+    # Unknown fallback
     app.add_handler(MessageHandler(filters.COMMAND,
         lambda u,c: u.message.reply_text("❓ Unknown—use the menu below.", reply_markup=MENU_MARKUP)
     ))
