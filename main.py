@@ -277,7 +277,7 @@ def register_handlers(app: ApplicationBuilder):
         app.add_handler(handler)
 
     # Buildings
-    app.add_handler(MessageHandler(filters.TEXT & filters.regex("🏗️ Buildings"), send_building_list))
+    app.add_handler(MessageHandler(filters.TEXT & filters.Regex("🏗️ Buildings"), send_building_list))
     app.add_handler(CallbackQueryHandler(building_detail_callback, pattern="^BUILDING:"))
     app.add_handler(CallbackQueryHandler(upgrade_building_callback, pattern="^UPGRADE:"))
     app.add_handler(CallbackQueryHandler(send_building_list, pattern="^BUILDINGS"))
