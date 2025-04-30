@@ -1,116 +1,182 @@
 import json
-from datetime import datetime
+from telegram import Update
+from telegram.ext import ContextTypes
 from utils import google_sheets
 from utils.ui_helpers import render_status_panel
 
-# Load shop items
+# Load shop data
 with open("config/shop_items.json", "r") as f:
-    SHOP = json.load(f)
+    SHOP_DATA = json.load(f)
 
-# -------------- /shop — Normal Shop Browser --------------
-async def shop(update, context):
+
+# --- Helpers ---
+def _format_cost(cost: dict) -> str:
+    """Formats a cost dictionary into a string."""
+    return ", ".join(f"{amt} {res.title()}" for res, amt in cost.items())
+
+
+# --- Handlers ---
+async def shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /shop — Show the normal shop inventory.
+    """
     player_id = str(update.effective_user.id)
-    resources = google_sheets.load_resources(player_id)
-    lines = [
-        f"💰 Your Resources: Metal {resources['metal']}, Fuel {resources['fuel']}, Crystals {resources['crystal']}",
-        "",
-        "🛒 Normal Shop Items:"
-    ]
-    for item in SHOP.get("normal_shop", []):
-        cost_str = ", ".join(f"{v} {k}" for k, v in item.get("cost", {}).items())
-        lines.append(f"- {item['id']}: {item['name']} ({cost_str})")
-        lines.append(f"  {item.get('description','')}")
+    lines = ["<b>🛒 Shop:</b>"]
+    for item in SHOP_DATA["normal_shop"]:
+        cost_str = _format_cost(item["cost"])
+        lines.append(f"• {item['name']} ({cost_str}) — {item['description']}")
     lines.append("")
-    lines.append("To purchase: /buy [item_id]")
+    lines.append(render_status_panel(player_id))
+    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
 
-    msg = "\n".join(lines) + "\n\n" + render_status_panel(player_id)
-    await update.message.reply_text(msg)
 
-# -------------- /buy — Purchase Normal Shop Item --------------
-async def buy(update, context):
+async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /buy [item_id] — Purchase an item from the shop.
+    """
     player_id = str(update.effective_user.id)
-    args = context.args
-    if len(args) != 1:
-        await update.message.reply_text("🛒 Usage: /buy [item_id]\n\n" + render_status_panel(player_id))
-        return
-
-    item_id = args[0]
-    item = next((i for i in SHOP.get("normal_shop", []) if i.get("id") == item_id), None)
-    if not item:
-        await update.message.reply_text("❌ Item not found in the Normal Shop.\n\n" + render_status_panel(player_id))
-        return
-
-    resources = google_sheets.load_resources(player_id)
-    # Check costs
-    for res, cost in item.get("cost", {}).items():
-        if resources.get(res, 0) < cost:
-            await update.message.reply_text(f"❌ Not enough {res}. You need {cost}.\n\n" + render_status_panel(player_id))
-            return
-
-    # Deduct cost
-    for res, cost in item.get("cost", {}).items():
-        resources[res] -= cost
-    google_sheets.save_resources(player_id, resources)
-    google_sheets.save_purchase(player_id, "normal", item_id, datetime.now().isoformat())
-
-    await update.message.reply_text(
-        f"✅ Purchased {item['name']}! {item.get('description','')}\n\n" + render_status_panel(player_id)
-    )
-
-# -------------- /unlockblackmarket — Unlock Premium Store --------------
-async def unlock_blackmarket(update, context):
-    player_id = str(update.effective_user.id)
-    if google_sheets.has_unlocked_blackmarket(player_id):
-        await update.message.reply_text("🔓 Black Market already unlocked!\n\n" + render_status_panel(player_id))
-        return
-
-    # Simulate payment
-    google_sheets.unlock_blackmarket(player_id)
-    unlock_cost = SHOP.get('black_market', {}).get('unlock_cost', 'N/A')
-    await update.message.reply_text(
-        f"🔓 Black Market unlocked for {unlock_cost}!\nUse /blackmarket to browse.\n\n" + render_status_panel(player_id)
-    )
-
-# -------------- /blackmarket — Premium Shop Browser --------------
-async def blackmarket(update, context):
-    player_id = str(update.effective_user.id)
-    if not google_sheets.has_unlocked_blackmarket(player_id):
-        unlock_cost = SHOP.get('black_market', {}).get('unlock_cost', 'N/A')
-        await update.message.reply_text(
-            f"🔒 Black Market locked. Unlock it for {unlock_cost} via /unlockblackmarket.\n\n" + render_status_panel(player_id)
+    if len(context.args) != 1:
+        return await update.message.reply_text(
+            "🛒 Usage: /buy [item_id]\n"
+            "Example: /buy speedup_30m\n\n"
+            + render_status_panel(player_id)
         )
-        return
 
-    lines = ["💎 Black Market Items:"]
-    for item in SHOP.get('black_market', {}).get('items', []):
-        lines.append(f"- {item['id']}: {item['name']} (Price: {item['price']})")
-        lines.append(f"  {item.get('description','')}")
-    lines.append("")
-    lines.append("To purchase: /bmbuy [item_id]")
-
-    msg = "\n".join(lines) + "\n\n" + render_status_panel(player_id)
-    await update.message.reply_text(msg)
-
-# -------------- /bmbuy — Purchase Premium Item --------------
-async def bmbuy(update, context):
-    player_id = str(update.effective_user.id)
-    args = context.args
-    if len(args) != 1:
-        await update.message.reply_text("💎 Usage: /bmbuy [item_id]\n\n" + render_status_panel(player_id))
-        return
-
-    item_id = args[0]
-    item = next((i for i in SHOP.get('black_market', {}).get('items', []) if i.get('id') == item_id), None)
+    item_id = context.args[0]
+    item = next(
+        (i for i in SHOP_DATA["normal_shop"] if i["id"] == item_id),
+        None
+    )
     if not item:
-        await update.message.reply_text("❌ Item not found in Black Market.\n\n" + render_status_panel(player_id))
-        return
+        return await update.message.reply_text(
+            "❌ Item not found in shop.\n\n" + render_status_panel(player_id)
+        )
 
-    if google_sheets.has_purchase(player_id, item_id):
-        await update.message.reply_text("⚠️ You already purchased this item.\n\n" + render_status_panel(player_id))
-        return
+    cost = item["cost"]
+    resources = google_sheets.load_resources(player_id)
+    for res, amt in cost.items():
+        if resources.get(res, 0) < amt:
+            return await update.message.reply_text(
+                f"❌ Not enough {res.title()} to buy {item['name']}.\n"
+                f"Needed: {amt}, You have: {resources.get(res, 0)}\n\n"
+                + render_status_panel(player_id)
+            )
 
-    # Record the purchase
-    google_sheets.save_purchase(player_id, "blackmarket", item_id, datetime.now().isoformat())
+    # Deduct resources
+    for res, amt in cost.items():
+        resources[res] -= amt
+    google_sheets.save_resources(player_id, resources)
+
+    # Apply effect (simplified for example)
+    if item_id == "speedup_30m":
+        effect_str = "All timers reduced by 30 minutes (not implemented)."
+    elif item_id == "xp_boost_100":
+        effect_str = "100 XP added (not implemented)."
+    else:
+        effect_str = "Effect applied (not implemented)."
+
     await update.message.reply_text(
-        f"✅ Purchased {item['name']} for {item['price']}! {item.get('description','')}\n\n" + render_status_panel(player_id)
+        f"✅ {item['name']} purchased! {effect_str}\n\n"
+        + render_status_panel(player_id)
+    )
+
+
+async def unlock_blackmarket(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /unlockblackmarket — Unlock the black market.
+    """
+    player_id = str(update.effective_user.id)
+    cost_str = SHOP_DATA["black_market"]["unlock_cost"]
+    credits = google_sheets.load_resources(player_id).get("credits", 0)
+    needed = int(cost_str.lstrip("R"))
+
+    if credits < needed:
+        return await update.message.reply_text(
+            f"❌ Not enough credits to unlock Black Market. Needed: {cost_str}, You have: {credits}\n\n"
+            + render_status_panel(player_id)
+        )
+
+    # Deduct credits
+    resources = google_sheets.load_resources(player_id)
+    resources["credits"] -= needed
+    google_sheets.save_resources(player_id, resources)
+
+    await update.message.reply_text(
+        "🔓 Black Market unlocked! Use /blackmarket to browse.\n\n"
+        + render_status_panel(player_id)
+    )
+
+
+async def blackmarket(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /blackmarket — Show the black market inventory (if unlocked).
+    """
+    player_id = str(update.effective_user.id)
+    # TODO: Check unlocked status from player data
+    unlocked = True
+    if not unlocked:
+        cost = SHOP_DATA["black_market"]["unlock_cost"]
+        return await update.message.reply_text(
+            f"🔒 Black Market locked. Unlock with /unlockblackmarket (Cost: {cost})\n\n"
+            + render_status_panel(player_id)
+        )
+
+    lines = ["<b>🏴‍☠️ Black Market:</b>"]
+    for item in SHOP_DATA["black_market"]["items"]:
+        lines.append(
+            f"• {item['name']} (Credits {item['price']}) — {item['description']}"
+        )
+    lines.append("")
+    lines.append(render_status_panel(player_id))
+    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+
+async def bmbuy(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /bmbuy [item_id] — Purchase an item from the black market.
+    """
+    player_id = str(update.effective_user.id)
+    if len(context.args) != 1:
+        return await update.message.reply_text(
+            "🏴‍☠️ Usage: /bmbuy [item_id]\n"
+            "Example: /bmbuy shield_breaker\n\n"
+            + render_status_panel(player_id)
+        )
+
+    item_id = context.args[0]
+    item = next(
+        (i for i in SHOP_DATA["black_market"]["items"] if i["id"] == item_id),
+        None
+    )
+    if not item:
+        return await update.message.reply_text(
+            "❌ Item not found in Black Market.\n\n"
+            + render_status_panel(player_id)
+        )
+
+    # TODO: Check unlocked status from player data
+    unlocked = True
+    if not unlocked:
+        return await update.message.reply_text(
+            "🔒 Black Market locked. Unlock with /unlockblackmarket.\n\n"
+            + render_status_panel(player_id)
+        )
+
+    price = int(item["price"].lstrip("R"))
+    credits = google_sheets.load_resources(player_id).get("credits", 0)
+    if credits < price:
+        return await update.message.reply_text(
+            f"❌ Not enough credits to buy {item['name']}.\n"
+            f"Needed: {price}, You have: {credits}\n\n"
+            + render_status_panel(player_id)
+        )
+
+    # Deduct credits
+    resources = google_sheets.load_resources(player_id)
+    resources["credits"] -= price
+    google_sheets.save_resources(player_id, resources)
+
+    await update.message.reply_text(
+        f"✅ {item['name']} purchased! Effect applied (not implemented).\n\n"
+        + render_status_panel(player_id)
     )
