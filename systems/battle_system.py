@@ -2,7 +2,7 @@ import json
 import datetime
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import ContextTypes
+from telegram.ext import ContextTypes, CallbackQueryHandler
 
 from utils import google_sheets
 from systems import army_system
@@ -14,10 +14,9 @@ with open("config/battle_tactics.json", "r") as f:
     BATTLE_TACTICS = json.load(f)
 
 
-# ── Attack another player ─────────────────────────────────────────────────────
 async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    /attack [player_id] — Initiate an attack with tactic selection.
+    /attack [player_id] — Start an attack and choose your tactic.
     """
     player_id = str(update.effective_user.id)
     args = context.args or []
@@ -32,7 +31,7 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     target_id = args[0]
 
-    # Load both armies
+    # Load armies
     player_army = google_sheets.load_player_army(player_id)
     target_army = google_sheets.load_player_army(target_id)
 
@@ -50,15 +49,15 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # Tactic Selection UI
+    # Attacker tactic selection
     buttons = [
-        [InlineKeyboardButton(tac["display_name"], callback_data=f"TACTIC:{name}")]
+        [InlineKeyboardButton(tac["display_name"], callback_data=f"ATTACK_TACTIC:{name}")]
         for name, tac in BATTLE_TACTICS.items()
     ]
     markup = InlineKeyboardMarkup(buttons)
 
-    # Store attack context for callback
-    context.user_data["attack_data"] = {
+    # Store attack context
+    context.user_data["attacking"] = {
         "target_id": target_id,
         "player_army": player_army,
         "target_army": target_army,
@@ -69,30 +68,56 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# ── Tactic callback ─────────────────────────────────────────────────────────
-async def tactic_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def attack_tactic_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    Handles tactic choice, performs combat, shows results.
+    Callback when attacker chooses a tactic; then prompt defender counter-tactic.
     """
     query = update.callback_query
     await query.answer()
 
+    attack_data = context.user_data.get("attacking")
+    if not attack_data:
+        await query.edit_message_text("❌ Attack data lost. Please retry /attack.")
+        return
+
+    tactic = query.data.split("\":\", 1)[1]
+    attack_data["attacker_tactic"] = tactic
+
+    # Defender counter-tactic selection
+    buttons = [
+        [InlineKeyboardButton(tac["display_name"], callback_data=f"DEFEND_TACTIC:{name}")]
+        for name, tac in BATTLE_TACTICS.items()
+    ]
+    markup = InlineKeyboardMarkup(buttons)
+
+    await query.edit_message_text(
+        "Choose defender counter-tactic:", reply_markup=markup
+    )
+
+
+async def defend_tactic_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Callback when defender chooses counter-tactic; resolve battle.
+    """
+    query = update.callback_query
+    await query.answer()
+
+    attack_data = context.user_data.pop("attacking", None)
+    if not attack_data:
+        await query.edit_message_text("❌ Attack data lost. Please retry /attack.")
+        return
+
     player_id = str(query.from_user.id)
-    data = context.user_data.pop("attack_data", None)
-    if not data:
-        return await query.edit_message_text(
-            "⚠️ Attack context lost. Please try /attack again.", parse_mode=None
-        )
+    attacker_tactic = attack_data.get("attacker_tactic", "")
+    defender_tactic = query.data.split("\":\", 1)[1]
+    target_id = attack_data["target_id"]
+    player_army = attack_data["player_army"]
+    target_army = attack_data["target_army"]
 
-    tactic_key = query.data.split("":", 1)[1]
-    tactic = BATTLE_TACTICS.get(tactic_key, {})
-
-    player_army = data["player_army"]
-    target_army = data["target_army"]
-    target_id = data["target_id"]
-
-    # Perform combat (ignoring tactics for now)
-    outcome, battle_log = calculate_battle_outcome(player_army, target_army)
+    # Perform combat (only attacker tactic used currently)
+    outcome, battle_log = calculate_battle_outcome(
+        player_army, target_army, attacker_tactic
+    )
     rewards = calculate_battle_rewards(outcome, player_army, target_army)
 
     # Record battle
@@ -101,10 +126,12 @@ async def tactic_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         player_id, target_id, outcome, rewards, now_str, battle_log
     )
 
-    # Display results
+    atk_name = BATTLE_TACTICS.get(attacker_tactic, {}).get("display_name", attacker_tactic)
+    def_name = BATTLE_TACTICS.get(defender_tactic, {}).get("display_name", defender_tactic)
     msg = (
         f"⚔️ Battle vs {target_id} — {outcome}!\n"
-        f"Tactic: {tactic.get('display_name', tactic_key)}\n\n"
+        f"Attacker Tactic: {atk_name}\n"
+        f"Defender Counter: {def_name}\n\n"
         f"🎖️ Rewards: {rewards}\n\n"
         f"📜 Battle Log:\n{battle_log}\n\n"
         + render_status_panel(player_id)
@@ -112,7 +139,6 @@ async def tactic_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text(msg)
 
 
-# ── View battle history ───────────────────────────────────────────────────────
 async def battle_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     /battlestatus — Show past battle outcomes.
@@ -140,10 +166,9 @@ async def battle_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(msg)
 
 
-# ── Spy another player's army ────────────────────────────────────────────────
 async def spy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    /spy [player_id] — Reveal another player's army composition.
+    /spy [player_id] — Reveal another player's army.
     """
     player_id = str(update.effective_user.id)
     args = context.args or []
@@ -161,7 +186,7 @@ async def spy(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not target_army:
         await update.message.reply_text(
-            f"❌ Player {target_id} has no army to spy on.\n\n"
+            f"❌ Player {target_id} has no army.\n\n"
             + render_status_panel(player_id)
         )
         return
@@ -174,3 +199,12 @@ async def spy(update: Update, context: ContextTypes.DEFAULT_TYPE):
         + render_status_panel(player_id)
     )
     await update.message.reply_text(report)
+
+
+def register_callbacks(app):
+    app.add_handler(
+        CallbackQueryHandler(attack_tactic_callback, pattern="^ATTACK_TACTIC:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(defend_tactic_callback, pattern="^DEFEND_TACTIC:")
+    )
