@@ -285,7 +285,7 @@ def register_handlers(app: ApplicationBuilder):
     app.add_handler(CommandHandler("buildinfo", building_system.buildinfo))
 
     # Army
-    app.add_handler(MessageHandler(filters.TEXT & filters.regex("🛡️ Army"), send_army_list))
+    app.add_handler(MessageHandler(filters.TEXT & filters.Regex("🛡️ Army"), send_army_list))
     app.add_handler(CallbackQueryHandler(main_menu_callback, pattern="^MAIN_MENU"))
     app.add_handler(CommandHandler("train", army_system.train_units))
     app.add_handler(CommandHandler("army", army_system.view_army))
