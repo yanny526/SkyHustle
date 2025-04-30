@@ -1,0 +1,51 @@
+{
+  "melee": {
+    "display_name": "Melee Assault",
+    "description": "Focus on close-quarters combat, boosting infantry attack.",
+    "attack_bonus": { "infantry": 0.2 },
+    "defense_penalty": { "ranged": 0.1 }
+  },
+  "breakthrough": {
+    "display_name": "Breakthrough",
+    "description": "Concentrated attack to breach defenses, boosting heavy unit attack.",
+    "attack_bonus": { "heavy": 0.3 },
+    "defense_penalty": { "siege": 0.2 }
+  },
+  "skirmish": {
+    "display_name": "Skirmish",
+    "description": "Hit-and-run tactics, increasing ranged unit speed and attack.",
+    "attack_bonus": { "ranged": 0.15, "recon": 0.15 },
+    "speed_bonus": { "ranged": 0.1, "recon": 0.1 },
+    "defense_penalty": { "infantry": 0.1 }
+  },
+  "bombardment": {
+    "display_name": "Bombardment",
+    "description": "Long-range assault to weaken enemy lines, boosting siege unit attack.",
+    "attack_bonus": { "siege": 0.25 },
+    "defense_penalty": { "heavy": 0.15 }
+  },
+  "reconnaissance": {
+    "display_name": "Reconnaissance",
+    "description": "Emphasis on scouting and flanking, boosting recon unit speed and defense.",
+    "speed_bonus": { "recon": 0.2 },
+    "defense_bonus": { "recon": 0.1 },
+    "attack_penalty": { "heavy": 0.1 }
+  },
+  "flanking": {
+    "display_name": "Flanking Maneuver",
+    "description": "Outmaneuver the enemy, boosting infantry and recon attack when combined.",
+    "attack_bonus": { "infantry": 0.1, "recon": 0.1 }
+  },
+  "siege": {
+    "display_name": "Siege Warfare",
+    "description": "Wear down fortified positions, boosting siege and heavy unit attack, but reducing speed.",
+    "attack_bonus": { "siege": 0.15, "heavy": 0.15 },
+    "speed_penalty": { "siege": 0.1, "heavy": 0.1 }
+  },
+  "ambush": {
+    "display_name": "Ambush Tactics",
+    "description": "Surprise attack to catch the enemy off guard, boosting ranged unit attack and speed.",
+    "attack_bonus": { "ranged": 0.2 },
+    "speed_bonus": { "ranged": 0.15 }
+  }
+}
