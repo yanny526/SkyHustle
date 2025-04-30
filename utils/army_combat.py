@@ -4,32 +4,49 @@ import json
 with open("config/army_stats.json", "r") as f:
     UNIT_STATS = json.load(f)
 
+# Load battle tactics
+with open("config/battle_tactics.json", "r") as f:
+    BATTLE_TACTICS = json.load(f)
+
 
 def calculate_battle_outcome(
-    player_army: dict[str, int], target_army: dict[str, int]
+    player_army: dict[str, int],
+    target_army: dict[str, int],
+    tactic_name: str,
 ) -> tuple[str, str]:
     """
-    Calculates the outcome of a battle between two armies.
+    Calculates battle outcome applying tactic bonuses.
+
+    Args:
+        player_army: Attacker's unit counts
+        target_army: Defender's unit counts
+        tactic_name: Key for chosen tactic in BATTLE_TACTICS
 
     Returns:
-        outcome (str): "Victory", "Defeat", or "Draw"
-        battle_log (str): summary of power and casualties
+        outcome: "Victory", "Defeat", or "Draw"
+        battle_log: Summary of power and casualties
     """
-    # Compute total attack power
-    player_power = sum(
-        UNIT_STATS.get(unit, {}).get("attack", 0) * count
-        for unit, count in player_army.items()
-    )
-    target_power = sum(
-        UNIT_STATS.get(unit, {}).get("attack", 0) * count
-        for unit, count in target_army.items()
-    )
+    tactic = BATTLE_TACTICS.get(tactic_name, {})
 
-    # Total units for casualty calculations
+    def compute_power(army: dict[str, int]) -> float:
+        total = 0.0
+        for unit, count in army.items():
+            stats = UNIT_STATS.get(unit, {})
+            base_atk = stats.get("attack", 0)
+            role = stats.get("role")
+            bonus = 0.0
+            if role and "attack_bonus" in tactic:
+                bonus = tactic["attack_bonus"].get(role, 0.0)
+            total += (base_atk * (1 + bonus)) * count
+        return total
+
+    player_power = compute_power(player_army)
+    target_power = compute_power(target_army)
+
     total_player = sum(player_army.values())
     total_target = sum(target_army.values())
 
-    # Casualties proportional to opponent power, avoid division by zero
+    player_casualties = target_casualties = 0
     if player_power + target_power > 0:
         player_casualties = min(
             total_player,
@@ -39,11 +56,7 @@ def calculate_battle_outcome(
             total_target,
             int(total_target * (player_power / (player_power + target_power)))
         )
-    else:
-        player_casualties = 0
-        target_casualties = 0
 
-    # Determine outcome
     if player_power > target_power:
         outcome = "Victory"
     elif player_power < target_power:
@@ -51,9 +64,8 @@ def calculate_battle_outcome(
     else:
         outcome = "Draw"
 
-    # Build battle log
     battle_log = (
-        f"Your Power: {player_power}  |  Enemy Power: {target_power}\n"
+        f"Your Power: {int(player_power)}  |  Enemy Power: {int(target_power)}\n"
         f"You lost {player_casualties} unit(s), Enemy lost {target_casualties} unit(s)."
     )
 
@@ -63,19 +75,21 @@ def calculate_battle_outcome(
 def calculate_battle_rewards(
     outcome: str,
     player_army: dict[str, int],
-    target_army: dict[str, int]
+    target_army: dict[str, int],
 ) -> str:
     """
-    Determines resource rewards or penalties based on battle outcome.
+    Returns resource rewards or penalties.
+
+    Args:
+        outcome: Battle outcome
+        player_army: Attacker's army
+        target_army: Defender's army
 
     Returns:
-        str: human-readable rewards description
+        Formatted rewards string
     """
     if outcome == "Victory":
-        # Flat rewards
         return "500 Metal, 300 Fuel, 50 Crystals"
-    elif outcome == "Defeat":
-        # Penalty description (actual deduction handled elsewhere)
+    if outcome == "Defeat":
         return "Penalty: 10% of your total resources lost."
-    else:
-        return "No rewards (Draw)."
+    return "No rewards (Draw)."
