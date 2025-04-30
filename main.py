@@ -42,14 +42,11 @@ from utils.ui_helpers import render_status_panel
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
     logger.exception("Unhandled exception:")
     if hasattr(update, "message") and update.message:
         await update.message.reply_text("❌ Oops, something went wrong.")
 
-
-# ────────────────────────────────────────────────────────────────────────────────
 MAIN_MENU = [
     [KeyboardButton("🏗️ Buildings"), KeyboardButton("🛡️ Army")],
     [KeyboardButton("⚙️ Status"), KeyboardButton("📜 Missions")],
@@ -67,13 +64,11 @@ LORE_TEXT = (
     "Welcome to SKYHUSTLE."
 )
 
-
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🛰️ Welcome Commander!\nUse the menu below to navigate.",
         reply_markup=MENU_MARKUP
     )
-
 
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -84,10 +79,8 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=MENU_MARKUP
     )
 
-
 async def lore(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(LORE_TEXT, reply_markup=MENU_MARKUP)
-
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     pid = str(update.effective_user.id)
@@ -95,8 +88,6 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         panel, parse_mode=ParseMode.HTML, reply_markup=MENU_MARKUP
     )
-
-
 # ────────────────────────────────────────────────────────────────────────────────
 TUTORIAL_HANDLERS = [
     CommandHandler("tutorial", tutorial_system.tutorial),
@@ -110,7 +101,6 @@ TUTORIAL_HANDLERS = [
     CommandHandler("trainstatus", army_system.training_status),
     CommandHandler("claimtrain", army_system.claim_training),
 ]
-
 
 # ────────────────────────────────────────────────────────────────────────────────
 # Buildings menu & callbacks
@@ -126,12 +116,10 @@ def _make_building_list(pid: str):
     text = "🏗️ <b>Your Buildings</b>\nChoose one for details:"
     return text, InlineKeyboardMarkup(buttons)
 
-
 async def send_building_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     pid = str(update.effective_user.id)
     text, markup = _make_building_list(pid)
     await update.message.reply_text(text, parse_mode=ParseMode.HTML, reply_markup=markup)
-
 
 async def building_detail_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -156,14 +144,11 @@ async def building_detail_callback(update: Update, context: ContextTypes.DEFAULT
 
     cur = get_building_level(pid, key)
     nxt = cur + 1
-    cost = building_system.BUILDINGS[key]["resource_cost"]
-    eff = building_system.BUILDINGS[key].get("effects", {})
+    cost = building_system.BUILDINGS[key]["resource_cost"](nxt)
+    eff = building_system.BUILDINGS[key]["effect"](nxt)
 
-    cost_str = " | ".join(f"{k.capitalize()}: {v}" for k, v in cost.items())
-    eff_str = ", ".join(
-        f"{k.replace('_',' ').title()}: {v}{'%' if 'pct' in k else ''}"
-        for k, v in eff.items()
-    ) or "(no direct effect)"
+    cost_str = " | ".join(f"{k.title()}: {v}" for k, v in cost.items())
+    eff_str = ", ".join(f"{k.replace('_',' ').title()}: {v}" for k, v in eff.items()) or "(no effect)"
 
     text = (
         f"🏗️ <b>{key.replace('_',' ').title()}</b>\n"
@@ -177,47 +162,43 @@ async def building_detail_callback(update: Update, context: ContextTypes.DEFAULT
     ])
     await query.edit_message_text(text, parse_mode=ParseMode.HTML, reply_markup=markup)
 
-
-async def upgrade_building_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    pid = str(query.from_user.id)
-    key = query.data.split(":", 1)[1]
-    now = datetime.now()
-
+async def _handle_building_upgrade(query: CallbackQuery, pid: str, key: str):
     queue = load_building_queue(pid)
     if any(t["building_name"] == key for t in queue.values()):
-        return await query.edit_message_text(
+        await query.edit_message_text(
             f"⚡ Already upgrading {key.replace('_',' ').title()}!",
             parse_mode=ParseMode.HTML,
         )
+        return True  # Indicate upgrade in progress
 
     cur = get_building_level(pid, key)
     nxt = cur + 1
-    cost = building_system.BUILDINGS[key]["resource_cost"]
+    cost = building_system.BUILDINGS[key]["resource_cost"](nxt)
     base = building_system.BUILDINGS[key]["base_time_min"]
     mult = building_system.BUILDINGS[key]["time_multiplier"]
     upgrade_time = base * (mult ** cur)
-    end_time = now + timedelta(minutes=upgrade_time)
+    end_time = datetime.now() + timedelta(minutes=upgrade_time)
 
     resources = load_resources(pid)
     for res, amt in cost.items():
         if resources.get(res, 0) < amt:
-            return await query.edit_message_text(
-                f"⚡ Not enough {res.capitalize()} to upgrade!",
+            await query.edit_message_text(
+                f"⚡ Not enough {res.title()} to upgrade!",
                 parse_mode=ParseMode.HTML,
             )
+            return True  # Indicate not enough resources
         resources[res] -= amt
     save_resources(pid, resources)
 
     task = {
         "building_name": key,
-        "start_time": now.strftime("%Y-%m-%d %H:%M:%S"),
+        "level": nxt,
+        "start_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "end_time": end_time.strftime("%Y-%m-%d %H:%M:%S"),
     }
     save_building_task(pid, task)
 
-    rem = building_system._format_timedelta(end_time - now)
+    rem = building_system._format_timedelta(end_time - datetime.now())
     text = (
         f"🏗️ Upgrading {key.replace('_',' ').title()} to Lv {nxt} ({rem} left)!\n"
         "Tap below to return to building list."
@@ -226,7 +207,14 @@ async def upgrade_building_callback(update: Update, context: ContextTypes.DEFAUL
         [InlineKeyboardButton("« Back to Buildings", callback_data="BUILDINGS")]
     ])
     await query.edit_message_text(text, parse_mode=ParseMode.HTML, reply_markup=markup)
+    return False # Indicate successful upgrade initiation
 
+async def upgrade_building_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    pid = str(query.from_user.id)
+    key = query.data.split(":", 1)[1]
+    await _handle_building_upgrade(query, pid, key)
 
 # ────────────────────────────────────────────────────────────────────────────────
 # Army menu & callbacks
@@ -245,80 +233,37 @@ def _make_army_list(pid: str):
     ])
     return "\n".join(lines), markup
 
-
 async def send_army_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     pid = str(update.effective_user.id)
     text, markup = _make_army_list(pid)
     await update.message.reply_text(text, parse_mode=ParseMode.HTML, reply_markup=markup)
 
-
 # ────────────────────────────────────────────────────────────────────────────────
-async def main_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    await query.edit_message_text(
-        "Use the menu below to navigate:", reply_markup=MENU_MARKUP
-    )
+def main():
+    application = ApplicationBuilder().token(BOT_TOKEN).build()
 
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("help", help_cmd))
+    application.add_handler(CommandHandler("lore", lore))
+    application.add_handler(CommandHandler("status", status))
 
-# ────────────────────────────────────────────────────────────────────────────────
-def register_handlers(app: ApplicationBuilder):
+    # Tutorial handlers
+    application.add_handlers(TUTORIAL_HANDLERS)
+
+    # Buildings handlers
+    application.add_handler(MessageHandler(filters.Regex("^🏗️ Buildings$"), send_building_list))
+    application.add_handler(CallbackQueryHandler(building_detail_callback, pattern="^BUILDING:"))
+    application.add_handler(CallbackQueryHandler(upgrade_building_callback, pattern="^UPGRADE:"))
+    application.add_handler(CallbackQueryHandler(send_building_list, pattern="^BUILDINGS$")) # Handle back button
+
+    # Army handlers
+    application.add_handler(MessageHandler(filters.Regex("^🛡️ Army$"), send_army_list))
+    application.add_handler(CallbackQueryHandler(lambda update, _: update.effective_message.reply_text("Returning to main menu.", reply_markup=MENU_MARKUP), pattern="^MAIN_MENU$")) # Handle back to main menu
+
     # Error handler
-    app.add_error_handler(error_handler)
+    application.add_error_handler(error_handler)
 
-    # Main commands
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("help", help_cmd))
-    app.add_handler(CommandHandler("lore", lore))
-    app.add_handler(CommandHandler("status", status))
+    application.run_polling()
 
-    # Tutorial
-    for handler in TUTORIAL_HANDLERS:
-        app.add_handler(handler)
-
-    # Buildings
-    app.add_handler(MessageHandler(filters.TEXT & filters.Regex("🏗️ Buildings"), send_building_list))
-    app.add_handler(CallbackQueryHandler(building_detail_callback, pattern="^BUILDING:"))
-    app.add_handler(CallbackQueryHandler(upgrade_building_callback, pattern="^UPGRADE:"))
-    app.add_handler(CallbackQueryHandler(send_building_list, pattern="^BUILDINGS"))
-    app.add_handler(CommandHandler("buildstatus", building_system.buildstatus))
-    app.add_handler(CommandHandler("buildinfo", building_system.buildinfo))
-
-    # Army
-    app.add_handler(MessageHandler(filters.TEXT & filters.Regex("🛡️ Army"), send_army_list))
-    app.add_handler(CallbackQueryHandler(main_menu_callback, pattern="^MAIN_MENU"))
-    app.add_handler(CommandHandler("train", army_system.train_units))
-    app.add_handler(CommandHandler("army", army_system.view_army))
-    app.add_handler(CommandHandler("trainstatus", army_system.training_status))
-    app.add_handler(CommandHandler("claimtrain", army_system.claim_training))
-
-    # Battle
-    app.add_handler(CommandHandler("attack", battle_system.attack))
-    app.add_handler(CallbackQueryHandler(battle_system.attack_tactic_callback, pattern="^ATTACK_TACTIC:"))
-    app.add_handler(CallbackQueryHandler(battle_system.defend_tactic_callback, pattern="^DEFEND_TACTIC:"))
-    app.add_handler(CommandHandler("battle_status", battle_system.battle_status))
-    app.add_handler(CommandHandler("spy", battle_system.spy))
-
-    # Shop
-    app.add_handler(CommandHandler("shop", shop_system.shop))
-    app.add_handler(CommandHandler("buy", shop_system.buy))
-    app.add_handler(CommandHandler("unlockblackmarket", shop_system.unlock_blackmarket))
-    app.add_handler(CommandHandler("blackmarket", shop_system.blackmarket))
-    app.add_handler(CommandHandler("bmbuy", shop_system.bmbuy))
-
-    # Fallback for unknown commands
-    app.add_handler(
-        MessageHandler(
-            filters.COMMAND,
-            lambda u, c: u.message.reply_text(
-                "❓ Unknown—use the menu below.", reply_markup=MENU_MARKUP
-            ),
-        )
-    )
-
-
-# ────────────────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
-    register_handlers(app)
-    app.run_polling()
+    main()
