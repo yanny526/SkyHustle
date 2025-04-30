@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Dict, Tuple
 
 # Load unit stats from config
-with open("config/army_stats.json", "r") as f:
+with open("os.path.join(os.path.dirname(__file__), "../config/army_stats.json")", "r") as f:
     UNIT_STATS = json.load(f)
 
 # Load battle tactics\ nwith open("config/battle_tactics.json", "r") as f:
