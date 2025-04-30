@@ -1,3 +1,8 @@
+import json
+import os
+with open(os.path.join(os.path.dirname(__file__), "../config/building_stats.json"), "r") as f:
+    BUILDINGS = json.load(f)
+
 import datetime
 from telegram import Update
 from telegram.constants import ParseMode
