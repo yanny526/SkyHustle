@@ -1,23 +1,4 @@
-import json
-
-# Load unit stats from config
-with open("config/army_stats.json", "r") as f:
-    UNIT_STATS = json.load(f)
-
-
-def calculate_battle_outcome(
-    player_army: dict[str, int], target_army: dict[str, int]
-) -> tuple[str, str]:
-    """
-    Calculates the outcome of a battle between two armies.
-
-    Returns:
-        outcome (str): "Victory", "Defeat", or "Draw"
-        battle_log (str): summary of power and casualties
-    """
-    # Compute total attack power
-    player_power = sum(
-        UNIT_STATS.get(unit, {
+{
   "soldier": {
     "display_name": "Soldier",
     "attack": 10,
@@ -68,28 +49,4 @@ def calculate_battle_outcome(
     "training_time": 2,
     "tactics": ["reconnaissance", "flanking"]
   }
-} unit(s)."
-    )
-
-    return outcome, battle_log
-
-
-def calculate_battle_rewards(
-    outcome: str,
-    player_army: dict[str, int],
-    target_army: dict[str, int]
-) -> str:
-    """
-    Determines resource rewards or penalties based on battle outcome.
-
-    Returns:
-        str: human-readable rewards description
-    """
-    if outcome == "Victory":
-        # Flat rewards
-        return "500 Metal, 300 Fuel, 50 Crystals"
-    elif outcome == "Defeat":
-        # Penalty description (actual deduction handled elsewhere)
-        return "Penalty: 10% of your total resources lost."
-    else:
-        return "No rewards (Draw)."
+}
