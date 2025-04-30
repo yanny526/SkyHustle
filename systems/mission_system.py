@@ -1,206 +1,143 @@
-import json
-from datetime import datetime, timedelta
+# mission_system.py (Part 1 of X)
+
+import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
-from utils import google_sheets
+from utils.google_sheets import load_player_missions, save_player_mission, load_resources, save_resources
 from utils.ui_helpers import render_status_panel
 
+# ── Static Mission Definitions ────────────────────────────────────────────
 
-# Load mission templates
-with open("config/mission_data.json", "r") as f:
-    MISSION_TEMPLATES = json.load(f)
+MISSIONS = {
+    "build_metal_mine": {
+        "title": "⛏️ Construct a Metal Mine",
+        "desc": "Start metal extraction by building your first mine.",
+        "check": lambda stats: stats.get("metal_mine", 0) >= 1,
+        "reward": {"metal": 300, "fuel": 150}
+    },
+    "train_soldiers": {
+        "title": "🪖 Train Soldiers",
+        "desc": "Recruit a basic force to defend your empire.",
+        "check": lambda stats: stats.get("soldier", 0) >= 5,
+        "reward": {"credits": 100}
+    },
+    "upgrade_barracks": {
+        "title": "🏗️ Barracks Upgrade",
+        "desc": "Upgrade your Barracks to level 2 or more.",
+        "check": lambda stats: stats.get("barracks", 0) >= 2,
+        "reward": {"metal": 500}
+    },
+    "build_crystal_synth": {
+        "title": "🔮 Crystal Synthesizer Online",
+        "desc": "Unlock and build a Crystal Synthesizer.",
+        "check": lambda stats: stats.get("crystal_synthesizer", 0) >= 1,
+        "reward": {"crystal": 100}
+    },
+    "train_tanks": {
+        "title": "🚛 Tank Division",
+        "desc": "Train at least 3 tanks for your armored unit.",
+        "check": lambda stats: stats.get("tank", 0) >= 3,
+        "reward": {"credits": 250, "metal": 500}
+    },
+}
+# ── Helper: Check Mission Completion ──────────────────────────────────────
 
-
-# --- Helpers ---
-def _generate_missions(mission_type: str, count: int):
+def evaluate_missions(player_id: str, stats: dict) -> dict:
     """
-    Picks `count` random missions of a given type.
-    (In a real game, this might consider player level, etc.)
+    Returns dict of mission_id → status (complete or not)
     """
-    templates = MISSION_TEMPLATES.get(f"{mission_type}_templates", [])
-    if not templates:
-        return []
-    return [templates[i % len(templates)] for i in range(count)]
+    results = {}
+    completed = {m["mission_id"] for m in load_player_missions(player_id)}
+    for key, mission in MISSIONS.items():
+        is_done = mission["check"](stats)
+        results[key] = "CLAIMED" if key in completed else ("READY" if is_done else "LOCKED")
+    return results
 
 
-def _format_rewards(rewards: dict) -> str:
-    """Formats a reward dictionary into a string."""
-    return ", ".join(f"{amt} {res.title()}" for res, amt in rewards.items())
+# ── Command: /missions — View Mission List ────────────────────────────────
 
-
-# --- /missions — Show daily missions ---
 async def missions(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    player_id = str(update.effective_user.id)
-    today = datetime.now().date()
-    missions_data = google_sheets.load_player_missions(player_id)
+    pid = str(update.effective_user.id)
+    stats = context.user_data.get("stats", {})  # must be pre-loaded externally
+    if not stats:
+        return await update.message.reply_text("❌ Error: Mission stats missing.")
 
-    # Ensure missions_data has today's date
-    if not missions_data or missions_data.get("date") != str(today):
-        new_missions = _generate_missions("daily", 3)
-        missions_data = {
-            "date": str(today),
-            "missions": {m["id"]: False for m in new_missions},
-        }
-        google_sheets.save_player_missions(player_id, missions_data)
-    else:
-        # Reconstruct mission objects for display
-        new_missions = [
-            tpl for tpl in MISSION_TEMPLATES.get("daily_templates", [])
-            if tpl["id"] in missions_data["missions"]
-        ]
-
-    # Build message
-    lines = ["<b>📜 Daily Missions:</b>"]
+    status = evaluate_missions(pid, stats)
+    lines = ["<b>📜 Missions</b>"]
     buttons = []
-    for m in new_missions:
-        done = missions_data["missions"].get(m["id"], False)
-        icon = "✅" if done else "⬜"
-        lines.append(
-            f"{icon} {m['description']}  (Reward: {_format_rewards(m['rewards'])})"
-        )
-        if not done:
-            buttons.append([
-                InlineKeyboardButton(
-                    "Claim", callback_data=f"MISSION_CLAIM:daily:{m['id']}"
-                )
-            ])
-        lines.append("")
 
-    lines.append(render_status_panel(player_id))
+    for key, mission in MISSIONS.items():
+        state = status[key]
+        emoji = "✅" if state == "CLAIMED" else "🎯" if state == "READY" else "🔒"
+        lines.append(f"{emoji} <b>{mission['title']}</b>\n<code>{mission['desc']}</code>")
+        if state == "READY":
+            buttons.append([InlineKeyboardButton(f"🎁 Claim {mission['title']}", callback_data=f"CLAIM_MISSION:{key}")])
+
+    lines.append("\nTap the buttons below to claim rewards.")
+
     markup = InlineKeyboardMarkup(buttons) if buttons else None
-
     await update.message.reply_text(
-        "\n".join(lines),
-        parse_mode="HTML",
-        reply_markup=markup
+        "\n\n".join(lines), parse_mode=ParseMode.HTML, reply_markup=markup
     )
 
 
-# --- /storymissions — Show story missions ---
-async def storymissions(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    player_id = str(update.effective_user.id)
-    missions_data = google_sheets.load_player_missions(player_id) or {}
-
-    if "story" not in missions_data:
-        new_missions = _generate_missions("story", 5)
-        missions_data["story"] = {m["id"]: False for m in new_missions}
-        google_sheets.save_player_missions(player_id, missions_data)
-    else:
-        new_missions = [
-            tpl for tpl in MISSION_TEMPLATES.get("story_templates", [])
-            if tpl["id"] in missions_data["story"]
-        ]
-
-    lines = ["<b>📜 Story Missions:</b>"]
-    buttons = []
-    for m in new_missions:
-        done = missions_data["story"].get(m["id"], False)
-        icon = "✅" if done else "⬜"
-        lines.append(
-            f"{icon} {m['description']}  (Reward: {_format_rewards(m['rewards'])})"
-        )
-        if not done:
-            buttons.append([
-                InlineKeyboardButton(
-                    "Claim", callback_data=f"MISSION_CLAIM:story:{m['id']}"
-                )
-            ])
-        lines.append("")
-
-    lines.append(render_status_panel(player_id))
-    markup = InlineKeyboardMarkup(buttons) if buttons else None
-
-    await update.message.reply_text(
-        "\n".join(lines),
-        parse_mode="HTML",
-        reply_markup=markup
-    )
-
-
-# --- /epicmissions — Show epic missions ---
-async def epicmissions(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    player_id = str(update.effective_user.id)
-    missions_data = google_sheets.load_player_missions(player_id) or {}
-
-    if "epic" not in missions_data:
-        new_missions = _generate_missions("epic", 5)
-        missions_data["epic"] = {m["id"]: False for m in new_missions}
-        google_sheets.save_player_missions(player_id, missions_data)
-    else:
-        new_missions = [
-            tpl for tpl in MISSION_TEMPLATES.get("epic_templates", [])
-            if tpl["id"] in missions_data["epic"]
-        ]
-
-    lines = ["<b>📜 Epic Missions:</b>"]
-    buttons = []
-    for m in new_missions:
-        done = missions_data["epic"].get(m["id"], False)
-        icon = "✅" if done else "⬜"
-        lines.append(
-            f"{icon} {m['description']}  (Reward: {_format_rewards(m['rewards'])})"
-        )
-        if not done:
-            buttons.append([
-                InlineKeyboardButton(
-                    "Claim", callback_data=f"MISSION_CLAIM:epic:{m['id']}"
-                )
-            ])
-        lines.append("")
-
-    lines.append(render_status_panel(player_id))
-    markup = InlineKeyboardMarkup(buttons) if buttons else None
-
-    await update.message.reply_text(
-        "\n".join(lines),
-        parse_mode="HTML",
-        reply_markup=markup
-    )
-
-
-# --- Callback for mission claims ---
-async def claim_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# ── Callback: Claim Mission Reward ─────────────────────────────────────────
+async def claim_mission_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    player_id = str(query.from_user.id)
-    _, mtype, mission_id = query.data.split(":", 2)
+    pid = str(query.from_user.id)
+    key = query.data.split(":", 1)[1]
 
-    missions_data = google_sheets.load_player_missions(player_id) or {}
-    category = {
-        "daily": "missions",
-        "story": "story",
-        "epic": "epic"
-    }.get(mtype)
+    stats = context.user_data.get("stats", {})
+    if not stats:
+        return await query.edit_message_text("❌ Error: Mission data not loaded.")
 
-    if not category or mission_id not in missions_data.get(category, {}):
-        return await query.edit_message_text(
-            "❌ Cannot claim this mission.", parse_mode="HTML"
-        )
+    state = evaluate_missions(pid, stats).get(key)
+    if state != "READY":
+        return await query.edit_message_text("⚠️ Mission not complete or already claimed.")
 
-    if missions_data[category][mission_id]:
-        return await query.edit_message_text(
-            "❌ Mission already claimed.", parse_mode="HTML"
-        )
+    reward = MISSIONS[key]["reward"]
+    resources = load_resources(pid)
+    for k, v in reward.items():
+        resources[k] = resources.get(k, 0) + v
+    save_resources(pid, resources)
+    save_player_mission(pid, key, completed=True)
 
-    # Mark claimed and apply rewards
-    tpl_list = MISSION_TEMPLATES.get(f"{mtype}_templates", [])
-    rewards = next((m["rewards"] for m in tpl_list if m["id"] == mission_id), {})
-    missions_data[category][mission_id] = True
-    google_sheets.save_player_missions(player_id, missions_data)
-
-    await _apply_rewards(player_id, rewards)
-    return await query.edit_message_text(
-        f"✅ Mission Claimed! Rewards: {_format_rewards(rewards)}",
-        parse_mode="HTML"
+    await query.edit_message_text(
+        f"🎉 You claimed rewards for <b>{MISSIONS[key]['title']}</b>!\n"
+        f"Resources gained: " + ", ".join(f"{k.title()}: {v}" for k, v in reward.items()),
+        parse_mode=ParseMode.HTML
     )
+# ── Helper: Preload Stats for Mission Evaluation ──────────────────────────
+
+def load_mission_stats(player_id: str) -> dict:
+    """
+    Assembles the relevant data used by all mission check functions.
+    This should include building levels, army size, etc.
+    """
+    from utils.google_sheets import get_building_level, load_player_army
+
+    stats = {}
+
+    # Building levels
+    stats["metal_mine"] = get_building_level(player_id, "metal_mine")
+    stats["barracks"] = get_building_level(player_id, "barracks")
+
+    # Army size
+    army = load_player_army(player_id)
+    total_units = sum(qty for unit, qty in army.items() if not "_" in unit)
+    stats["total_units"] = total_units
+
+    return stats
 
 
-async def _apply_rewards(player_id: str, rewards: dict):
+# ── Middleware Hook or Updater Logic Integration ──────────────────────────
+
+async def preload_mission_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    Helper: Applies rewards to the player's resources.
+    Should be called before any mission commands to ensure mission stats are available.
     """
-    resources = google_sheets.load_resources(player_id)
-    for res, amt in rewards.items():
-        resources[res] = resources.get(res, 0) + amt
-    google_sheets.save_resources(player_id, resources)
+    pid = str(update.effective_user.id)
+    context.user_data["stats"] = load_mission_stats(pid)
