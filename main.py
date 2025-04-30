@@ -264,42 +264,4 @@ def main():
 
     # Inline building callbacks
     app.add_handler(CallbackQueryHandler(building_detail_callback, pattern="^BUILDING:[^_].+"))
-    app.add_handler(CallbackQueryHandler(building_back_callback,   pattern="^BUILDING:__back__$"))
-    app.add_handler(CallbackQueryHandler(building_upgrade_callback,pattern="^BUILDING_UPGRADE:.+"))
-
-    # Fallback commands
-    app.add_handler(CommandHandler("build",       building_system.build))
-    app.add_handler(CommandHandler("buildinfo",   building_system.buildinfo))
-    app.add_handler(CommandHandler("buildstatus", building_system.buildstatus))
-    app.add_handler(CommandHandler("mine",        timer_system.start_mining))
-    app.add_handler(CommandHandler("minestatus",  timer_system.mining_status))
-    app.add_handler(CommandHandler("claimmine",   timer_system.claim_mining))
-    app.add_handler(CommandHandler("train",       army_system.train_units))
-    app.add_handler(CommandHandler("army",        army_system.view_army))
-    app.add_handler(CommandHandler("trainstatus", army_system.training_status))
-    app.add_handler(CommandHandler("claimtrain",  army_system.claim_training))
-    app.add_handler(CommandHandler("missions",      mission_system.missions))
-    app.add_handler(CommandHandler("storymissions", mission_system.storymissions))
-    app.add_handler(CommandHandler("epicmissions",  mission_system.epicmissions))
-    # ← corrected here:
-    app.add_handler(CommandHandler("claimmission",  mission_system.claimmission))
-
-    app.add_handler(CommandHandler("attack",         battle_system.attack))
-    app.add_handler(CommandHandler("battle_status",  battle_system.battle_status))
-    app.add_handler(CommandHandler("spy",            battle_system.spy))
-    app.add_handler(CommandHandler("shop",            shop_system.shop))
-    app.add_handler(CommandHandler("buy",             shop_system.buy))
-    app.add_handler(CommandHandler("unlockblackmarket", shop_system.unlock_blackmarket))
-    app.add_handler(CommandHandler("blackmarket",       shop_system.blackmarket))
-    app.add_handler(CommandHandler("bmbuy",             shop_system.bmbuy))
-
-    # Unknown /fallback
-    app.add_handler(MessageHandler(filters.COMMAND,
-        lambda u,c: u.message.reply_text("❓ Unknown—use the menu below.", reply_markup=MENU_MARKUP)
-    ))
-
-    app.add_error_handler(error_handler)
-    app.run_polling()
-
-if __name__ == "__main__":
-    main()
+    app.add_handler(CallbackQueryHandler(building_back_callback,   pattern="^BUILDING:__back__$
