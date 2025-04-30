@@ -1,23 +1,27 @@
 import datetime
-
 from utils.ui_helpers import render_status_panel
 from utils import google_sheets
 
-# In-memory mining tracker
-# player_mining[player_id] = {resource: {"amount": int, "end_time": str}}
+# In-memory mining tracker: player_id → resource → {amount, end_time}
 player_mining: dict[str, dict[str, dict[str, str]]] = {}
 
-# Resources per minute
-MINING_SPEEDS = {
-    "metal": 100,
-    "fuel": 60,
-    "crystal": 30,
-}
+
+def get_mining_speed(player_id: str, resource: str) -> int:
+    """
+    Returns the mining speed (units per minute) based on building level.
+    """
+    level = google_sheets.get_building_level(player_id, f"{resource}_mine") or 1
+    speed_table = {
+        "metal": [100, 200, 400, 800, 1600],
+        "fuel": [60, 120, 240, 480, 960],
+        "crystal": [30, 60, 120, 240, 480],
+    }
+    return speed_table.get(resource, [0])[level - 1]
 
 
 async def start_mining(update, context):
     """
-    /mine [resource] [amount] — Start mining a resource.
+    /mine [resource] [amount] — Start mining a specified amount of a resource.
     """
     pid = str(update.effective_user.id)
     panel = render_status_panel(pid)
@@ -37,12 +41,12 @@ async def start_mining(update, context):
             "⚡ Amount must be a number.\n\n" + panel
         )
 
-    if resource not in MINING_SPEEDS:
+    if resource not in ("metal", "fuel", "crystal"):
         return await update.message.reply_text(
             "❌ Invalid resource. Available: metal, fuel, crystal.\n\n" + panel
         )
 
-    speed = MINING_SPEEDS[resource]
+    speed = get_mining_speed(pid, resource)
     minutes = amount / speed
     finish_dt = datetime.datetime.now() + datetime.timedelta(minutes=minutes)
     finish_str = finish_dt.strftime("%Y-%m-%d %H:%M:%S")
@@ -53,14 +57,13 @@ async def start_mining(update, context):
     }
 
     await update.message.reply_text(
-        f"⛏️ Mining {amount} {resource.title()}... "
-        f"(ends {finish_str})\n\n" + panel
+        f"⛏️ Mining {amount} {resource.title()}... (ends {finish_str})\n\n" + panel
     )
 
 
 async def mining_status(update, context):
     """
-    /minestatus — Check current mining operations.
+    /minestatus — Check current mining operations for the player.
     """
     pid = str(update.effective_user.id)
     panel = render_status_panel(pid)
@@ -91,7 +94,7 @@ async def mining_status(update, context):
 
 async def claim_mining(update, context):
     """
-    /claimmine — Claim completed mining operations.
+    /claimmine — Claim completed mining operations and credit resources.
     """
     pid = str(update.effective_user.id)
     panel = render_status_panel(pid)
