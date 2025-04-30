@@ -188,7 +188,6 @@ async def building_upgrade_callback(update: Update, context: ContextTypes.DEFAUL
     pid = str(query.from_user.id)
     key = query.data.split(":",1)[1]
 
-    # Inline build logic
     cur_lv = get_building_level(pid, key)
     nxt_lv = cur_lv + 1
     cost   = building_system.BUILDINGS[key]["resource_cost"](nxt_lv)
@@ -214,7 +213,6 @@ async def building_upgrade_callback(update: Update, context: ContextTypes.DEFAUL
     ready_at = datetime.now() + timedelta(minutes=minutes)
     building_system.save_building_task(pid, key, datetime.now(), ready_at)
 
-    # Acknowledge & refresh detail
     await query.answer(f"🔨 Upgrading to Lv {nxt_lv}!")
     await building_detail_callback(update, context)
 
@@ -283,8 +281,8 @@ def main():
     app.add_handler(CommandHandler("missions",      mission_system.missions))
     app.add_handler(CommandHandler("storymissions", mission_system.storymissions))
     app.add_handler(CommandHandler("epicmissions",  mission_system.epicmissions))
-    # <— updated line below:
-    app.add_handler(CommandHandler("claimmission",  mission_system.claim_mission))
+    # ← corrected here:
+    app.add_handler(CommandHandler("claimmission",  mission_system.claimmission))
 
     app.add_handler(CommandHandler("attack",         battle_system.attack))
     app.add_handler(CommandHandler("battle_status",  battle_system.battle_status))
