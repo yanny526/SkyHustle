@@ -111,7 +111,6 @@ TUTORIAL_HANDLERS = [
 # BUILDING LIST & DETAILS
 
 def _make_building_list(pid: str):
-    """Return (text, markup) for the building list menu."""
     queue = load_building_queue(pid)
     buttons = []
     for key in building_system.BUILDINGS:
@@ -133,8 +132,8 @@ async def building_detail_callback(update: Update, context: ContextTypes.DEFAULT
     pid = str(query.from_user.id)
     key = query.data.split(":",1)[1]
 
-    # — If already upgrading, show remaining time and only a Back button —
     queue = load_building_queue(pid)
+    # If already upgrading
     for task in queue.values():
         if task['building_name'] == key:
             end_time = datetime.strptime(task["end_time"], "%Y-%m-%d %H:%M:%S")
@@ -145,11 +144,11 @@ async def building_detail_callback(update: Update, context: ContextTypes.DEFAULT
                 "« Back to list"
             )
             markup = InlineKeyboardMarkup([
-                [ InlineKeyboardButton("« Back", callback_data="BUILDING:__back__") ]
+                [InlineKeyboardButton("« Back", callback_data="BUILDING:__back__")]
             ])
             return await query.edit_message_text(text, parse_mode=ParseMode.HTML, reply_markup=markup)
 
-    # — Otherwise, show normal detail & Upgrade button —
+    # Normal detail
     cur = get_building_level(pid, key)
     nxt = cur + 1
     cost = building_system.BUILDINGS[key]["resource_cost"](nxt)
@@ -189,7 +188,7 @@ async def building_upgrade_callback(update: Update, context: ContextTypes.DEFAUL
     pid = str(query.from_user.id)
     key = query.data.split(":",1)[1]
 
-    # —— Inline build logic ——
+    # Inline build logic
     cur_lv = get_building_level(pid, key)
     nxt_lv = cur_lv + 1
     cost   = building_system.BUILDINGS[key]["resource_cost"](nxt_lv)
@@ -215,12 +214,11 @@ async def building_upgrade_callback(update: Update, context: ContextTypes.DEFAUL
     ready_at = datetime.now() + timedelta(minutes=minutes)
     building_system.save_building_task(pid, key, datetime.now(), ready_at)
 
-    # Acknowledge & refresh detail to show “Upgrading”
+    # Acknowledge & refresh detail
     await query.answer(f"🔨 Upgrading to Lv {nxt_lv}!")
     await building_detail_callback(update, context)
 
 # ────────────────────────────────────────────────────────────────────────────────
-# Main menu router for reply-keyboard
 async def menu_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
     pid  = str(update.effective_user.id)
@@ -241,13 +239,7 @@ async def menu_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await status(update, context)
 
     if text == "📜 Missions":
-        # Hijack reply_text so mission_system.missions always re-attach the menu
-        orig = update.message.reply_text
-        async def reply_with_menu(txt, **kwargs):
-            kwargs.setdefault("reply_markup", MENU_MARKUP)
-            return await orig(txt, **kwargs)
-        update.message.reply_text = reply_with_menu  # monkey-patch just for this call
-        return await mission_system.missions(update, context)
+        return await update.message.reply_text("Use /missions to view missions.", reply_markup=MENU_MARKUP)
 
     if text == "🛒 Shop":
         return await update.message.reply_text("Use /shop to browse.", reply_markup=MENU_MARKUP)
@@ -269,7 +261,7 @@ def main():
     app.add_handler(CommandHandler("lore",   lore))
     app.add_handler(CommandHandler("status", status))
 
-    # Reply-keyboard menu
+    # Reply‐keyboard menu
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, menu_router))
 
     # Inline building callbacks
@@ -291,7 +283,9 @@ def main():
     app.add_handler(CommandHandler("missions",      mission_system.missions))
     app.add_handler(CommandHandler("storymissions", mission_system.storymissions))
     app.add_handler(CommandHandler("epicmissions",  mission_system.epicmissions))
-    app.add_handler(CommandHandler("claimmission",  mission_system.claimmission))
+    # <— updated line below:
+    app.add_handler(CommandHandler("claimmission",  mission_system.claim_mission))
+
     app.add_handler(CommandHandler("attack",         battle_system.attack))
     app.add_handler(CommandHandler("battle_status",  battle_system.battle_status))
     app.add_handler(CommandHandler("spy",            battle_system.spy))
