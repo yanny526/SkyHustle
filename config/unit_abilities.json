@@ -1,1 +1,42 @@
+{
+  "rush": {
+    "display_name": "Rush",
+    "description": "Infantry charges forward, gaining a temporary attack boost.",
+    "attack_bonus": 0.2,
+    "duration": 1,
+    "cooldown": 3,
+    "trigger": "start_of_battle",
+    "role_restriction": "infantry"
+  },
+  "armor_piercing": {
+    "display_name": "Armor Piercing",
+    "description": "Heavy units ignore a portion of the enemy's defense.",
+    "defense_penetration": 0.3,
+    "trigger": "passive",
+    "role_restriction": "heavy"
+  },
+  "swarm": {
+    "display_name": "Swarm",
+    "description": "Ranged units fire a volley of projectiles, hitting multiple targets.",
+    "target_count": 2,
+    "attack_penalty": 0.1,
+    "trigger": "on_attack",
+    "role_restriction": "ranged"
+  },
+  "barrage": {
+    "display_name": "Barrage",
+    "description": "Siege units unleash a powerful bombardment, dealing area damage.",
+    "area_damage": 0.5,
+    "trigger": "active",
+    "cooldown": 5,
+    "role_restriction": "siege"
+  },
+  "evasion": {
+    "display_name": "Evasion",
+    "description": "Recon units have a chance to dodge incoming attacks.",
+    "dodge_chance": 0.15,
+    "trigger": "on_defense",
+    "role_restriction": "recon"
+  }
+}
 
