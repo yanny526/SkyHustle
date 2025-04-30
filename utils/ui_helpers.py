@@ -1,140 +1,132 @@
-import datetime
-from typing import List, Tuple
+# ui_helpers.py (Part 1 of X)
 
-from systems import timer_system, tutorial_system
-from utils.google_sheets import (
-    load_resources,
-    load_player_army,
-    load_training_queue,
-    get_building_level,
-)
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram.ext import ContextTypes
 
-# === Constants & Icons ===
-MAX_STORAGE = {
-    "metal": 5000,
-    "fuel": 2500,
-    "crystal": 1000,
-    "credits": 500,
-}
-
-UNIT_ICONS = {
-    "soldier": "👤",
-    "tank": "🚛",
-    "scout_drone": "🛰️",
-    "raider_mech_suit": "🤖",
-    "infinity_scout_vehicle": "🚀",
-}
-
-TIMER_ICONS = {
-    "mine": "⛏️",
-    "train": "🏭",
-}
-
-CAPACITY_BY_LEVEL = {
-    1: 100,
-    5: 300,
-    10: 800,
-    15: 2000,
-}
-DEFAULT_CAPACITY = 1000
-
-
-def _format_timedelta(delta: datetime.timedelta) -> str:
-    seconds = int(delta.total_seconds())
-    days, seconds = divmod(seconds, 86400)
-    hours, seconds = divmod(seconds, 3600)
-    minutes, seconds = divmod(seconds, 60)
-    parts: List[str] = []
-    if days:
-        parts.append(f"{days}d")
-    if hours:
-        parts.append(f"{hours}h")
-    parts.append(f"{minutes}m {seconds}s")
-    return " ".join(parts)
-
-
-def render_status_panel(player_id: str) -> str:
-    """
-    Assembles the full status panel text for a player.
-    """
-    # 1) Resources
-    resources = load_resources(player_id)
-    res_lines = [
-        f"• {r.title()}: {amt}/{MAX_STORAGE.get(r, '∞')}"
-        for r, amt in resources.items()
+# ── Send Main Menu ───────────────────────────────────────────────────────
+async def send_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [
+        [InlineKeyboardButton("🎯 Missions", callback_data="mission_main")],
+        [InlineKeyboardButton("🏗 Build", callback_data="build_main")],
+        [InlineKeyboardButton("⚔ Train", callback_data="train_main")],
+        [InlineKeyboardButton("🚀 Attack", callback_data="combat_main")],
+        [InlineKeyboardButton("🛰 Spy", callback_data="spy_main")],
+        [InlineKeyboardButton("🧬 Research", callback_data="tech_main")],
+        [InlineKeyboardButton("🛒 Store", callback_data="store_main")],
+        [InlineKeyboardButton("💣 Black Market", callback_data="bm_main")],
+        [InlineKeyboardButton("🎁 Rewards", callback_data="reward_main")],
+        [InlineKeyboardButton("📈 Status", callback_data="status_main")],
     ]
-    res_str = "\n".join(res_lines)
-
-    # 2) Army (with icons)
-    army = load_player_army(player_id)
-    if army:
-        army_lines = [
-            f"• {UNIT_ICONS.get(unit, '❓')} {unit.title()}: {qty}"
-            for unit, qty in army.items()
-        ]
-    else:
-        army_lines = ["(none)"]
-    army_str = "\n".join(army_lines)
-
-    # 3) Buildings (just levels)
-    building_lines = [
-        f"• {building.replace('_', ' ').title()}: Lv {get_building_level(player_id, building) or 0}"
-        for building in ["command_center", "metal_mine", "fuel_refinery"]
-    ]
-    building_str = "\n".join(building_lines)
-
-    # 4) Timers (mining/training)
-    now = datetime.datetime.now()
-    timer_msgs: List[Tuple[datetime.timedelta, str]] = []
-
-    # Mining timers
-    for resource, details in getattr(timer_system, 'player_mining', {}).get(player_id, {}).items():
-        end_str = details.get('end')
-        if not end_str:
-            continue
-        end_dt = datetime.datetime.strptime(end_str, "%Y-%m-%d %H:%M:%S")
-        rem = end_dt - now
-        if rem.total_seconds() > 0:
-            timer_msgs.append(
-                (rem, f"{TIMER_ICONS['mine']} Mining {resource.title()}: {_format_timedelta(rem)}")
-            )
-
-    # Training timers
-    queue = load_training_queue(player_id)
-    for task in queue.values():
-        end_str = task.get('end_time')
-        if not end_str:
-            continue
-        end_dt = datetime.datetime.strptime(end_str, "%Y-%m-%d %H:%M:%S")
-        rem = end_dt - now
-        if rem.total_seconds() > 0:
-            timer_msgs.append(
-                (
-                    rem,
-                    f"{TIMER_ICONS['train']} Training {task['amount']}× {task['unit_name'].capitalize()}: {_format_timedelta(rem)}",
-                )
-            )
-
-    # Sort and select top 2
-    timer_msgs.sort(key=lambda x: x[0])
-    timer_line = ""
-    if timer_msgs:
-        timer_line = "⏳ " + " | ".join(msg for _, msg in timer_msgs[:2])
-
-    # 5) Shield timer
-    shield_line = ""
-    exp = tutorial_system.shield_expirations.get(player_id)
-    if exp:
-        rem = exp - now
-        if rem.total_seconds() > 0:
-            shield_line = f"🛡️ Shield: {_format_timedelta(rem)}"
-
-    # Assemble panel
-    return (
-        f"<b>⚙️ Empire Status:</b>\n"
-        f"<b>Resources:</b>\n{res_str}\n\n"
-        f"<b>Army:</b>\n{army_str}\n\n"
-        f"<b>Buildings:</b>\n{building_str}\n\n"
-        f"{timer_line}\n"
-        f"{shield_line}"
+    await update.message.reply_text(
+        "👋 *Welcome to SkyHustle!*\nSelect an option below:",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode="Markdown"
     )
+
+# ── Helper: Button Grid ──────────────────────────────────────────────────
+def button_grid(buttons, cols=2):
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(text, callback_data=data)
+         for text, data in buttons[i:i+cols]]
+        for i in range(0, len(buttons), cols)
+    ])
+# ui_helpers.py (Part 2 of X)
+
+def render_resources(player_data):
+    return (
+        f"🪙 *Resources:*\n"
+        f"• Metal: `{player_data['metal']}`\n"
+        f"• Energy: `{player_data['energy']}`\n"
+        f"• Oil: `{player_data['oil']}`\n"
+        f"• Credits: `{player_data['credits']}`"
+    )
+
+def render_buildings(building_data):
+    if not building_data:
+        return "🏗 No buildings constructed yet."
+    lines = ["🏗 *Your Buildings:*"]
+    for name, level in building_data.items():
+        lines.append(f"• {name.title()}: `Lvl {level}`")
+    return "\n".join(lines)
+
+def render_army(army_data):
+    if not army_data:
+        return "⚔ You have no units trained yet."
+    lines = ["⚔ *Your Army:*"]
+    for unit, count in army_data.items():
+        lines.append(f"• {unit.title()}: `{count}`")
+    return "\n".join(lines)
+
+def render_tech_tree(tech_data):
+    if not tech_data:
+        return "🧬 No tech researched yet."
+    lines = ["🧬 *Tech Tree:*"]
+    for tech, level in tech_data.items():
+        lines.append(f"• {tech.title()}: `Lvl {level}`")
+    return "\n".join(lines)
+# ui_helpers.py (Part 3 of X)
+
+def render_spy_report(report: dict):
+    if not report:
+        return "🛰 No data available. Target may have cloaking tech."
+    
+    lines = [f"🛰 *Spy Report on Player {report.get('target')}*"]
+    if "resources" in report:
+        res = report["resources"]
+        lines.append(
+            f"• Metal: `{res['metal']}` | Energy: `{res['energy']}` | Oil: `{res['oil']}` | Credits: `{res['credits']}`"
+        )
+    if "army" in report:
+        for unit, count in report["army"].items():
+            lines.append(f"• {unit.title()}: `{count}`")
+    if "tech" in report:
+        for tech, level in report["tech"].items():
+            lines.append(f"• {tech.title()} Tech: `Lvl {level}`")
+    return "\n".join(lines)
+
+def render_missions(missions: list):
+    if not missions:
+        return "🎯 No missions available."
+    return "\n".join(
+        [f"• {m['name']}: {m['desc']} — *Reward:* {m['reward']} credits" for m in missions]
+    )
+
+def render_blackmarket_item(item):
+    return (
+        f"{item['name']}\n"
+        f"{item['desc']}\n"
+        f"💳 Cost: *{item['cost']}* credits"
+    )
+
+def render_store_item(item):
+    return (
+        f"{item['name']}\n"
+        f"{item['desc']}\n"
+        f"💵 Price: *{item['price']}* credits"
+    )
+# ui_helpers.py (Part 4 of 4)
+
+def render_zone_control(zone_data):
+    if not zone_data:
+        return "🧭 No zones controlled yet."
+    lines = ["🧭 *Zone Control:*"]
+    for zone, info in zone_data.items():
+        lines.append(f"• {zone.title()}: {info['faction']} (Player {info['claimed_by']})")
+    return "\n".join(lines)
+
+def render_rewards(rewards: list):
+    if not rewards:
+        return "🎁 No rewards available."
+    return "\n".join([f"• {r['name']} — *{r['amount']}* credits" for r in rewards])
+
+def render_expand_options(current_slots: int, max_slots: int, cost: int):
+    return (
+        f"📦 *Base Slots:*\n"
+        f"• Current Slots: `{current_slots}` / `{max_slots}`\n"
+        f"• Expansion Cost: *{cost} credits*"
+    )
+
+def back_button(callback_data: str = "main_menu"):
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔙 Back", callback_data=callback_data)]
+    ])
