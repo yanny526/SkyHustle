@@ -1,16 +1,18 @@
+import os
 import json
 from datetime import datetime
 from typing import Dict, Tuple
 
 # Load unit stats from config
-with open("os.path.join(os.path.dirname(__file__), "../config/army_stats.json")", "r") as f:
+with open(os.path.join(os.path.dirname(__file__), "../config/army_stats.json"), "r") as f:
     UNIT_STATS = json.load(f)
 
-# Load battle tactics\ nwith open("config/battle_tactics.json", "r") as f:
+# Load battle tactics
+with open(os.path.join(os.path.dirname(__file__), "../config/battle_tactics.json"), "r") as f:
     BATTLE_TACTICS = json.load(f)
 
 # Load unit abilities
-with open("config/unit_abilities.json", "r") as f:
+with open(os.path.join(os.path.dirname(__file__), "../config/unit_abilities.json"), "r") as f:
     UNIT_ABILITIES = json.load(f)
 
 
