@@ -1,125 +1,206 @@
 import json
-import datetime
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.constants import ParseMode
+from datetime import datetime, timedelta
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
+
 from utils import google_sheets
 from utils.ui_helpers import render_status_panel
 
+
 # Load mission templates
 with open("config/mission_data.json", "r") as f:
-    MISSIONS = json.load(f)
+    MISSION_TEMPLATES = json.load(f)
 
-# Helper to format rewards
+
+# --- Helpers ---
+def _generate_missions(mission_type: str, count: int):
+    """
+    Picks `count` random missions of a given type.
+    (In a real game, this might consider player level, etc.)
+    """
+    templates = MISSION_TEMPLATES.get(f"{mission_type}_templates", [])
+    if not templates:
+        return []
+    return [templates[i % len(templates)] for i in range(count)]
+
+
 def _format_rewards(rewards: dict) -> str:
-    return ", ".join(f"{v} {k.capitalize()}" for k, v in rewards.items())
+    """Formats a reward dictionary into a string."""
+    return ", ".join(f"{amt} {res.title()}" for res, amt in rewards.items())
 
-# Merge assigned records with their templates
-def _merge_records(records: list[dict], templates: list[dict]) -> list[dict]:
-    out = []
-    for r in records:
-        tmpl = next((t for t in templates if t.get("id") == r.get("mission_id")), {})
-        merged = {
-            'row_idx':    r.get('row_idx'),
-            'mission_id': r.get('mission_id'),
-            'type':       r.get('type'),
-            'date':       r.get('date'),
-            'progress':   int(r.get('progress', 0)),
-            'claimed':    bool(r.get('claimed')),
-            'description':tmpl.get('description', ''),
-            'rewards':    tmpl.get('rewards', {}),
-            'total':      tmpl.get('amount') or tmpl.get('requirement', {}).get('value') or 0
-        }
-        out.append(merged)
-    return out
 
-# Build inline menu of missions
-async def menu_missions(context, player_id: str) -> tuple[str, InlineKeyboardMarkup]:
-    today = datetime.date.today().isoformat()
-    # Ensure daily missions
-    daily_assigned = google_sheets.get_player_missions(player_id, 'daily', today)
-    if not daily_assigned:
-        for tmpl in MISSIONS.get('daily_templates', []):
-            google_sheets.save_player_mission(
-                player_id, tmpl['id'], 'daily', today, 0, False
-            )
-        daily_assigned = google_sheets.get_player_missions(player_id, 'daily', today)
-    daily = _merge_records(daily_assigned, MISSIONS.get('daily_templates', []))
-
-    # Story missions
-    res = google_sheets.load_resources(player_id)
-    lvl = res.get('level', 1)
-    story_templates = [t for t in MISSIONS.get('story_missions', []) if lvl >= t.get('level_required', 0)]
-    saved_story = google_sheets.get_player_missions(player_id, 'story')
-    if len(saved_story) < len(story_templates):
-        for tmpl in story_templates:
-            if tmpl['id'] not in [r['mission_id'] for r in saved_story]:
-                google_sheets.save_player_mission(
-                    player_id, tmpl['id'], 'story', None, 0, False
-                )
-        saved_story = google_sheets.get_player_missions(player_id, 'story')
-    story = _merge_records(saved_story, story_templates)
-
-    # Epic missions
-    epic_assigned = google_sheets.get_player_missions(player_id, 'epic')
-    if not epic_assigned:
-        for tmpl in MISSIONS.get('epic_missions', []):
-            google_sheets.save_player_mission(
-                player_id, tmpl['id'], 'epic', None, 0, False
-            )
-        epic_assigned = google_sheets.get_player_missions(player_id, 'epic')
-    epic = _merge_records(epic_assigned, MISSIONS.get('epic_missions', []))
-
-    # Build text and buttons
-    text_lines = ["📜 <b>Your Missions</b>"]
-    buttons = []
-    for section, lst in (('Daily', daily), ('Story', story), ('Epic', epic)):
-        text_lines.append(f"\n<b>{section}:</b>")
-        for m in lst:
-            status = '✅' if m['claimed'] else f"{m['progress']}/{m['total']}"
-            text_lines.append(
-                f"– {m['description']} ({status}) → {_format_rewards(m['rewards'])}"
-            )
-            if not m['claimed'] and m['progress'] >= m['total']:
-                buttons.append([
-                    InlineKeyboardButton(
-                        f"Claim {m['mission_id']}",
-                        callback_data=f"MISSION_CLAIM:{m['mission_id']}"
-                    )
-                ])
-    # Back to main menu button at bottom
-    buttons.append([
-        InlineKeyboardButton("« Back", callback_data="NAV:back")
-    ])
-
-    # Append status panel
-    text = "\n".join(text_lines) + "\n\n" + render_status_panel(player_id)
-    markup = InlineKeyboardMarkup(buttons)
-    return text, markup
-
-# Slash‑command entrypoints
+# --- /missions — Show daily missions ---
 async def missions(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    pid = str(update.effective_user.id)
-    text, markup = await menu_missions(context, pid)
-    await update.message.reply_text(text, parse_mode=ParseMode.HTML, reply_markup=markup)
+    player_id = str(update.effective_user.id)
+    today = datetime.now().date()
+    missions_data = google_sheets.load_player_missions(player_id)
 
+    # Ensure missions_data has today's date
+    if not missions_data or missions_data.get("date") != str(today):
+        new_missions = _generate_missions("daily", 3)
+        missions_data = {
+            "date": str(today),
+            "missions": {m["id"]: False for m in new_missions},
+        }
+        google_sheets.save_player_missions(player_id, missions_data)
+    else:
+        # Reconstruct mission objects for display
+        new_missions = [
+            tpl for tpl in MISSION_TEMPLATES.get("daily_templates", [])
+            if tpl["id"] in missions_data["missions"]
+        ]
+
+    # Build message
+    lines = ["<b>📜 Daily Missions:</b>"]
+    buttons = []
+    for m in new_missions:
+        done = missions_data["missions"].get(m["id"], False)
+        icon = "✅" if done else "⬜"
+        lines.append(
+            f"{icon} {m['description']}  (Reward: {_format_rewards(m['rewards'])})"
+        )
+        if not done:
+            buttons.append([
+                InlineKeyboardButton(
+                    "Claim", callback_data=f"MISSION_CLAIM:daily:{m['id']}"
+                )
+            ])
+        lines.append("")
+
+    lines.append(render_status_panel(player_id))
+    markup = InlineKeyboardMarkup(buttons) if buttons else None
+
+    await update.message.reply_text(
+        "\n".join(lines),
+        parse_mode="HTML",
+        reply_markup=markup
+    )
+
+
+# --- /storymissions — Show story missions ---
 async def storymissions(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    return await missions(update, context)
+    player_id = str(update.effective_user.id)
+    missions_data = google_sheets.load_player_missions(player_id) or {}
 
+    if "story" not in missions_data:
+        new_missions = _generate_missions("story", 5)
+        missions_data["story"] = {m["id"]: False for m in new_missions}
+        google_sheets.save_player_missions(player_id, missions_data)
+    else:
+        new_missions = [
+            tpl for tpl in MISSION_TEMPLATES.get("story_templates", [])
+            if tpl["id"] in missions_data["story"]
+        ]
+
+    lines = ["<b>📜 Story Missions:</b>"]
+    buttons = []
+    for m in new_missions:
+        done = missions_data["story"].get(m["id"], False)
+        icon = "✅" if done else "⬜"
+        lines.append(
+            f"{icon} {m['description']}  (Reward: {_format_rewards(m['rewards'])})"
+        )
+        if not done:
+            buttons.append([
+                InlineKeyboardButton(
+                    "Claim", callback_data=f"MISSION_CLAIM:story:{m['id']}"
+                )
+            ])
+        lines.append("")
+
+    lines.append(render_status_panel(player_id))
+    markup = InlineKeyboardMarkup(buttons) if buttons else None
+
+    await update.message.reply_text(
+        "\n".join(lines),
+        parse_mode="HTML",
+        reply_markup=markup
+    )
+
+
+# --- /epicmissions — Show epic missions ---
 async def epicmissions(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    return await missions(update, context)
+    player_id = str(update.effective_user.id)
+    missions_data = google_sheets.load_player_missions(player_id) or {}
 
-# Claim via inline button
+    if "epic" not in missions_data:
+        new_missions = _generate_missions("epic", 5)
+        missions_data["epic"] = {m["id"]: False for m in new_missions}
+        google_sheets.save_player_missions(player_id, missions_data)
+    else:
+        new_missions = [
+            tpl for tpl in MISSION_TEMPLATES.get("epic_templates", [])
+            if tpl["id"] in missions_data["epic"]
+        ]
+
+    lines = ["<b>📜 Epic Missions:</b>"]
+    buttons = []
+    for m in new_missions:
+        done = missions_data["epic"].get(m["id"], False)
+        icon = "✅" if done else "⬜"
+        lines.append(
+            f"{icon} {m['description']}  (Reward: {_format_rewards(m['rewards'])})"
+        )
+        if not done:
+            buttons.append([
+                InlineKeyboardButton(
+                    "Claim", callback_data=f"MISSION_CLAIM:epic:{m['id']}"
+                )
+            ])
+        lines.append("")
+
+    lines.append(render_status_panel(player_id))
+    markup = InlineKeyboardMarkup(buttons) if buttons else None
+
+    await update.message.reply_text(
+        "\n".join(lines),
+        parse_mode="HTML",
+        reply_markup=markup
+    )
+
+
+# --- Callback for mission claims ---
 async def claim_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    pid = str(query.from_user.id)
-    mission_id = query.data.split(':',1)[1]
-    # reuse existing logic
-    context.args = [mission_id]
-    from systems.mission_system import claimmission
-    update.message = query.message
-    await claimmission(update, context)
-    # refresh list
-    text, markup = await menu_missions(context, pid)
-    await query.edit_message_text(text, parse_mode=ParseMode.HTML, reply_markup=markup)
+    player_id = str(query.from_user.id)
+    _, mtype, mission_id = query.data.split(":", 2)
+
+    missions_data = google_sheets.load_player_missions(player_id) or {}
+    category = {
+        "daily": "missions",
+        "story": "story",
+        "epic": "epic"
+    }.get(mtype)
+
+    if not category or mission_id not in missions_data.get(category, {}):
+        return await query.edit_message_text(
+            "❌ Cannot claim this mission.", parse_mode="HTML"
+        )
+
+    if missions_data[category][mission_id]:
+        return await query.edit_message_text(
+            "❌ Mission already claimed.", parse_mode="HTML"
+        )
+
+    # Mark claimed and apply rewards
+    tpl_list = MISSION_TEMPLATES.get(f"{mtype}_templates", [])
+    rewards = next((m["rewards"] for m in tpl_list if m["id"] == mission_id), {})
+    missions_data[category][mission_id] = True
+    google_sheets.save_player_missions(player_id, missions_data)
+
+    await _apply_rewards(player_id, rewards)
+    return await query.edit_message_text(
+        f"✅ Mission Claimed! Rewards: {_format_rewards(rewards)}",
+        parse_mode="HTML"
+    )
+
+
+async def _apply_rewards(player_id: str, rewards: dict):
+    """
+    Helper: Applies rewards to the player's resources.
+    """
+    resources = google_sheets.load_resources(player_id)
+    for res, amt in rewards.items():
+        resources[res] = resources.get(res, 0) + amt
+    google_sheets.save_resources(player_id, resources)
