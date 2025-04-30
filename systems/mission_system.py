@@ -1,6 +1,7 @@
 import json
 import datetime
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 from utils import google_sheets
 from utils.ui_helpers import render_status_panel
@@ -96,14 +97,13 @@ async def menu_missions(context, player_id: str) -> tuple[str, InlineKeyboardMar
     markup = InlineKeyboardMarkup(buttons)
     return text, markup
 
-# Hand off slash commands to callback-like flow
+# Slash‑command entrypoints
 async def missions(update: Update, context: ContextTypes.DEFAULT_TYPE):
     pid = str(update.effective_user.id)
     text, markup = await menu_missions(context, pid)
     await update.message.reply_text(text, parse_mode=ParseMode.HTML, reply_markup=markup)
 
 async def storymissions(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # alias to menu_missions for simplicity
     return await missions(update, context)
 
 async def epicmissions(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -118,9 +118,8 @@ async def claim_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # reuse existing logic
     context.args = [mission_id]
     from systems.mission_system import claimmission
-    # craft a fake update.message
     update.message = query.message
     await claimmission(update, context)
-    # refresh mission list
+    # refresh list
     text, markup = await menu_missions(context, pid)
     await query.edit_message_text(text, parse_mode=ParseMode.HTML, reply_markup=markup)
