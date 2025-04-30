@@ -1,18 +1,20 @@
 import datetime
+
 from utils import google_sheets
-from systems import army_system
 from utils.army_combat import calculate_battle_outcome, calculate_battle_rewards
 from utils.ui_helpers import render_status_panel
 
-# Attack another player
+
+# ── Attack another player ─────────────────────────────────────────────────────
 async def attack(update, context):
     player_id = str(update.effective_user.id)
     args = context.args
 
     if len(args) != 1:
         await update.message.reply_text(
-            "🛡️ Usage: /attack [player_id]\nExample: /attack 12345\n\n" +
-            render_status_panel(player_id)
+            "🛡️ Usage: /attack [player_id]\n"
+            "Example: /attack 12345\n\n"
+            + render_status_panel(player_id)
         )
         return
 
@@ -24,14 +26,15 @@ async def attack(update, context):
 
     if not player_army:
         await update.message.reply_text(
-            "❌ Your army is empty. Train units with /train.\n\n" +
-            render_status_panel(player_id)
+            "❌ Your army is empty. Train units with /train.\n\n"
+            + render_status_panel(player_id)
         )
         return
+
     if not target_army:
         await update.message.reply_text(
-            f"❌ Player {target_id} has no army. Unable to attack.\n\n" +
-            render_status_panel(player_id)
+            f"❌ Player {target_id} has no army. Unable to attack.\n\n"
+            + render_status_panel(player_id)
         )
         return
 
@@ -56,15 +59,16 @@ async def attack(update, context):
     )
     await update.message.reply_text(msg)
 
-# View battle history
+
+# ── View battle history ───────────────────────────────────────────────────────
 async def battle_status(update, context):
     player_id = str(update.effective_user.id)
     history = google_sheets.load_battle_history(player_id)
 
     if not history:
         await update.message.reply_text(
-            "❌ You have no battle history.\n\n" +
-            render_status_panel(player_id)
+            "❌ You have no battle history.\n\n"
+            + render_status_panel(player_id)
         )
         return
 
@@ -75,19 +79,22 @@ async def battle_status(update, context):
     msg = (
         "🛡️ Battle History:\n\n"
         + "\n".join(lines)
-        + "\n\n" + render_status_panel(player_id)
+        + "\n\n"
+        + render_status_panel(player_id)
     )
     await update.message.reply_text(msg)
 
-# Spy another player's army
+
+# ── Spy another player's army ────────────────────────────────────────────────
 async def spy(update, context):
     player_id = str(update.effective_user.id)
     args = context.args
 
     if len(args) != 1:
         await update.message.reply_text(
-            "🛡️ Usage: /spy [player_id]\nExample: /spy 12345\n\n" +
-            render_status_panel(player_id)
+            "🛡️ Usage: /spy [player_id]\n"
+            "Example: /spy 12345\n\n"
+            + render_status_panel(player_id)
         )
         return
 
@@ -96,13 +103,15 @@ async def spy(update, context):
 
     if not target_army:
         await update.message.reply_text(
-            f"❌ Player {target_id} has no army to spy on.\n\n" +
-            render_status_panel(player_id)
+            f"❌ Player {target_id} has no army to spy on.\n\n"
+            + render_status_panel(player_id)
         )
         return
 
     report_lines = [f"🕵️‍♂️ Spy Report — Player {target_id}:"]
     for unit, qty in target_army.items():
         report_lines.append(f"- {unit.capitalize()}: {qty}")
-    report_lines.append("\n" + render_status_panel(player_id))
+    report_lines.append("")  # blank line before panel
+    report_lines.append(render_status_panel(player_id))
+
     await update.message.reply_text("\n".join(report_lines))
