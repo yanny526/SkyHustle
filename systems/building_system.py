@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+import datetime
 from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
@@ -14,7 +14,8 @@ from utils.google_sheets import (
 )
 from utils.ui_helpers import render_status_panel
 
-# ── BUILDING DEFINITIONS ────────────────────────────────────────────────────────
+
+# ── BUILDING DEFINITIONS ───────────────────────────────────────────────────────
 BUILDING_DATA = {
     "command_center": {
         "display_name": "Command Center",
@@ -67,7 +68,10 @@ BUILDING_DATA = {
         "time_mult": 1.3,
         "resource_cost": {"metal": 500, "fuel": 200, "crystal": 100},
         "cost_increase_factor": 1.7,
-        "effects": {"train_time_pct": lambda lvl: -5 * lvl, "train_slots": lambda lvl: 50 + 10 * lvl},
+        "effects": {
+            "train_time_pct": lambda lvl: -5 * lvl,
+            "train_slots": lambda lvl: 50 + 10 * lvl,
+        },
         "max_level": 5,
     },
     "vehicle_factory": {
@@ -153,32 +157,34 @@ BUILDING_DATA = {
     },
 }
 
-# --- Helper Functions ---
+
+# ── Helper Functions ─────────────────────────────────────────────────────────
 def calculate_building_time(building: str, level: int) -> int:
-    """Calculates the building time based on base time and multiplier."""
     data = BUILDING_DATA[building]
     return int(data["base_time"] * (data["time_mult"] ** (level - 1)))
 
+
 def calculate_building_cost(building: str, level: int) -> dict:
-    """Calculates the resource cost for a building level."""
     data = BUILDING_DATA[building]
     base_cost = data["resource_cost"]
-    cost_factor = data["cost_increase_factor"]
+    factor = data["cost_increase_factor"]
     return {
-        res: int(base_cost.get(res, 0) * (cost_factor ** (level - 1)))
+        res: int(base_cost.get(res, 0) * (factor ** (level - 1)))
         for res in base_cost
     }
 
+
 def get_building_effect(building: str, level: int) -> dict:
-    """Retrieves the effects of a building at a given level."""
     data = BUILDING_DATA[building]
     effects = data.get("effects", {})
-    return {effect: func(level) for effect, func in effects.items()}
+    return {name: fn(level) for name, fn in effects.items()}
 
-# ── /build — start building ────────────────────────────────────────────────────
+
+# ── /build — start building ───────────────────────────────────────────────────
 async def build(update: Update, context: ContextTypes.DEFAULT_TYPE):
     player_id = str(update.effective_user.id)
     args = context.args
+
     if len(args) != 1:
         return await update.message.reply_text(
             "Usage: /build [building_name]\n\n" + render_status_panel(player_id),
@@ -187,9 +193,12 @@ async def build(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     building = args[0].lower()
     if building not in BUILDING_DATA:
-        available = ", ".join(data["display_name"] for data in BUILDING_DATA.values())
+        available = ", ".join(
+            BUILDING_DATA[b]["display_name"] for b in BUILDING_DATA
+        )
         return await update.message.reply_text(
-            f"Unknown building. Available: {available}\n\n" + render_status_panel(player_id),
+            f"Unknown building. Available: {available}\n\n"
+            + render_status_panel(player_id),
             parse_mode=ParseMode.HTML,
         )
 
@@ -205,134 +214,107 @@ async def build(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for res, amt in cost.items():
         if resources.get(res, 0) < amt:
             return await update.message.reply_text(
-                f"Not enough resources for {BUILDING_DATA[building]['display_name']} (Level {level}).\n"
-                + f"Needed: {amt} {res.title()}\n"
-                + f"You have: {resources.get(res, 0)} {res.title()}\n\n"
+                f"Not enough resources to build {BUILDING_DATA[building]['display_name']} "
+                f"(Level {level}).\n"
+                f"Needed: {amt} {res.title()}\n"
+                f"You have: {resources.get(res, 0)} {res.title()}\n\n"
                 + render_status_panel(player_id),
                 parse_mode=ParseMode.HTML,
             )
 
+    # Deduct resources
     for res, amt in cost.items():
         resources[res] -= amt
     save_resources(player_id, resources)
 
-    build_time = calculate_building_time(building, level)
-    end_time = datetime.now() + timedelta(seconds=build_time)
+    start_time = datetime.datetime.now()
+    end_time = start_time + datetime.timedelta(seconds=calculate_building_time(building, level))
     task = {
         "building_name": building,
         "level": level,
-        "start_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "start_time": start_time.strftime("%Y-%m-%d %H:%M:%S"),
         "end_time": end_time.strftime("%Y-%m-%d %H:%M:%S"),
     }
     save_building_task(player_id, task)
 
-    return await update.message.reply_text(
-        f"🏗️ Building {BUILDING_DATA[building]['display_name']} (Level {level})... Time: {build_time}s\n\n"
+    await update.message.reply_text(
+        f"🏗️ Building {BUILDING_DATA[building]['display_name']} "
+        f"(Level {level})… Time: {int((end_time - start_time).total_seconds())}s\n\n"
         + render_status_panel(player_id),
         parse_mode=ParseMode.HTML,
     )
 
-# ── /buildstatus — show building queue ─────────────────────────────────────────
+
+# ── /buildstatus — list in-progress builds ────────────────────────────────────
 async def buildstatus(update: Update, context: ContextTypes.DEFAULT_TYPE):
     player_id = str(update.effective_user.id)
     queue = load_building_queue(player_id)
+
     if not queue:
         return await update.message.reply_text(
-            "No buildings in progress.\n\n" + render_status_panel(player_id),
+            "✅ No active constructions.\n\n" + render_status_panel(player_id),
             parse_mode=ParseMode.HTML,
         )
 
-    now = datetime.now()
-    lines = []
-    for task_id, task in queue.items():
-        end_time = datetime.strptime(task["end_time"], "%Y-%m-%d %H:%M:%S")
-        remaining = end_time - now
-        name = BUILDING_DATA[task["building_name"]]["display_name"]
-        if remaining.total_seconds() > 0:
-            lines.append(f"🏗️ {name} (Level {task['level']}): {remaining}")
-        else:
-            lines.append(f"✅ {name} (Level {task['level']}): Completed")
+    now = datetime.datetime.now()
+    lines = ["<b>🔨 Active Constructions:</b>"]
+    for idx, task in queue.items():
+        end_time = datetime.datetime.strptime(task["end_time"], "%Y-%m-%d %H:%M:%S")
+        rem = end_time - now
+        key = task["building_name"]
+        level = task["level"]
+        lines.append(
+            f"• <b>{BUILDING_DATA[key]['display_name']}</b> → Lv {level} ({rem})"
+        )
 
-    return await update.message.reply_text(
-        "🏗️ Building Queue:\n" + "\n".join(lines) + "\n\n" + render_status_panel(player_id),
+    lines.append("")
+    lines.append(render_status_panel(player_id))
+
+    await update.message.reply_text(
+        "\n".join(lines),
         parse_mode=ParseMode.HTML,
     )
 
-# ── /buildinfo — show next-level cost & effect ────────────────────────────────
+
+# ── /buildinfo — show next-level cost & effect ───────────────────────────────
 async def buildinfo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     player_id = str(update.effective_user.id)
+
     if len(context.args) != 1:
         return await update.message.reply_text(
-            "Usage: /buildinfo [building_name]\n\n" + render_status_panel(player_id),
+            "Usage: /buildinfo [building_name]\n\n"
+            + render_status_panel(player_id),
             parse_mode=ParseMode.HTML,
         )
 
-    building = context.args[0].lower()
-    if building not in BUILDING_DATA:
-        available = ", ".join(data["display_name"] for data in BUILDING_DATA.values())
+    key = context.args[0].lower()
+    if key not in BUILDING_DATA:
+        available = ", ".join(
+            BUILDING_DATA[b]["display_name"] for b in BUILDING_DATA
+        )
         return await update.message.reply_text(
-            f"Unknown building. Available: {available}\n\n" + render_status_panel(player_id),
+            f"Unknown building. Available: {available}\n\n"
+            + render_status_panel(player_id),
             parse_mode=ParseMode.HTML,
         )
 
-    current_level = get_building_level(player_id, building)
-    next_level = current_level + 1
-    if next_level > BUILDING_DATA[building]["max_level"]:
-        return await update.message.reply_text(
-            "Max level reached!\n\n" + render_status_panel(player_id),
-            parse_mode=ParseMode.HTML,
-        )
+    cur = get_building_level(player_id, key)
+    nxt = cur + 1
+    cost = calculate_building_cost(key, nxt)
+    eff = get_building_effect(key, nxt) or {}
 
-    cost = calculate_building_cost(building, next_level)
-    effects = get_building_effect(building, next_level)
+    cost_str = " | ".join(f"{k.title()}: {v}" for k, v in cost.items())
+    eff_str = ", ".join(
+        f"{k.replace('_', ' ').title()}: {v}{'%' if 'pct' in k else ''}"
+        for k, v in eff.items()
+    ) or "(no direct effect)"
 
-    cost_str = " | ".join(f"{res.capitalize()}: {amt}" for res, amt in cost.items())
-    effects_str = (
-        ", ".join(f"{name.replace('_', ' ').title()}: {val}" for name, val in effects.items())
-        or "None"
-    )
-
-    return await update.message.reply_text(
-        f"🏗️ {BUILDING_DATA[building]['display_name']} (Level {next_level}):\n"
-        f"Cost: {cost_str}\n"
-        f"Effects: {effects_str}\n\n"
+    await update.message.reply_text(
+        f"<b>🏗️ {BUILDING_DATA[key]['display_name']}</b>\n"
+        f"• Current Lv: {cur}\n"
+        f"• Next Lv: {nxt}\n"
+        f"• Cost: {cost_str}\n"
+        f"• Effect: {eff_str}\n\n"
         + render_status_panel(player_id),
         parse_mode=ParseMode.HTML,
     )
-
-# --- Utility Functions ---
-def process_building_completion(player_id: str) -> str | None:
-    """
-    Checks for and finalizes completed building tasks, updating building levels.
-    This should be called periodically or after certain commands.
-    """
-    queue = load_building_queue(player_id)
-    now = datetime.now()
-    completed = []
-    for task_id, task in list(queue.items()):
-        end_time = datetime.strptime(task["end_time"], "%Y-%m-%d %H:%M:%S")
-        if now >= end_time:
-            save_building_level(player_id, task["building_name"], task["level"])
-            delete_building_task(task_id)
-            completed.append((task["building_name"], task["level"]))
-
-    if completed:
-        lines = [f"  {BUILDING_DATA[b]['display_name']} to Level {lvl}" for b, lvl in completed]
-        return "🎉 Buildings upgraded:\n" + "\n".join(lines)
-    return None
-
-async def periodic_building_updates(context: ContextTypes.DEFAULT_TYPE):
-    """
-    Periodically checks for completed buildings and sends updates to players.
-    Schedule with `context.job_queue.run_repeating(...)`
-    """
-    job = context.job
-    if not job:
-        return
-    player_id = job.user_id
-    update = job.data.get("update")
-    if not update:
-        return
-    msg = process_building_completion(player_id)
-    if msg:
-        await update.message.reply_text(msg, parse_mode=ParseMode.HTML)
