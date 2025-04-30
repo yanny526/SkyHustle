@@ -1,372 +1,413 @@
 import datetime
-from telegram import Update
-from telegram.constants import ParseMode
-from telegram.ext import ContextTypes
-from utils.google_sheets import (
-    load_resources,
-    save_resources,
-    get_building_level,
-    save_building_level,
-    load_building_queue,
-    save_building_task,
-    delete_building_task
-)
-from utils.ui_helpers import render_status_panel
+ from telegram import Update
+ from telegram.constants import ParseMode
+ from telegram.ext import ContextTypes
+ from utils.google_sheets import (
+  load_resources,
+  save_resources,
+  get_building_level,
+  save_building_level,
+  load_building_queue,
+  save_building_task,
+  delete_building_task,
+ )
+ from utils.ui_helpers import render_status_panel
+ 
 
-# ── BUILDING DEFINITIONS ────────────────────────────────────────────────────────
-BUILDINGS = {
-    "command_center": {
-        "base_time": 60,
-        "time_mult": 1.5,
-        "resource_cost": lambda lvl: {
-            "metal":   1000 * lvl,
-            "fuel":     500 * lvl,
-            "crystal":  100 * lvl
-        },
-        "effect": lambda lvl: {
-            "max_army": 1000 + lvl * 500
-        }
-    },
-    "metal_mine": {
-        "base_time": 30,
-        "time_mult": 1.2,
-        "resource_cost": lambda lvl: {
-            "metal": 200 * lvl,
-            "fuel":  100 * lvl
-        },
-        "effect": lambda lvl: {
-            "mine_speed_pct": 10 * lvl
-        }
-    },
-    "fuel_refinery": {
-        "base_time": 30,
-        "time_mult": 1.2,
-        "resource_cost": lambda lvl: {
-            "metal": 150 * lvl,
-            "fuel":  150 * lvl
-        },
-        "effect": lambda lvl: {
-            "refinery_speed_pct": 10 * lvl
-        }
-    },
-    "crystal_synthesizer": {
-        "base_time": 45,
-        "time_mult": 1.3,
-        "resource_cost": lambda lvl: {
-            "metal":   300 * lvl,
-            "crystal":  50 * lvl
-        },
-        "effect": lambda lvl: {
-            "crystal_rate_pct": 5 * lvl
-        }
-    },
-    "warehouse": {
-        "base_time": 40,
-        "time_mult": 1.25,
-        "resource_cost": lambda lvl: {
-            "metal":   500 * lvl,
-            "fuel":    500 * lvl,
-            "crystal": 200 * lvl
-        },
-        "effect": lambda lvl: {
-            "storage_pct": 20 * lvl
-        }
-    },
-    "barracks": {
-        "base_time": 40,
-        "time_mult": 1.3,
-        "resource_cost": lambda lvl: {
-            "metal":  500 * lvl,
-            "fuel":   200 * lvl,
-            "crystal":100 * lvl
-        },
-        "effect": lambda lvl: {
-            "train_time_pct": -5 * lvl,
-            "train_slots":    50 + 10 * lvl
-        }
-    },
-    "vehicle_factory": {
-        "base_time": 120,
-        "time_mult": 1.4,
-        "resource_cost": lambda lvl: {
-            "metal":   2000 * lvl,
-            "fuel":    1000 * lvl,
-            "crystal": 200 * lvl
-        },
-        "effect": lambda lvl: {
-            "vehicle_build_pct": -5 * lvl
-        }
-    },
-    "drone_hangar": {
-        "base_time": 50,
-        "time_mult": 1.3,
-        "resource_cost": lambda lvl: {
-            "metal": 300 * lvl,
-            "fuel":  100 * lvl
-        },
-        "effect": lambda lvl: {
-            "drone_speed_pct": 10 * lvl
-        }
-    },
-    "research_lab": {
-        "base_time": 90,
-        "time_mult": 1.2,
-        "resource_cost": lambda lvl: {
-            "metal":   500 * lvl,
-            "crystal": 500 * lvl
-        },
-        "effect": lambda lvl: {
-            "tech_slots": 2 * lvl
-        }
-    },
-    "shield_generator": {
-        "base_time": 80,
-        "time_mult": 1.25,
-        "resource_cost": lambda lvl: {
-            "metal":   600 * lvl,
-            "crystal": 200 * lvl
-        },
-        "effect": lambda lvl: {
-            "damage_reduction_pct": 2 * lvl
-        }
-    },
-    "laser_turrets": {
-        "base_time": 60,
-        "time_mult": 1.2,
-        "resource_cost": lambda lvl: {
-            "metal": 800 * lvl
-        },
-        "effect": lambda lvl: {
-            "turret_dps_pct": 10 * lvl
-        }
-    },
-    "missile_silos": {
-        "base_time": 70,
-        "time_mult": 1.2,
-        "resource_cost": lambda lvl: {
-            "metal": 1000 * lvl,
-            "fuel":   500 * lvl
-        },
-        "effect": lambda lvl: {
-            "missile_speed_pct": 5 * lvl
-        }
-    },
-    "radar_station": {
-        "base_time": 45,
-        "time_mult": 1.15,
-        "resource_cost": lambda lvl: {
-            "metal": 300 * lvl,
-            "fuel":  200 * lvl
-        },
-        "effect": lambda lvl: {
-            "detection_range": 10 * lvl
-        }
-    },
-    "orbital_shipyard": {
-        "base_time": 180,
-        "time_mult": 1.3,
-        "resource_cost": lambda lvl: {
-            "metal":   5000 * lvl,
-            "crystal": 1000 * lvl
-        },
-        "effect": lambda lvl: {
-            "ship_slots": lvl
-        }
-    },
-    "trade_hub": {
-        "base_time": 30,
-        "time_mult": 1.1,
-        "resource_cost": lambda lvl: {
-            "credits": 200 * lvl
-        },
-        "effect": lambda lvl: {
-            "trade_bonus_pct": 2 * lvl
-        }
-    },
-    "black_market": {
-        "base_time": 120,
-        "time_mult": 1.5,
-        "resource_cost": lambda lvl: {
-            "credits": 500 * lvl,
-            "crystal": 200 * lvl
-        },
-        "effect": lambda lvl: {
-            "discount_pct": 5 * lvl
-        }
-    },
-    "nanite_forge": {
-        "base_time": 100,
-        "time_mult": 1.2,
-        "resource_cost": lambda lvl: {
-            "crystal": 300 * lvl
-        },
-        "effect": lambda lvl: {
-            "conversion_efficiency_pct": 5 * lvl
-        }
-    },
-}
+ # ── BUILDING DEFINITIONS ────────────────────────────────────────────────────────
+ # Refactored to use a more structured approach
+ BUILDING_DATA = {
+  "command_center": {
+  "display_name": "Command Center",
+  "base_time": 60,
+  "time_mult": 1.5,
+  "resource_cost": {
+  "metal": 1000,
+  "fuel": 500,
+  "crystal": 100,
+  },
+  "cost_increase_factor": 1.8,  # Factor by which costs increase per level
+  "effects": {
+  "max_army": lambda lvl: 1000 + lvl * 500,
+  },
+  "max_level": 5,
+  },
+  "metal_mine": {
+  "display_name": "Metal Mine",
+  "base_time": 30,
+  "time_mult": 1.2,
+  "resource_cost": {
+  "metal": 200,
+  "fuel": 100,
+  },
+  "cost_increase_factor": 1.7,
+  "effects": {
+  "mine_speed_pct": lambda lvl: 10 * lvl,
+  },
+  "max_level": 5,
+  },
+  "fuel_refinery": {
+  "display_name": "Fuel Refinery",
+  "base_time": 30,
+  "time_mult": 1.2,
+  "resource_cost": {
+  "metal": 150,
+  "fuel": 150,
+  },
+  "cost_increase_factor": 1.7,
+  "effects": {
+  "refinery_speed_pct": lambda lvl: 10 * lvl,
+  },
+  "max_level": 5,
+  },
+  "crystal_synthesizer": {
+  "display_name": "Crystal Synthesizer",
+  "base_time": 45,
+  "time_mult": 1.3,
+  "resource_cost": {
+  "metal": 300,
+  "crystal": 50,
+  },
+  "cost_increase_factor": 1.7,
+  "effects": {
+  "crystal_rate_pct": lambda lvl: 5 * lvl,
+  },
+  "max_level": 5,
+  },
+  "warehouse": {
+  "display_name": "Warehouse",
+  "base_time": 40,
+  "time_mult": 1.25,
+  "resource_cost": {
+  "metal": 500,
+  "fuel": 500,
+  "crystal": 200,
+  },
+  "cost_increase_factor": 1.7,
+  "effects": {
+  "storage_pct": lambda lvl: 20 * lvl,
+  },
+  "max_level": 5,
+  },
+  "barracks": {
+  "display_name": "Barracks",
+  "base_time": 40,
+  "time_mult": 1.3,
+  "resource_cost": {
+  "metal": 500,
+  "fuel": 200,
+  "crystal": 100,
+  },
+  "cost_increase_factor": 1.7,
+  "effects": {
+  "train_time_pct": lambda lvl: -5 * lvl,
+  "train_slots": lambda lvl: 50 + 10 * lvl,
+  },
+  "max_level": 5,
+  },
+  "vehicle_factory": {
+  "display_name": "Vehicle Factory",
+  "base_time": 120,
+  "time_mult": 1.4,
+  "resource_cost": {
+  "metal": 2000,
+  "fuel": 1000,
+  "crystal": 200,
+  },
+  "cost_increase_factor": 1.8,
+  "effects": {
+  "vehicle_build_pct": lambda lvl: -5 * lvl,
+  },
+  "max_level": 5,
+  },
+  "drone_hangar": {
+  "display_name": "Drone Hangar",
+  "base_time": 50,
+  "time_mult": 1.3,
+  "resource_cost": {
+  "metal": 300,
+  "fuel": 100,
+  },
+  "cost_increase_factor": 1.7,
+  "effects": {
+  "drone_speed_pct": lambda lvl: 10 * lvl,
+  },
+  "max_level": 5,
+  },
+  "research_lab": {
+  "display_name": "Research Lab",
+  "base_time": 90,
+  "time_mult": 1.2,
+  "resource_cost": {
+  "metal": 500,
+  "crystal": 500,
+  },
+  "cost_increase_factor": 1.7,
+  "effects": {
+  "tech_slots": lambda lvl: 2 * lvl,
+  },
+  "max_level": 5,
+  },
+  "shield_generator": {
+  "display_name": "Shield Generator",
+  "base_time": 80,
+  "time_mult": 1.25,
+  "resource_cost": {
+  "metal": 600,
+  "crystal": 200,
+  },
+  "cost_increase_factor": 1.75,
+  "effects": {
+  "damage_reduction_pct": lambda lvl: 2 * lvl,
+  },
+  "max_level": 5,
+  },
+  "laser_turrets": {
+  "display_name": "Laser Turrets",
+  "base_time": 60,
+  "time_mult": 1.2,
+  "resource_cost": {
+  "metal": 800,
+  },
+  "cost_increase_factor": 1.7,
+  "effects": {
+  "turret_dps_pct": lambda lvl: 10 * lvl,
+  },
+  "max_level": 5,
+  },
+  "missile_silos": {
+  "display_name": "Missile Silos",
+  "base_time": 70,
+  "time_mult": 1.2,
+  "resource_cost": {
+  "metal": 1000,
+  "fuel": 500,
+  },
+  "cost_increase_factor": 1.7,
+  "effects": {
+  "missile_speed_pct": lambda lvl: 5 * lvl,
+  },
+  "max_level": 5,
+  },
+  "radar_station": {
+  "display_name": "Radar Station",
+  "base_time": 45,
+  "time_mult": 1.15,
+  "resource_cost": {
+  "metal": 300,
+  "fuel": 200,
+  },
+  "cost_increase_factor": 1.6,
+  "effects": {
+  "detection_range": lambda lvl: 10 * lvl,
+  },
+  "max_level": 5,
+  },
+  "orbital_shipyard": {
+  "display_name": "Orbital Shipyard",
+  "base_time": 180,
+  "time_mult": 1.3,
+  "resource_cost": {
+  "metal": 5000,
+  "crystal": 1000,
+  },
+  "cost_increase_factor": 1.9,
+  "effects": {
+  "ship_slots": lambda lvl: lvl,
+  },
+  "max_level": 5,
+  },
+  "trade_hub": {
+  "display_name": "Trade Hub",
+  "base_time": 100,
+  "time_mult": 1.2,
+  "resource_cost": {
+  "metal": 1000,
+  "fuel": 1000,
+  "crystal": 500,
+  },
+  "cost_increase_factor": 1.7,
+  "effects": {
+  "trade_capacity": lambda lvl: 10 * lvl,
+  },
+  "max_level": 5,
+  },
+ }
+ 
 
-# Display‐friendly names
-DISPLAY = {
-    key: key.replace("_", " ").title()
-    for key in BUILDINGS
-}
+ # --- Helper Functions ---
+ def calculate_building_time(building: str, level: int) -> int:
+  """Calculates the building time based on base time and multiplier."""
+  data = BUILDING_DATA[building]
+  return int(data["base_time"] * (data["time_mult"] \*\* (level - 1)))
+ 
 
-def _format_timedelta(delta: datetime.timedelta) -> str:
-    secs = int(delta.total_seconds())
-    h, rem = divmod(secs, 3600)
-    m, s   = divmod(rem, 60)
-    parts = []
-    if h: parts.append(f"{h}h")
-    if m: parts.append(f"{m}m")
-    parts.append(f"{s}s")
-    return " ".join(parts)
+ def calculate_building_cost(building: str, level: int) -> dict:
+  """Calculates the resource cost for a building level."""
+  data = BUILDING_DATA[building]
+  base_cost = data["resource_cost"]
+  cost_factor = data["cost_increase_factor"]
+  return {
+  res: int(base\_cost.get(res, 0) \* (cost_factor \*\* (level - 1)))
+  for res in base_cost
+  }
+ 
 
-# ── /buildings — show full menu ───────────────────────────────────────────────
-async def buildings_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    player_id = str(update.effective_user.id)
-    res = load_resources(player_id)  # just to ensure the sheet exists
+ def get_building_effect(building: str, level: int) -> dict:
+  """Retrieves the effects of a building at a given level."""
+  data = BUILDING_DATA[building]
+  effects = data.get("effects", {})
+  return {effect: func(level) for effect, func in effects.items()}
+ 
 
-    lines = ["<b>🏛️ Buildings Overview</b>"]
-    for key, cfg in BUILDINGS.items():
-        cur = get_building_level(player_id, key)
-        nxt = cur + 1
-        cost = cfg["resource_cost"](nxt)
-        eff  = cfg["effect"](nxt) or {}
+ # ── /build — start building ───────────────────────────────────────────────────
+ async def build(update: Update, context: ContextTypes.DEFAULT_TYPE):
+  player_id = str(update.effective_user.id)
+  args = context.args
+  if len(args) != 1:
+  return await update.message.reply_text(
+  "Usage: /build [building_name]\\n\\n" + render_status_panel(player_id),
+  parse_mode=ParseMode.HTML,
+  )
+ 
 
-        cost_str = " | ".join(f"{k.capitalize()}: {v}" for k, v in cost.items())
-        eff_str  = ", ".join(
-            f"{k.replace('_',' ').title()}: {v}{'%' if 'pct' in k else ''}"
-            for k, v in eff.items()
-        ) or "(no direct effect)"
+  building = args[0].lower()
+  if building not in BUILDING_DATA:
+  available_buildings = ", ".join(
+  BUILDING_DATA[b]["display_name"] for b in BUILDING_DATA
+  )
+  return await update.message.reply_text(
+  f"Unknown building. Available: {available_buildings}\\n\\n"
+  + render_status_panel(player_id),
+  parse_mode=ParseMode.HTML,
+  )
+ 
 
-        lines.append(
-            f"<b>{DISPLAY[key]}</b> (Lv {cur})\n"
-            f" • Next Lv {nxt} cost: {cost_str}\n"
-            f" • Effect: {eff_str}\n"
-        )
+  level = get_building_level(player_id, building) + 1
+  if level > BUILDING_DATA[building]["max_level"]:
+  return await update.message.reply_text(
+  "Max level reached!\\n\\n" + render_status_panel(player_id),
+  parse_mode=ParseMode.HTML,
+  )
+ 
 
-    lines.append(render_status_panel(player_id))
-    await update.message.reply_text(
-        "\n".join(lines),
-        parse_mode=ParseMode.HTML
-    )
+  cost = calculate_building_cost(building, level)
+  resources = load_resources(player_id)
+  for res, amt in cost.items():
+  if resources.get(res, 0) < amt:
+  return await update.message.reply_text(
+  f"Not enough resources to build {building.title()} (Level {level}).\\n"
+  + f"Needed: {amt} {res.title()}\\n"
+  + f"You have: {resources.get(res, 0)} {res.title()}\\n\\n"
+  + render_status_panel(player_id),
+  parse_mode=ParseMode.HTML,
+  )
+ 
 
-# ── /build — queue an upgrade ───────────────────────────────────────────────
-async def build(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    player_id = str(update.effective_user.id)
-    if len(context.args) != 1:
-        return await update.message.reply_text(
-            "Usage: /build [building_name]\n\n" +
-            render_status_panel(player_id),
-            parse_mode=ParseMode.HTML
-        )
+  # Deduct resources
+  for res, amt in cost.items():
+  resources[res] -= amt
+  save_resources(player_id, resources)
+ 
 
-    key = context.args[0].lower()
-    if key not in BUILDINGS:
-        return await update.message.reply_text(
-            f"Unknown building. Available: {', '.join(DISPLAY.values())}\n\n"
-            + render_status_panel(player_id),
-            parse_mode=ParseMode.HTML
-        )
+  build_time = calculate_building_time(building, level)
+  end_time = datetime.datetime.now() + datetime.timedelta(seconds=build_time)
+  task = {
+  "building_name": building,
+  "level": level,
+  "start_time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+  "end_time": end_time.strftime("%Y-%m-%d %H:%M:%S"),
+  }
+  save_building_task(player_id, task)
+ 
 
-    cur = get_building_level(player_id, key)
-    nxt = cur + 1
-    cost = BUILDINGS[key]["resource_cost"](nxt)
-    res  = load_resources(player_id)
+  await update.message.reply_text(
+  f"🏗️ Building {building.title()} (Level {level})... Time: {build_time}s\\n\\n"
+  + render_status_panel(player_id),
+  parse_mode=ParseMode.HTML,
+  )
+ 
 
-    # check cost
-    for r, amt in cost.items():
-        if res.get(r, 0) < amt:
-            return await update.message.reply_text(
-                f"❌ Not enough {r.title()}: need {amt}, have {res.get(r,0)}\n\n"
-                + render_status_panel(player_id),
-                parse_mode=ParseMode.HTML
-            )
+ # ── /buildstatus — show building queue ─────────────────────────────────────────
+ async def buildstatus(update: Update, context: ContextTypes.DEFAULT_TYPE):
+  player_id = str(update.effective_user.id)
+  queue = load_building_queue(player_id)
+  if not queue:
+  return await update.message.reply_text(
+  "No buildings in progress.\\n\\n" + render_status_panel(player_id),
+  parse_mode=ParseMode.HTML,
+  )
+ 
 
-    # deduct & schedule
-    for r, amt in cost.items():
-        res[r] -= amt
-    save_resources(player_id, res)
+  now = datetime.datetime.now()
+  lines = []
+  for task in queue.values():
+  end_time = datetime.datetime.strptime(task["end_time"], "%Y-%m-%d %H:%M:%S")
+  remaining = end_time - now
+  if remaining.total_seconds() > 0:
+  lines.append(
+  f"🏗️ {task['building_name'].title()} (Level {task['level']}): "
+  f"{remaining}"
+  )
+  else:
+  lines.append(
+  f"✅ {task['building_name'].title()} (Level {task['level']}): Completed"
+  )
+ 
 
-    minutes = int(
-        BUILDINGS[key]["base_time"]
-        * (BUILDINGS[key]["time_mult"] ** cur)
-    )
-    ready_at = datetime.datetime.now() + datetime.timedelta(minutes=minutes)
-    save_building_task(player_id, key, datetime.datetime.now(), ready_at)
+  await update.message.reply_text(
+  "🏗️ Building Queue:\\n" + "\\n".join(lines) + "\\n\\n"
+  + render_status_panel(player_id),
+  parse_mode=ParseMode.HTML,
+  )
+ 
 
-    await update.message.reply_text(
-        f"🔨 Upgrading <b>{DISPLAY[key]}</b> to level {nxt}.\n"
-        f"⏱️ Ready in {minutes}m.\n\n"
-        + render_status_panel(player_id),
-        parse_mode=ParseMode.HTML
-    )
+ # ── /buildinfo — show next-level cost & effect ─────────────────────────────
+ async def buildinfo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+  player_id = str(update.effective_user.id)
+  if len(context.args) != 1:
+  return await update.message.reply_text(
+  "Usage: /buildinfo [building_name]\\n\\n" + render_status_panel(player_id),
+  parse_mode=ParseMode.HTML,
+  )
+ 
 
-# ── /buildstatus — list in-progress builds ─────────────────────────────────
-async def buildstatus(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    player_id = str(update.effective_user.id)
-    queue = load_building_queue(player_id)
-    if not queue:
-        return await update.message.reply_text(
-            "✅ No active constructions.\n\n" +
-            render_status_panel(player_id),
-            parse_mode=ParseMode.HTML
-        )
+  building = context.args[0].lower()
+  if building not in BUILDING_DATA:
+  available_buildings = ", ".join(
+  BUILDING_DATA[b]["display_name"] for b in BUILDING_DATA
+  )
+  return await update.message.reply_text(
+  f"Unknown building. Available: {available_buildings}\\n\\n"
+  + render_status_panel(player_id),
+  parse_mode=ParseMode.HTML,
+  )
+ 
 
-    now = datetime.datetime.now()
-    lines = ["<b>🔨 Active Constructions:</b>"]
-    for idx, task in queue.items():
-        end = datetime.datetime.strptime(task["end_time"], "%Y-%m-%d %H:%M:%S")
-        rem = _format_timedelta(end - now)
-        key = task["building_name"]
-        lv  = get_building_level(player_id, key) + 1
-        lines.append(
-            f"• <b>{DISPLAY[key]}</b> → Lv {lv} ({rem} remaining)"
-        )
+  current_level = get_building_level(player_id, building)
+  next_level = current_level + 1
+ 
 
-    lines.append("")
-    lines.append(render_status_panel(player_id))
-    await update.message.reply_text(
-        "\n".join(lines),
-        parse_mode=ParseMode.HTML
-    )
+  if next_level > BUILDING_DATA[building]["max_level"]:
+  return await update.message.reply_text(
+  "Max level reached!\\n\\n" + render_status_panel(player_id),
+  parse_mode=ParseMode.HTML,
+  )
+ 
 
-# ── /buildinfo — show next-level cost & effect ─────────────────────────────
-async def buildinfo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    player_id = str(update.effective_user.id)
-    if len(context.args) != 1:
-        return await update.message.reply_text(
-            "Usage: /buildinfo [building_name]\n\n" +
-            render_status_panel(player_id),
-            parse_mode=ParseMode.HTML
-        )
+  cost = calculate_building_cost(building, next_level)
+  effects = get_building_effect(building, next_level)
+ 
 
-    key = context.args[0].lower()
-    if key not in BUILDINGS:
-        return await update.message.reply_text(
-            f"Unknown building. Available: {', '.join(DISPLAY.values())}\n\n"
-            + render_status_panel(player_id),
-            parse_mode=ParseMode.HTML
-        )
+  cost_str = " | ".join(f"{res.capitalize()}: {amt}" for res, amt in cost.items())
+  effects_str = ", ".join(
+  f"{effect.replace('_', ' ').title()}: {value}"
+  for effect, value in effects.items()
+  ) or "None"
+ 
 
-    cur = get_building_level(player_id, key)
-    nxt = cur + 1
-    cost = BUILDINGS[key]["resource_cost"](nxt)
-    eff  = BUILDINGS[key]["effect"](nxt) or {}
-
-    cost_str = " | ".join(f"{k.capitalize()}: {v}" for k, v in cost.items())
-    eff_str  = ", ".join(
-        f"{k.replace('_',' ').title()}: {v}{'%' if 'pct' in k else ''}"
-        for k, v in eff.items()
-    ) or "(no direct effect)"
-
-    await update.message.reply_text(
-        "<b>🏗️ " + DISPLAY[key] + "</b>\n"
-        f"• Current Lv: {cur}\n"
-        f"• Next Lv:    {nxt}\n"
-        f"• Cost:       {cost_str}\n"
-        f"• Effect:     {eff_str}\n\n"
-        + render_status_panel(player_id),
-        parse_mode=ParseMode.HTML
-    )
+  await update.message.reply_text(
+  f"🏗️ {BUILDING_DATA[building]['display_name']} (Level {next_level}):\\n"
+  f"Cost: {cost_str}\\n"
+  f"Effects: {effects_str}\\n\\n"
+  + render_
