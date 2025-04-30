@@ -1,5 +1,3 @@
-# utils/google_sheets.py
-
 import os
 import json
 import base64
@@ -24,7 +22,7 @@ if not creds_b64:
 creds_info = json.loads(base64.b64decode(creds_b64).decode("utf-8"))
 scope = [
     "https://spreadsheets.google.com/feeds",
-    "https://www.googleapis.com/auth/drive"
+    "https://www.googleapis.com/auth/drive",
 ]
 creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_info, scope)
 client = gspread.authorize(creds)
@@ -32,328 +30,228 @@ sheet = client.open_by_key(SHEET_ID)
 
 # === Worksheet Names & Headers ===
 WORKSHEETS = {
-    'army':            'army',
-    'training':        'training',
-    'battle_history':  'battle_history',
-    'missions':        'player_missions',
-    'resources':       'resources',
-    'buildings':       'buildings',
-    'purchases':       'purchases',
-    'building_queue':  'building_queue'
+    "army": "army",
+    "training": "training",
+    "battle_history": "battle_history",
+    "missions": "player_missions",
+    "resources": "resources",
+    "buildings": "buildings",
+    "purchases": "purchases",
+    "building_queue": "building_queue",
 }
 
 HEADERS = {
-    'army':            ['player_id','unit_name','quantity'],
-    'training':        ['player_id','unit_name','amount','end_time','start_time'],
-    'battle_history':  ['player_id','target_id','outcome','rewards','date','battle_log'],
-    'missions':        ['player_id','mission_id','type','date','progress','claimed'],
-    'resources':       ['player_id','metal','fuel','crystal','xp','level'],
-    'buildings':       ['player_id','building_name','level'],
-    'purchases':       ['player_id','shop_type','item_id','timestamp'],
-    'building_queue':  ['player_id','building_name','start_time','end_time']
+    "army": ["player_id", "unit_name", "amount"],
+    "training": ["task_id", "player_id", "unit_name", "amount", "end_time"],
+    "battle_history": [
+        "player_id", "target_id", "outcome", "rewards", "date", "battle_log",
+    ],
+    "missions": ["player_id", "date", "missions"],
+    "resources": ["player_id", "metal", "fuel", "crystal", "credits"],
+    "buildings": ["player_id", "building_name", "level"],
+    "purchases": ["player_id", "item_id", "date"],
+    "building_queue": ["task_id", "player_id", "building_name", "end_time"],
 }
 
-def get_ws(key):
-    """Get or create worksheet with correct headers."""
-    title = WORKSHEETS[key]
+# === Worksheet Loading ===
+
+def _get_worksheet(name: str):
+    """Gets a worksheet by name, creating it if necessary."""
     try:
-        ws = sheet.worksheet(title)
+        return sheet.worksheet(WORKSHEETS[name])
     except WorksheetNotFound:
-        ws = sheet.add_worksheet(title=title, rows="100", cols=str(len(HEADERS[key])))
-        ws.append_row(HEADERS[key])
-    return ws
+        new_ws = sheet.add_worksheet(
+            title=WORKSHEETS[name], rows=100, cols=10
+        )
+        new_ws.append_row(HEADERS[name])
+        return new_ws
 
-# === Worksheet Handles ===
-army_ws           = get_ws('army')
-training_ws       = get_ws('training')
-battle_ws         = get_ws('battle_history')
-missions_ws       = get_ws('missions')
-resources_ws      = get_ws('resources')
-buildings_ws      = get_ws('buildings')
-purchases_ws      = get_ws('purchases')
-building_queue_ws = get_ws('building_queue')
+# Initialize worksheets
+army_ws = _get_worksheet("army")
+training_ws = _get_worksheet("training")
+battle_ws = _get_worksheet("battle_history")
+missions_ws = _get_worksheet("missions")
+resources_ws = _get_worksheet("resources")
+buildings_ws = _get_worksheet("buildings")
+purchases_ws = _get_worksheet("purchases")
+building_queue_ws = _get_worksheet("building_queue")
 
-# === Army Helpers ===
+# === Army Sheet Functions ===
 
-def load_player_army(player_id):
+def load_player_army(player_id: str) -> dict:
+    """Loads the player's army from the sheet."""
     try:
         recs = army_ws.get_all_records()
-        return {
-            row['unit_name']: int(row['quantity'])
-            for row in recs if str(row['player_id']) == str(player_id)
-        }
+        army = {}
+        for row in recs:
+            if str(row.get("player_id")) == str(player_id):
+                army[row["unit_name"]] = row["amount"]
+        return army
     except Exception as e:
         print("load_player_army error:", e)
         return {}
 
-def save_player_army(player_id, army_data):
+
+def save_player_army(player_id: str, army: dict) -> None:
+    """Saves the player's army, overwriting existing entries."""
     try:
+        # Clear existing
         for cell in army_ws.findall(str(player_id)):
-            if army_ws.cell(cell.row, 1).value == str(player_id):
-                army_ws.delete_row(cell.row)
-        for unit, qty in army_data.items():
-            if qty > 0:
-                army_ws.append_row([player_id, unit, qty])
+            army_ws.delete_row(cell.row)
+        # Save current
+        rows = [[player_id, unit, qty] for unit, qty in army.items()]
+        army_ws.append_rows(rows)
     except Exception as e:
         print("save_player_army error:", e)
 
-# === Resource Helpers ===
+# === Training Queue Functions ===
 
-def load_resources(player_id):
-    try:
-        recs = resources_ws.get_all_records()
-        for row in recs:
-            if str(row['player_id']) == str(player_id):
-                return {
-                    'metal':   int(row.get('metal', 0)),
-                    'fuel':    int(row.get('fuel', 0)),
-                    'crystal': int(row.get('crystal', 0)),
-                    'xp':      int(row.get('xp', 0)),
-                    'level':   int(row.get('level', 1))
-                }
-        default = {'metal':0,'fuel':0,'crystal':0,'xp':0,'level':1}
-        resources_ws.append_row([
-            player_id,
-            default['metal'], default['fuel'], default['crystal'],
-            default['xp'],    default['level']
-        ])
-        return default
-    except Exception as e:
-        print("load_resources error:", e)
-        return {'metal':0,'fuel':0,'crystal':0,'xp':0,'level':1}
-
-def save_resources(player_id, res):
-    try:
-        recs = resources_ws.get_all_records()
-        for idx, row in enumerate(recs, start=2):
-            if str(row['player_id']) == str(player_id):
-                resources_ws.update_cell(idx, 2, res['metal'])
-                resources_ws.update_cell(idx, 3, res['fuel'])
-                resources_ws.update_cell(idx, 4, res['crystal'])
-                resources_ws.update_cell(idx, 5, res['xp'])
-                resources_ws.update_cell(idx, 6, res['level'])
-                return
-        resources_ws.append_row([
-            player_id,
-            res['metal'], res['fuel'], res['crystal'],
-            res['xp'],    res['level']
-        ])
-    except Exception as e:
-        print("save_resources error:", e)
-
-# === Purchase & Black Market Helpers ===
-
-def save_purchase(player_id, shop_type, item_id, timestamp=None):
-    try:
-        ts = timestamp or datetime.now().isoformat()
-        purchases_ws.append_row([player_id, shop_type, item_id, ts])
-    except Exception as e:
-        print("save_purchase error:", e)
-
-def has_purchase(player_id, item_id):
-    try:
-        recs = purchases_ws.get_all_records()
-        return any(
-            str(r['player_id']) == str(player_id) and r['item_id'] == item_id
-            for r in recs
-        )
-    except Exception as e:
-        print("has_purchase error:", e)
-        return False
-
-def unlock_blackmarket(player_id):
-    save_purchase(player_id, 'blackmarket_unlock', '', datetime.now().isoformat())
-
-def has_unlocked_blackmarket(player_id):
-    try:
-        recs = purchases_ws.get_all_records()
-        return any(
-            str(r['player_id']) == str(player_id) and r['shop_type'] == 'blackmarket_unlock'
-            for r in recs
-        )
-    except Exception as e:
-        print("has_unlocked_blackmarket error:", e)
-        return False
-
-# === Training Queue Helpers ===
-
-def load_training_queue(player_id):
+def load_training_queue(player_id: str) -> dict:
+    """Loads the player's training queue."""
     try:
         recs = training_ws.get_all_records()
-        return {
-            idx: {
-                'unit_name': row['unit_name'],
-                'amount':    int(row['amount']),
-                'end_time':  row['end_time']
-            }
-            for idx, row in enumerate(recs, start=2)
-            if str(row['player_id']) == str(player_id)
-        }
+        return {row["task_id"]: row for row in recs if str(row.get("player_id")) == str(player_id)}
     except Exception as e:
         print("load_training_queue error:", e)
         return {}
 
-def save_training_task(player_id, unit_name, amount, end_time):
+
+def save_training_task(player_id: str, unit_name: str, amount: int, end_time: str) -> None:
+    """Saves a training task."""
     try:
-        training_ws.append_row([
-            player_id,
-            unit_name,
-            amount,
-            end_time.strftime("%Y-%m-%d %H:%M:%S"),
-            datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        ])
+        task_id = datetime.now().strftime("%Y%m%d%H%M%S%f")
+        training_ws.append_row([task_id, player_id, unit_name, amount, end_time])
     except Exception as e:
         print("save_training_task error:", e)
 
-def delete_training_task(row_idx):
+
+def delete_training_task(task_id: str) -> None:
+    """Deletes a training task by ID."""
     try:
-        training_ws.delete_row(row_idx)
+        for cell in training_ws.findall(str(task_id)):
+            training_ws.delete_row(cell.row)
     except Exception as e:
         print("delete_training_task error:", e)
 
-# === Battle History Helpers ===
+# === Battle History Functions ===
 
-def save_battle_result(player_id, target_id, outcome, rewards, date, battle_log):
+def save_battle_result(player_id: str, target_id: str, outcome: str, rewards: str, date: str, battle_log: str) -> None:
+    """Saves a battle result."""
     try:
         battle_ws.append_row([player_id, target_id, outcome, rewards, date, battle_log])
     except Exception as e:
         print("save_battle_result error:", e)
 
-def load_battle_history(player_id):
+
+def load_battle_history(player_id: str) -> list:
+    """Loads the player's battle history."""
     try:
         recs = battle_ws.get_all_records()
-        return [
-            {
-                'player_id':  r['player_id'],
-                'target_id':  r['target_id'],
-                'outcome':    r['outcome'],
-                'rewards':    r['rewards'],
-                'date':       r['date'],
-                'battle_log': r['battle_log']
-            }
-            for r in recs if str(r['player_id']) == str(player_id)
-        ]
+        return [row for row in recs if str(row.get("player_id")) == str(player_id)]
     except Exception as e:
         print("load_battle_history error:", e)
         return []
 
-def get_battle_wins(player_id):
-    try:
-        return sum(1 for b in load_battle_history(player_id) if b['outcome'] == 'Victory')
-    except Exception as e:
-        print("get_battle_wins error:", e)
-        return 0
+# === Missions Functions ===
 
-# === Mission Helpers ===
-
-def get_player_missions(player_id, mission_type, date=None):
+def load_player_missions(player_id: str) -> dict | None:
+    """Loads the player's missions data (if any)."""
     try:
         recs = missions_ws.get_all_records()
-        out = []
-        for idx, row in enumerate(recs, start=2):
-            if str(row['player_id']) == str(player_id) and row['type'] == mission_type:
-                if mission_type == 'daily' and row['date'] != date:
-                    continue
-                out.append({
-                    'row_idx':    idx,
-                    'mission_id': row['mission_id'],
-                    'type':       row['type'],
-                    'date':       row['date'],
-                    'progress':   int(row['progress']),
-                    'claimed':    row['claimed'],
-                    'rewards':    row['rewards'],
-                    'description':row.get('description','')
-                })
-        return out
+        for row in recs:
+            if str(row.get("player_id")) == str(player_id):
+                return json.loads(row.get("missions", "{}").replace("'", '"'))
+        return None
     except Exception as e:
-        print("get_player_missions error:", e)
-        return []
+        print("load_player_missions error:", e)
+        return None
 
-def get_single_mission(player_id, mission_id):
+
+def save_player_missions(player_id: str, missions: dict) -> None:
+    """Saves the player's missions data, overwriting existing."""
     try:
-        recs = missions_ws.get_all_records()
-        for idx, row in enumerate(recs, start=2):
-            if (str(row['player_id']) == str(player_id)
-             and row['mission_id'] == mission_id):
+        # Clear existing
+        for cell in missions_ws.findall(str(player_id)):
+            missions_ws.delete_row(cell.row)
+        # Save current
+        missions_ws.append_row([
+            player_id,
+            str(datetime.now().date()),
+            json.dumps(missions),
+        ])
+    except Exception as e:
+        print("save_player_missions error:", e)
+
+# === Resources Functions ===
+
+def load_resources(player_id: str) -> dict:
+    """Loads the player's resources."""
+    try:
+        recs = resources_ws.get_all_records()
+        for row in recs:
+            if str(row.get("player_id")) == str(player_id):
                 return {
-                    'row_idx':    idx,
-                    'mission_id': row['mission_id'],
-                    'type':       row['type'],
-                    'date':       row['date'],
-                    'progress':   int(row['progress']),
-                    'claimed':    row['claimed'],
-                    'rewards':    row['rewards'],
-                    'description':row.get('description','')
+                    "metal": row.get("metal", 0),
+                    "fuel": row.get("fuel", 0),
+                    "crystal": row.get("crystal", 0),
+                    "credits": row.get("credits", 0),
                 }
+        return {"metal": 0, "fuel": 0, "crystal": 0, "credits": 0}
     except Exception as e:
-        print("get_single_mission error:", e)
-    return None
+        print("load_resources error:", e)
+        return {"metal": 0, "fuel": 0, "crystal": 0, "credits": 0}
 
-def save_player_mission(player_id, mission_id, mission_type, date, progress, claimed):
+
+def save_resources(player_id: str, resources: dict) -> None:
+    """Saves the player's resources, overwriting existing."""
     try:
-        missions_ws.append_row([player_id, mission_id, mission_type, date, progress, claimed])
+        # Clear existing
+        for cell in resources_ws.findall(str(player_id)):
+            resources_ws.delete_row(cell.row)
+        # Save current
+        resources_ws.append_row([
+            player_id,
+            resources.get("metal", 0),
+            resources.get("fuel", 0),
+            resources.get("crystal", 0),
+            resources.get("credits", 0),
+        ])
     except Exception as e:
-        print("save_player_mission error:", e)
+        print("save_resources error:", e)
 
-def award_mission_rewards(player_id, rewards):
-    try:
-        res = load_resources(player_id)
-        for k, v in rewards.items():
-            if k == 'crystals': res['crystal'] += int(v)
-            if k == 'xp':       res['xp']     += int(v)
-        save_resources(player_id, res)
-    except Exception as e:
-        print("award_mission_rewards error:", e)
+# === Building Queue Functions ===
 
-def mark_mission_claimed(player_id, mission_id):
-    try:
-        recs = missions_ws.get_all_records()
-        for idx, row in enumerate(recs, start=2):
-            if (str(row['player_id']) == str(player_id)
-             and row['mission_id'] == mission_id):
-                missions_ws.update_cell(idx, 6, True)
-                break
-    except Exception as e:
-        print("mark_mission_claimed error:", e)
-
-# === Building Queue Helpers ===
-
-def load_building_queue(player_id):
+def load_building_queue(player_id: str) -> dict:
+    """Loads the building queue for a player."""
     try:
         recs = building_queue_ws.get_all_records()
-        queue = {}
-        for idx, row in enumerate(recs, start=2):
-            if str(row['player_id']) == str(player_id):
-                queue[idx] = {
-                    'building_name': row['building_name'],
-                    'start_time':    row['start_time'],
-                    'end_time':      row['end_time']
-                }
-        return queue
+        return {row["task_id"]: row for row in recs if str(row.get("player_id")) == str(player_id)}
     except Exception as e:
         print("load_building_queue error:", e)
         return {}
 
-def save_building_task(player_id, building_name, start_time, end_time):
+
+def save_building_task(player_id: str, building_name: str, end_time: str) -> None:
+    """Saves a building task to the queue."""
     try:
-        building_queue_ws.append_row([
-            player_id,
-            building_name,
-            start_time.strftime("%Y-%m-%d %H:%M:%S"),
-            end_time.strftime("%Y-%m-%d %H:%M:%S")
-        ])
+        task_id = datetime.now().strftime("%Y%m%d%H%M%S%f")
+        building_queue_ws.append_row([task_id, player_id, building_name, end_time])
     except Exception as e:
         print("save_building_task error:", e)
 
-def delete_building_task(row_idx):
+
+def delete_building_task(task_id: str) -> None:
+    """Deletes a building task by ID."""
     try:
-        building_queue_ws.delete_row(row_idx)
+        for cell in building_queue_ws.findall(str(task_id)):
+            building_queue_ws.delete_row(cell.row)
     except Exception as e:
         print("delete_building_task error:", e)
 
 # === Building Level Helpers ===
 
-def save_building_level(player_id, building_name, new_level):
+def save_building_level(player_id: str, building_name: str, new_level: int) -> None:
+    """Updates the player's building level."""
     try:
         for cell in buildings_ws.findall(str(player_id)):
             if buildings_ws.cell(cell.row, 2).value == building_name:
@@ -362,34 +260,41 @@ def save_building_level(player_id, building_name, new_level):
     except Exception as e:
         print("save_building_level error:", e)
 
+
+def get_building_level(player_id: str, building_name: str) -> int:
+    """Retrieves the player's building level."""
+    try:
+        recs = buildings_ws.get_all_records()
+        for row in recs:
+            if str(row.get("player_id")) == str(player_id) and row.get("building_name") == building_name:
+                return int(row.get("level", 0))
+        return 0
+    except Exception as e:
+        print("get_building_level error:", e)
+        return 0
+
 # === Miscellaneous Queries ===
 
-def get_training_total(player_id, unit, amount):
+def get_training_total(player_id: str, unit: str) -> int:
+    """Returns total trained units of a type."""
     try:
         return load_player_army(player_id).get(unit, 0)
     except:
         return 0
 
-def get_mined_total(player_id, resource, amount):
+
+def get_mined_total(player_id: str, resource: str) -> int:
+    """Returns total mined resources of a type."""
     try:
         return load_resources(player_id).get(resource, 0)
     except:
         return 0
 
-def get_attack_count(player_id):
+
+def get_attack_count(player_id: str) -> int:
+    """Returns total attack count."""
     try:
         recs = battle_ws.get_all_records()
-        return sum(1 for r in recs if str(r['player_id']) == str(player_id))
+        return sum(1 for r in recs if str(r.get("player_id")) == str(player_id))
     except:
         return 0
-
-def get_building_level(player_id, building_name):
-    try:
-        recs = buildings_ws.get_all_records()
-        for row in recs:
-            if (str(row['player_id']) == str(player_id)
-             and row['building_name'] == building_name):
-                return int(row['level'])
-    except Exception as e:
-        print("get_building_level error:", e)
-    return 1
