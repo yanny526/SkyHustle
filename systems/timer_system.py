@@ -1,129 +1,135 @@
 import datetime
-from utils.ui_helpers import render_status_panel
-from utils import google_sheets
+ from utils.ui_helpers import render_status_panel
+ from utils import google_sheets
+ 
 
-# In-memory mining tracker
-player_mining = {}
+ # In-memory mining tracker
+ player_mining = {}  # player_id: {resource: {amount: x, end_time: time}}
+ 
 
-# Resources per minute
-MINING_SPEEDS = {
-    "metal": 100,
-    "fuel": 60,
-    "crystal": 30,
-}
+ # Resources per minute
+ MINING_SPEEDS = {
+  "metal": 100,
+  "fuel": 60,
+  "crystal": 30,
+ }
+ 
 
+ async def start_mining(update, context):
+  pid = str(update.effective_user.id)
+  panel = render_status_panel(pid)
+  args = context.args or []
+ 
 
-# ── /mine — start mining ───────────────────────────────────────────────────────
-async def start_mining(update, context):
-    pid = str(update.effective_user.id)
-    panel = render_status_panel(pid)
-    args = context.args or []
+  if len(args) != 2:
+  return await update.message.reply_text(
+  "⛏️ Usage: /mine [resource] [amount]\\nExample: /mine metal 1000\\n\\n"
+  + panel
+  )
+ 
 
-    if len(args) != 2:
-        return await update.message.reply_text(
-            "⛏️ Usage: /mine [resource] [amount]\n"
-            "Example: /mine metal 1000\n\n"
-            + panel
-        )
+  res = args[0].lower()
+  try:
+  amt = int(args[1])
+  except:
+  return await update.message.reply_text(
+  "⚡ Amount must be a number.\\n\\n" + panel
+  )
+ 
 
-    res = args[0].lower()
-    try:
-        amt = int(args[1])
-    except ValueError:
-        return await update.message.reply_text(
-            "⚡ Amount must be a number.\n\n" + panel
-        )
+  if res not in MINING_SPEEDS:
+  return await update.message.reply_text(
+  "❌ Invalid resource. Available: metal, fuel, crystal.\\n\\n"
+  + panel
+  )
+ 
 
-    if res not in MINING_SPEEDS:
-        return await update.message.reply_text(
-            "❌ Invalid resource. Available: metal, fuel, crystal.\n\n" + panel
-        )
+  # Schedule
+  speed = MINING_SPEEDS[res]
+  mins = amt / speed
+  delta = datetime.timedelta(minutes=mins)
+  end_time = datetime.datetime.now() + delta
+  end_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
+ 
 
-    # Prevent overlapping same-resource mines
-    pm = player_mining.get(pid, {})
-    if pm.get(res):
-        return await update.message.reply_text(
-            f"⚡ Already mining {res.capitalize()}! Claim first.\n\n" + panel
-        )
+  pm = player_mining.get(pid, {})
+  pm[res] = {"amount": amt, "end_time": end_str}
+  player_mining[pid] = pm  # Update the player_mining dictionary
+ 
 
-    # Schedule mining
-    speed = MINING_SPEEDS[res]
-    seconds = amt / speed * 60
-    finish = datetime.datetime.now() + datetime.timedelta(seconds=seconds)
+  await update.message.reply_text(
+  f"⛏️ Mining {amt} {res.capitalize()}... (ends {end_str})\\n\\n" + panel
+  )
+ 
 
-    player_mining.setdefault(pid, {})[res] = {
-        "amount": amt,
-        "end": finish.strftime("%Y-%m-%d %H:%M:%S"),
-    }
+ async def mining_status(update, context):
+  pid = str(update.effective_user.id)
+  panel = render_status_panel(pid)
+  pm = player_mining.get(pid, {})
+ 
 
-    msg = (
-        "⛏️ Mining Started!\n\n"
-        f"Resource: {res.capitalize()}\n"
-        f"Amount: {amt}\n"
-        f"Complete at: {finish:%Y-%m-%d %H:%M:%S}"
-    )
-    await update.message.reply_text(msg + "\n\n" + panel)
+  if not pm:
+  return await update.message.reply_text(
+  "❌ Not currently mining anything.\\n\\n" + panel
+  )
+ 
 
+  lines = ["⛏️ Current Mining Operations:"]
+  now = datetime.datetime.now()
+  for res, info in pm.items():
+  end_time = datetime.datetime.strptime(
+  info["end_time"], "%Y-%m-%d %H:%M:%S"
+  )
+  rem = end_time - now
+  if rem.total_seconds() <= 0:
+  lines.append(
+  f"✅ {res.capitalize()} ready to claim ({info['amount']})."
+  )
+  else:
+  m, s = divmod(int(rem.total_seconds()), 60)
+  lines.append(f"⏳ {res.capitalize()}: {m}m{s}s remaining.")
+ 
 
-# ── /mining_status — check current mining ─────────────────────────────────────
-async def mining_status(update, context):
-    pid = str(update.effective_user.id)
-    panel = render_status_panel(pid)
-    pm = player_mining.get(pid, {})
+  await update.message.reply_text("\n".join(lines) + "\n\n" + panel)
+ 
 
-    if not pm:
-        return await update.message.reply_text(
-            "❌ No active mining. Use /mine to start.\n\n" + panel
-        )
+ async def claim_mining(update, context):
+  pid = str(update.effective_user.id)
+  panel = render_status_panel(pid)
+  pm = player_mining.get(pid, {})
+ 
 
-    now = datetime.datetime.now()
-    lines = []
+  if not pm:
+  return await update.message.reply_text(
+  "❌ Nothing to claim.\\n\\n" + panel
+  )
+ 
 
-    for res, info in pm.items():
-        end = datetime.datetime.strptime(info["end"], "%Y-%m-%d %H:%M:%S")
-        rem = end - now
-        if rem.total_seconds() <= 0:
-            lines.append(f"✅ {res.capitalize()} ready to claim ({info['amount']}).")
-        else:
-            m, s = divmod(int(rem.total_seconds()), 60)
-            lines.append(f"⏳ {res.capitalize()}: {m}m{s}s remaining.")
+  now = datetime.datetime.now()
+  claimed = {}
+  for res, info in list(pm.items()):
+  end_time = datetime.datetime.strptime(
+  info["end_time"], "%Y-%m-%d %H:%M:%S"
+  )
+  if now >= end_time:
+  claimed[res] = info["amount"]
+  del pm[res]
+ 
 
-    await update.message.reply_text("\n".join(lines) + "\n\n" + panel)
+  if not claimed:
+  return await update.message.reply_text(
+  "⏳ Still mining—no resources ready.\\n\\n" + panel
+  )
+ 
 
+  # Add to Google Sheets
+  resources = google_sheets.load_resources(pid)
+  for res, amt in claimed.items():
+  resources[res] = resources.get(res, 0) + amt
+  google_sheets.save_resources(pid, resources)
+ 
 
-# ── /claim_mining — claim finished mining ────────────────────────────────────
-async def claim_mining(update, context):
-    pid = str(update.effective_user.id)
-    panel = render_status_panel(pid)
-    pm = player_mining.get(pid, {})
-
-    if not pm:
-        return await update.message.reply_text(
-            "❌ Nothing to claim.\n\n" + panel
-        )
-
-    now = datetime.datetime.now()
-    claimed = {}
-
-    for res, info in list(pm.items()):
-        end = datetime.datetime.strptime(info["end"], "%Y-%m-%d %H:%M:%S")
-        if now >= end:
-            claimed[res] = info["amount"]
-            del pm[res]
-
-    if not claimed:
-        return await update.message.reply_text(
-            "⏳ Still mining—no resources ready.\n\n" + panel
-        )
-
-    # Add claimed resources to Google Sheets
-    resources = google_sheets.load_resources(pid)
-    for r, a in claimed.items():
-        resources[r] = resources.get(r, 0) + a
-    google_sheets.save_resources(pid, resources)
-
-    summary = (
-        "🎉 Claimed:\n"
-        + "\n".join(f"🔹 {a} {r.capitalize()}" for r, a in claimed.items())
-    )
-    await update.message.reply_text(summary + "\n\n" + panel)
+  claimed_str = ", ".join(
+  f"{amt} {res.capitalize()}" for res, amt in claimed.items()
+  )
+  await update.message.reply_text(f"✅ Claimed: {claimed_str}\\n\\n" + panel)
