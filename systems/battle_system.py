@@ -1,79 +1,104 @@
+
 import datetime
-import random
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
-from telegram.ext import ContextTypes
-
+from telegram.ext import ContextTypes, CommandHandler
 from utils.google_sheets import (
-    load_player_army,
-    save_player_army,
-    load_resources,
-    save_battle_result,
-    get_building_level,
+    load_resources, save_resources, load_player_bases, save_player_base, save_all_player_bases
 )
+from utils.ui_helpers import render_status_panel
 
-# ── Player Scanning Placeholder ──────────────────────────────────────────────
-def get_nearby_enemies(player_id: str) -> list:
-    # In production, replace with smarter filtering
-    # Here we simulate fake enemies
-    return [
-        {"player_id": f"enemy_{i}", "name": f"Enemy_{i}"} for i in range(1, 4)
-    ]
+# Constants
+BASE_UNLOCK_COST = {
+    "metal": 5000,
+    "fuel": 3000,
+    "crystal": 1000,
+    "credits": 200
+}
+MAX_BASES = 5
 
-# ── Entry Point: /attack ─────────────────────────────────────────────────────
-async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def _format_costs(costs: dict) -> str:
+    return " | ".join(f"{res.title()}: {amt}" for res, amt in costs.items())
+
+async def list_bases(update: Update, context: ContextTypes.DEFAULT_TYPE):
     player_id = str(update.effective_user.id)
-    enemies = get_nearby_enemies(player_id)
+    bases = load_player_bases(player_id)
+    if not bases:
+        return await update.message.reply_text("You have no bases yet. Use ,expandbase to build one.")
+    lines = [f"<b>🏠 Your Bases ({len(bases)}/{MAX_BASES}):</b>"]
+    for b in bases:
+        lines.append(f"• {b['name']} — Built on {b['created']}")
+    lines.append("\nUse ,expandbase to create a new one.")
+    await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
 
-    if not enemies:
-        return await update.message.reply_text("No enemies found to attack!")
-
-    buttons = [
-        [InlineKeyboardButton(e["name"], callback_data=f"ATTACK:{e['player_id']}")]
-        for e in enemies
-    ]
+async def expand_base(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    player_id = str(update.effective_user.id)
+    bases = load_player_bases(player_id)
+    if len(bases) >= MAX_BASES:
+        return await update.message.reply_text(
+            f"❌ Max number of bases reached ({MAX_BASES}).", parse_mode=ParseMode.HTML
+        )
+    resources = load_resources(player_id)
+    for res, cost in BASE_UNLOCK_COST.items():
+        if resources.get(res, 0) < cost:
+            return await update.message.reply_text(
+                f"⚠️ Not enough {res.title()} to build new base.\n\n"
+                f"Cost: {_format_costs(BASE_UNLOCK_COST)}\n\n" + render_status_panel(player_id),
+                parse_mode=ParseMode.HTML
+            )
+    for res, cost in BASE_UNLOCK_COST.items():
+        resources[res] -= cost
+    save_resources(player_id, resources)
+    base_number = len(bases) + 1
+    base_name = f"Outpost #{base_number}"
+    created_on = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    save_player_base(player_id, {"name": base_name, "created": created_on})
     await update.message.reply_text(
-        "Select a target:",
-        reply_markup=InlineKeyboardMarkup(buttons),
+        f"✅ New base established: <b>{base_name}</b>\n\n" + render_status_panel(player_id),
+        parse_mode=ParseMode.HTML
     )
 
-# ── Core Battle Resolution ───────────────────────────────────────────────────
-def calculate_battle_result(attacker_army: dict, defender_army: dict) -> str:
-    atk_power = 0
-    def_power = 0
-    for unit, qty in attacker_army.items():
-        if not unit.endswith("_attack") and isinstance(qty, int):
-            atk_power += qty * attacker_army.get(f"{unit}_attack", 5)
-    for unit, qty in defender_army.items():
-        if not unit.endswith("_defense") and isinstance(qty, int):
-            def_power += qty * defender_army.get(f"{unit}_defense", 5)
-    return "win" if atk_power >= def_power else "lose"
-
-# ── Callback: Resolve attack ─────────────────────────────────────────────────
-async def attack_tactic_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    attacker_id = str(query.from_user.id)
-    defender_id = query.data.split(":")[1]
-
-    attacker_army = load_player_army(attacker_id)
-    defender_army = load_player_army(defender_id)
-
-    outcome = calculate_battle_result(attacker_army, defender_army)
-    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-    save_battle_result(
-        f"{attacker_id}-{timestamp}",
-        attacker_id,
-        defender_id,
-        tactic="auto",
-        outcome=outcome,
-        rewards="TBD",
-        timestamp=timestamp,
+async def delete_base(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    player_id = str(update.effective_user.id)
+    bases = load_player_bases(player_id)
+    if len(context.args) != 1:
+        return await update.message.reply_text("Usage: ,deletebase [number]")
+    try:
+        index = int(context.args[0]) - 1
+    except ValueError:
+        return await update.message.reply_text("❌ Invalid base number.")
+    if index < 0 or index >= len(bases):
+        return await update.message.reply_text("❌ No base with that number.")
+    removed = bases.pop(index)
+    save_all_player_bases(player_id, bases)
+    await update.message.reply_text(
+        f"🗑️ Removed base <b>{removed['name']}</b>.\n\n" + render_status_panel(player_id),
+        parse_mode=ParseMode.HTML
     )
 
-    result_text = (
-        f"<b>⚔️ Battle Report</b>\n"
-        f"You attacked <code>{defender_id}</code> and <b>{'won' if outcome == 'win' else 'lost'}</b>!"
+async def rename_base(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    player_id = str(update.effective_user.id)
+    bases = load_player_bases(player_id)
+    if len(context.args) < 2:
+        return await update.message.reply_text("Usage: ,renamebase [number] [new_name]")
+    try:
+        index = int(context.args[0]) - 1
+    except ValueError:
+        return await update.message.reply_text("❌ Invalid base number.")
+    if index < 0 or index >= len(bases):
+        return await update.message.reply_text("❌ No base with that number.")
+    new_name = " ".join(context.args[1:]).strip()
+    if not new_name:
+        return await update.message.reply_text("❌ Name cannot be empty.")
+    bases[index]["name"] = new_name
+    save_all_player_bases(player_id, bases)
+    await update.message.reply_text(
+        f"✏️ Renamed base to <b>{new_name}</b>.\n\n" + render_status_panel(player_id),
+        parse_mode=ParseMode.HTML
     )
-    await query.edit_message_text(result_text, parse_mode=ParseMode.HTML)
+
+def register_base_expansion_handlers(app):
+    app.add_handler(CommandHandler("createbase", expand_base))
+    app.add_handler(CommandHandler("mybases", list_bases))
+    app.add_handler(CommandHandler("deletebase", delete_base))
+    app.add_handler(CommandHandler("renamebase", rename_base))
