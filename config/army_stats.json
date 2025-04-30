@@ -7,7 +7,8 @@
     "speed": 10,
     "role": "infantry",
     "training_time": 1,
-    "tactics": ["melee", "flanking"]
+    "tactics": ["melee", "flanking"],
+    "abilities": ["rush"]
   },
   "tank": {
     "display_name": "Tank",
@@ -17,7 +18,8 @@
     "speed": 5,
     "role": "heavy",
     "training_time": 5,
-    "tactics": ["breakthrough", "siege"]
+    "tactics": ["breakthrough", "siege"],
+    "abilities": ["armor_piercing"]
   },
   "drone": {
     "display_name": "Drone",
@@ -27,7 +29,8 @@
     "speed": 15,
     "role": "ranged",
     "training_time": 3,
-    "tactics": ["skirmish", "ambush"]
+    "tactics": ["skirmish", "ambush"],
+    "abilities": ["swarm"]
   },
   "artillery": {
     "display_name": "Artillery",
@@ -37,7 +40,8 @@
     "speed": 3,
     "role": "siege",
     "training_time": 7,
-    "tactics": ["bombardment", "siege"]
+    "tactics": ["bombardment", "siege"],
+    "abilities": ["barrage"]
   },
   "scout": {
     "display_name": "Scout",
@@ -47,6 +51,7 @@
     "speed": 20,
     "role": "recon",
     "training_time": 2,
-    "tactics": ["reconnaissance", "flanking"]
+    "tactics": ["reconnaissance", "flanking"],
+    "abilities": ["evasion"]
   }
 }
