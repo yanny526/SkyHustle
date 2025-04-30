@@ -86,7 +86,8 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         panel, parse_mode=ParseMode.HTML, reply_markup=MENU_MARKUP
     )
 
-# Tutorial handlers
+# ────────────────────────────────────────────────────────────────────────────────
+# Tutorial handlers (highest priority)
 TUTORIAL_HANDLERS = [
     CommandHandler("tutorial",    tutorial_system.tutorial),
     CommandHandler("setname",     tutorial_system.setname),
@@ -100,13 +101,15 @@ TUTORIAL_HANDLERS = [
     CommandHandler("claimtrain",  tutorial_system.tutorial_claim_train),
 ]
 
-# Building menu
+# ────────────────────────────────────────────────────────────────────────────────
+# Buildings menu & callbacks
+
 def _make_building_list(pid: str):
     queue = load_building_queue(pid)
     buttons = []
     for key in building_system.BUILDINGS:
         lvl  = get_building_level(pid, key)
-        busy = any(t['building_name']==key for t in queue.values())
+        busy = any(t['building_name'] == key for t in queue.values())
         label = f"{key.replace('_',' ').title()} (Lv {lvl})" + (" ⏳" if busy else "")
         buttons.append([InlineKeyboardButton(label, callback_data=f"BUILDING:{key}")])
     text = "🏗 <b>Your Buildings</b>\nChoose one for details:"
@@ -123,6 +126,7 @@ async def building_detail_callback(update: Update, context: ContextTypes.DEFAULT
     pid = str(query.from_user.id)
     key = query.data.split(":",1)[1]
 
+    # If already upgrading, show remaining time + back
     queue = load_building_queue(pid)
     for task in queue.values():
         if task['building_name'] == key:
@@ -138,6 +142,7 @@ async def building_detail_callback(update: Update, context: ContextTypes.DEFAULT
             ])
             return await query.edit_message_text(text, parse_mode=ParseMode.HTML, reply_markup=markup)
 
+    # Otherwise show detail + upgrade button
     cur = get_building_level(pid, key)
     nxt = cur + 1
     cost = building_system.BUILDINGS[key]["resource_cost"](nxt)
@@ -177,11 +182,11 @@ async def building_upgrade_callback(update: Update, context: ContextTypes.DEFAUL
     pid = str(query.from_user.id)
     key = query.data.split(":",1)[1]
 
+    # Resource check
     cur_lv = get_building_level(pid, key)
     nxt_lv = cur_lv + 1
     cost   = building_system.BUILDINGS[key]["resource_cost"](nxt_lv)
     res    = load_resources(pid)
-
     for r, amt in cost.items():
         if res.get(r, 0) < amt:
             return await query.answer(
@@ -189,6 +194,7 @@ async def building_upgrade_callback(update: Update, context: ContextTypes.DEFAUL
                 show_alert=True
             )
 
+    # Deduct & schedule
     for r, amt in cost.items():
         res[r] -= amt
     save_resources(pid, res)
@@ -200,8 +206,10 @@ async def building_upgrade_callback(update: Update, context: ContextTypes.DEFAUL
     building_system.save_building_task(pid, key, datetime.now(), ready_at)
 
     await query.answer(f"🔨 Upgrading to Lv {nxt_lv}!")
+    # refresh details
     await building_detail_callback(update, context)
 
+# ────────────────────────────────────────────────────────────────────────────────
 # Main menu router
 async def menu_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
@@ -234,11 +242,11 @@ async def menu_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    # Tutorial first
+    # Tutorial handlers
     for h in TUTORIAL_HANDLERS:
         app.add_handler(h)
 
-    # Core commands
+    # Core slash commands
     app.add_handler(CommandHandler("start",  start))
     app.add_handler(CommandHandler("help",   help_cmd))
     app.add_handler(CommandHandler("lore",   lore))
@@ -246,20 +254,20 @@ def main():
     app.add_handler(CommandHandler("missions",      mission_system.missions))
     app.add_handler(CommandHandler("storymissions", mission_system.storymissions))
     app.add_handler(CommandHandler("epicmissions",  mission_system.epicmissions))
-    # ✂️ remove the broken `/claimmission` handler
+    # (no /claimmission here – handled inline)
 
-    # Reply‐keyboard menu
+    # Reply-keyboard
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, menu_router))
 
-    # Inline building callbacks
+    # Building callbacks
     app.add_handler(CallbackQueryHandler(building_detail_callback, pattern="^BUILDING:[^_].+"))
-    app.add_handler(CallbackQueryHandler(building_back_callback,   pattern="^BUILDING:__back__$"))
-    app.add_handler(CallbackQueryHandler(building_upgrade_callback,pattern="^BUILDING_UPGRADE:.+"))
+    app.add_handler(CallbackQueryHandler(building_back_callback,    pattern="^BUILDING:__back__$"))
+    app.add_handler(CallbackQueryHandler(building_upgrade_callback, pattern="^BUILDING_UPGRADE:.+"))
 
-    # Inline mission‐claim callback
+    # Inline mission-claim
     app.add_handler(CallbackQueryHandler(mission_system.claim_callback, pattern="^MISSION_CLAIM:.+"))
 
-    # Fallback commands
+    # Fallback / other systems
     app.add_handler(CommandHandler("build",       building_system.build))
     app.add_handler(CommandHandler("buildinfo",   building_system.buildinfo))
     app.add_handler(CommandHandler("buildstatus", building_system.buildstatus))
