@@ -80,7 +80,7 @@ async def attack_tactic_callback(update: Update, context: ContextTypes.DEFAULT_T
         await query.edit_message_text("❌ Attack data lost. Please retry /attack.")
         return
 
-    tactic = query.data.split("\":\", 1)[1]
+    tactic = query.data.split(":", 1)[1]
     attack_data["attacker_tactic"] = tactic
 
     # Defender counter-tactic selection
@@ -109,7 +109,7 @@ async def defend_tactic_callback(update: Update, context: ContextTypes.DEFAULT_T
 
     player_id = str(query.from_user.id)
     attacker_tactic = attack_data.get("attacker_tactic", "")
-    defender_tactic = query.data.split("\":\", 1)[1]
+    defender_tactic = query.data.split(":", 1)[1]
     target_id = attack_data["target_id"]
     player_army = attack_data["player_army"]
     target_army = attack_data["target_army"]
