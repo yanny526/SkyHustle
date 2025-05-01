@@ -287,12 +287,11 @@ async def pvp_attack_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         except Exception as e:
             logger.warning(f"Damage phase failed: {e}")
 
-    result = "🩸 Survived" if new_hp > 0 else "☠️ Defeated"
-
-    await update.message.reply_text(
-        f"⚔️ *Battle Summary*\n\nYou attacked `{target_id}`!\n"
-        f"🛡 Defense: {defense}\n"
-        f"💥 Damage dealt: *{reduced_damage}*\n"
+result = "🩸 Survived" if new_hp > 0 else "☠️ Defeated"
+await update.message.reply_text(
+f"⚔️ *Battle Summary*\n\nYou attacked `{target_id}`!\n"
+f"🛡 Defense: {defense}\n"
+f"💥 Damage dealt: *{reduced_damage}*\n"
         f"❤️ HP left: *{new_hp}*\n\n"
         f"{result}",
         parse_mode="Markdown"
