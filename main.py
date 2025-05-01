@@ -6,6 +6,14 @@ import base64
 import random
 import logging
 import datetime
+# ── Load Environment Credentials ────────────────────────────────
+BASE64_CREDS = os.environ.get("BASE64_CREDS")
+
+if not BASE64_CREDS:
+    raise ValueError("❌ Environment variable BASE64_CREDS is missing.")
+
+creds_json = json.loads(base64.b64decode(BASE64_CREDS).decode())
+
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
