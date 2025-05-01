@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 # ── Environment Variables ───────────────────────────────────────
 TOKEN = os.getenv("BOT_TOKEN")
 SHEET_KEY = os.getenv("SHEET_KEY")
-
+BASE64_CREDS = os.environ.get("BASE64_CREDS")
 # ── Google Sheets Setup ─────────────────────────────────────────
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 if not BASE64_CREDS:
