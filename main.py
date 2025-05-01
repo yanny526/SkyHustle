@@ -8,7 +8,8 @@ import logging
 import datetime
 # ── Load Environment Credentials ────────────────────────────────
 BASE64_CREDS = os.environ.get("BASE64_CREDS")
-
+print("ENV:", os.environ)
+print("BASE64_CREDS:", BASE64_CREDS)
 if not BASE64_CREDS:
     raise ValueError("❌ Environment variable BASE64_CREDS is missing.")
 
