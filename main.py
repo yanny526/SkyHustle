@@ -274,15 +274,18 @@ async def pvp_attack_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
         # Apply damage (stub — replace with your real unit/building logic)
             # Calculate base_damage (with faction/zone buffs) ...
+        try:
     
-    # Load defender stats
-    stats = get_pvp_stats(target_id)
-    old_hp = stats["hp"]
-    defense = stats["def"]
+            # Load defender stats
+            stats = get_pvp_stats(target_id)
+            old_hp = stats["hp"]
+            defense = stats["def"]
 
-    reduced_damage = max(0, base_damage - defense)
-    new_hp = max(0, old_hp - reduced_damage)
-    update_pvp_hp(target_id, new_hp)
+            reduced_damage = max(0, base_damage - defense)
+            new_hp = max(0, old_hp - reduced_damage)
+            update_pvp_hp(target_id, new_hp)
+        except Exception as e:
+            logger.warning(f"Damage phase failed: {e}")
 
     result = "🩸 Survived" if new_hp > 0 else "☠️ Defeated"
 
