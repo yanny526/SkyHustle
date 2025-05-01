@@ -168,6 +168,8 @@ async def zone_income_loop(app):
                         save_inbox_message(user_id, "Zone Reward",
                                            f"Passive income from {ZONES[zone_key]['name']}: +{amt} {res_type.title()}")
         except Exception as e:
+            logger.warning(f"Error in try block at line 144: {e}")
+        except Exception as e:
             logger.error(f"Zone income loop failed: {e}")
 
         await asyncio.sleep(3600)  # Run hourly
@@ -229,6 +231,8 @@ async def show_status_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
         await update.message.reply_text(text, parse_mode="Markdown")
+    except Exception as e:
+        logger.warning(f"Error in try block at line 179: {e}")
     except Exception as e:
         logger.error(f"Status panel error for {user_id}: {e}")
         await update.message.reply_text("⚠️ Failed to load status panel.")
@@ -370,6 +374,8 @@ async def heal_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         save_inbox_message(user_id, "Healing", "You spent 50 Iron + 20 Tech to heal to full HP.")
 
     except Exception as e:
+        logger.warning(f"Error in try block at line 343: {e}")
+    except Exception as e:
         logger.error(f"Heal command failed for {user_id}: {e}")
         await update.message.reply_text("⚠️ Healing failed.")
 # ── Log PvP to BattleLog Sheet ────────────────────────────────
@@ -418,6 +424,8 @@ async def show_battle_log(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await update.message.reply_text(text, parse_mode="Markdown")
     except Exception as e:
+        logger.warning(f"Error in try block at line 392: {e}")
+    except Exception as e:
         logger.error(f"Battle log error: {e}")
         await update.message.reply_text("⚠️ Failed to load battle log.")
 # ── /rankings Command — PvP Leaderboard ───────────────────────
@@ -447,6 +455,8 @@ async def show_rankings(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
         await update.message.reply_text(text, parse_mode="Markdown")
+    except Exception as e:
+        logger.warning(f"Error in try block at line 426: {e}")
     except Exception as e:
         logger.error(f"PvP rankings error: {e}")
         await update.message.reply_text("⚠️ Failed to load rankings.")
@@ -755,6 +765,8 @@ async def daily_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         save_inbox_message(user_id, "Daily Reward", f"You claimed today’s bonus: +{rewards['gold']} gold, +{rewards['crystals']} crystals, etc.")
     except Exception as e:
+        logger.warning(f"Error in try block at line 713: {e}")
+    except Exception as e:
         logger.error(f"Daily reward error: {e}")
         await update.message.reply_text("⚠️ Failed to process daily reward.")
 
@@ -814,6 +826,8 @@ async def wipe_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ws.append_row(headers)
 
         await update.message.reply_text("🧼 All game data has been wiped. The game is now reset.")
+    except Exception as e:
+        logger.warning(f"Error in try block at line 803: {e}")
     except Exception as e:
         logger.error(f"Wipe failed: {e}")
         await update.message.reply_text("⚠️ Wipe failed. Check logs.")
@@ -923,6 +937,8 @@ async def repair_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         save_inbox_message(user_id, "Repair Complete", f"{bld.title()} restored to 100 HP.")
     except Exception as e:
+        logger.warning(f"Error in try block at line 881: {e}")
+    except Exception as e:
         logger.error(f"Repair failed for {user_id}: {e}")
         await update.message.reply_text("⚠️ Failed to repair building.")
 
@@ -977,6 +993,8 @@ async def defend_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"Each level reduces incoming PvP damage by 5%."
         )
         save_inbox_message(user_id, "Defense Upgrade", f"Your base defense is now level {next_level}.")
+    except Exception as e:
+        logger.warning(f"Error in try block at line 939: {e}")
     except Exception as e:
         logger.error(f"Defense upgrade failed: {e}")
         await update.message.reply_text("⚠️ Failed to upgrade defense.")
@@ -1038,6 +1056,8 @@ def run_weekly_rewards():
 
         print(f"✅ Weekly rewards distributed for {week_tag}")
     except Exception as e:
+        logger.warning(f"Error in try block at line 1005: {e}")
+    except Exception as e:
         logger.error(f"Weekly reward error: {e}")
 
 
@@ -1086,6 +1106,8 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"🧪 Techs Unlocked: `{len([t for t in techs if t])}`"
         )
         await update.message.reply_text(text, parse_mode="Markdown")
+    except Exception as e:
+        logger.warning(f"Error in try block at line 1055: {e}")
     except Exception as e:
         logger.error(f"Profile error for {user_id}: {e}")
         await update.message.reply_text("⚠️ Failed to load profile.")
@@ -1214,6 +1236,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "_Game powered by strategy, resource control, and pure hustle._"
         )
         await update.message.reply_text(text, parse_mode="Markdown")
+    except Exception as e:
+        logger.warning(f"Error in try block at line 1189: {e}")
     except Exception as e:
         logger.error(f"/start failed for {user_id}: {e}")
         await update.message.reply_text("⚠️ Error starting the game.")
