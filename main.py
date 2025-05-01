@@ -32,10 +32,11 @@ logger = logging.getLogger(__name__)
 # ── Environment Variables ───────────────────────────────────────
 TOKEN = os.getenv("BOT_TOKEN")
 SHEET_KEY = os.getenv("SHEET_KEY")
-BASE64_CREDS = os.getenv("GOOGLE_CREDS")
 
 # ── Google Sheets Setup ─────────────────────────────────────────
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+if not BASE64_CREDS:
+    raise ValueError("❌ Environment variable BASE64_CREDS is missing for Google Sheets.")
 creds_json = json.loads(base64.b64decode(BASE64_CREDS.strip()).decode())
 creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_json, scope)
 sheet = gspread.authorize(creds).open_by_key(SHEET_KEY)
