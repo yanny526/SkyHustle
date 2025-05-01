@@ -822,6 +822,7 @@ async def faction_war(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # main.py — SkyHustle Unified Version (Part 21 of 21)
 # ── Command + Callback Registration ─────────────────────────────
 # main.py — SkyHustle Unified Version (Part 22 of X)
+
 # ── PvP Logs Sheet ─────────────────────────────────────────────
 pvp_log_sheet = get_or_create_worksheet(sheet, "PvPLogs", ["Attacker", "Defender", "Power", "Result", "Timestamp"])
 
@@ -830,7 +831,6 @@ def log_battle(attacker_id, defender_id, power, result):
     timestamp = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M")
     pvp_log_sheet.append_row([str(attacker_id), str(defender_id), str(power), result, timestamp])
 
-log_battle(attacker_id, target_id, attacker_power, result)
 
 # ── /my_battles Command ─────────────────────────────────────────
 async def my_battles(update: Update, context: ContextTypes.DEFAULT_TYPE):
