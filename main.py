@@ -86,7 +86,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         save_inbox_message(user_id, "Welcome", "Welcome to SkyHustle!")
 
     text = (
-        "🌍 *Welcome to SkyHustle!*
+        "🌍 *Welcome to SkyHustle!*"
 
 "
         "A Telegram strategy game where you:
