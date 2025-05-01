@@ -294,6 +294,10 @@ async def command_center_buttons(update: Update, context: ContextTypes.DEFAULT_T
     data = query.data
 
     # Core commands
+    application.add_handler(CommandHandler("attack", attack_command))
+    application.add_handler(CommandHandler("research", research_command))
+    application.add_handler(CommandHandler("train", train_command))
+    application.add_handler(CommandHandler("build", build_command))
     if data == "cmd_resources":
         await show_resource_panel(update, context)
     elif data == "cmd_build":
@@ -736,17 +740,370 @@ def award_daily_bonuses():
     logger.info("🎉 Awarding daily bonuses... [TODO]")
 
 
+
+# ── Building System ────────────────────────────────────────
+
+BUILDINGS = {
+    "mine": {
+        "name": "⛏ Gold Mine",
+        "base_cost": {"gold": 100, "iron": 50, "tech": 10},
+        "cost_scaling": 1.5,
+        "description": "Generates gold every hour."
+    },
+    "barracks": {
+        "name": "🏰 Barracks",
+        "base_cost": {"gold": 120, "iron": 60, "tech": 20},
+        "cost_scaling": 1.4,
+        "description": "Allows you to train soldiers."
+    },
+    "lab": {
+        "name": "🧪 Tech Lab",
+        "base_cost": {"gold": 200, "iron": 100, "tech": 40},
+        "cost_scaling": 1.8,
+        "description": "Unlocks new research paths."
+    }
+}
+
+def get_building_level(user_id, building_id):
+    try:
+        ws = sheet.worksheet("Buildings")
+        cell = ws.find(str(user_id))
+        row = cell.row
+        col_map = {k: i+2 for i, k in enumerate(BUILDINGS)}  # col 1 is user_id
+        col = col_map[building_id]
+        return int(ws.cell(row, col).value or 0)
+    except:
+        return 0
+
+def save_building_level(user_id, building_id, level):
+    ws = get_or_create_worksheet(sheet, "Buildings", ["ID"] + list(BUILDINGS))
+    try:
+        cell = ws.find(str(user_id))
+        row = cell.row
+    except:
+        ws.append_row([str(user_id)] + ["0"] * len(BUILDINGS))
+        cell = ws.find(str(user_id))
+        row = cell.row
+    col = list(BUILDINGS).index(building_id) + 2
+    ws.update_cell(row, col, str(level))
+
+def calculate_building_cost(building_id, level):
+    b = BUILDINGS[building_id]
+    scale = b["cost_scaling"]
+    cost = {
+        k: int(v * (level ** scale)) for k, v in b["base_cost"].items()
+    }
+    return cost
+
+async def build_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    keyboard = []
+    for bid, b in BUILDINGS.items():
+        keyboard.append([
+            InlineKeyboardButton(f'{b["name"]} - {b["description"]}', callback_data=f'build_{bid}')
+        ])
+    await update.message.reply_text(
+        "🛠 *Choose a building to construct or upgrade:*",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode="Markdown"
+    )
+
+async def build_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    user_id = query.from_user.id
+    building_id = query.data.replace("build_", "")
+    level = get_building_level(user_id, building_id)
+    new_level = level + 1
+    cost = calculate_building_cost(building_id, new_level)
+
+    resources = resources_sheet.get_all_values()
+    user_row = next((r for r in resources if r[0] == str(user_id)), None)
+    if not user_row:
+        await query.answer("❌ No resource data found.")
+        return
+
+    current = {
+        "gold": int(user_row[1]),
+        "iron": int(user_row[2]),
+        "tech": int(user_row[3]),
+    }
+
+    # Check affordability
+    if any(current[k] < cost[k] for k in cost):
+        await query.answer("❌ Not enough resources.")
+        return
+
+    # Deduct resources
+    updated = {
+        "gold": current["gold"] - cost["gold"],
+        "iron": current["iron"] - cost["iron"],
+        "tech": current["tech"] - cost["tech"],
+    }
+    row_idx = resources.index(user_row) + 1
+    resources_sheet.update(f'B{row_idx}:D{row_idx}', [[updated["gold"], updated["iron"], updated["tech"]]])
+
+    # Save building level
+    save_building_level(user_id, building_id, new_level)
+
+    await query.answer()
+    await query.edit_message_text(
+        f"✅ Upgraded *{BUILDINGS[building_id]['name']}* to Level {new_level}!
+
+"
+        f"Cost: {cost['gold']} gold, {cost['iron']
+# ── Combat System ──────────────────────────────────────────
+
+FACTION_BONUSES = {
+    "alpha": {"damage": 1.1, "desc": "⚔️ +10% attack strength"},
+    "beta": {"defense": 0.9, "desc": "🛡 -10% damage received"},
+    "gamma": {"income": 1.1, "desc": "💰 +10% income gain"},
+}
+
+def get_faction_bonus(user_id):
+    faction = get_player_faction(user_id)
+    return FACTION_BONUSES.get(faction, {})
+
+async def attack_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    army_ws = sheet.worksheet("Army")
+    attacker_row = next((r for r in army_ws.get_all_values() if r[0] == str(user_id)), None)
+
+    if not attacker_row:
+        await update.message.reply_text("❌ You have no army to attack with.")
+        return
+
+    army_size = sum(int(x or 0) for x in attacker_row[1:])
+    if army_size == 0:
+        await update.message.reply_text("🪖 Train some units before attacking.")
+        return
+
+    # Simplified: attack bot dummy base
+    attacker_power = army_size * 10 * get_faction_bonus(user_id).get("damage", 1)
+
+    if attacker_power >= 100:
+        gold_gain = int(100 * get_faction_bonus(user_id).get("income", 1))
+        resources = resources_sheet.get_all_values()
+        row_idx = next((i for i, r in enumerate(resources) if r[0] == str(user_id)), None)
+        if row_idx is not None:
+            row = resources[row_idx]
+            new_gold = int(row[1]) + gold_gain
+            resources_sheet.update_cell(row_idx + 1, 2, new_gold)
+        await update.message.reply_text(f"🏆 Victory! You looted {gold_gain} gold.")
+    else:
+        await update.message.reply_text("💥 You were repelled. Try again with more units.")
+
+# ── Research System ────────────────────────────────────────
+
+RESEARCH = {
+    "resource_boost": {
+        "name": "💡 Resource Boost",
+        "desc": "+20% resource gains",
+        "cost": {"gold": 500, "tech": 200}
+    },
+    "combat_upgrade": {
+        "name": "⚔️ Combat Upgrade",
+        "desc": "+20% attack power",
+        "cost": {"gold": 600, "tech": 300}
+    }
+}
+
+def get_research_level(user_id, research_id):
+    ws = get_or_create_worksheet(sheet, "Research", ["ID"] + list(RESEARCH))
+    try:
+        cell = ws.find(str(user_id))
+        row = cell.row
+        col = list(RESEARCH).index(research_id) + 2
+        return int(ws.cell(row, col).value or 0)
+    except:
+        return 0
+
+def save_research_level(user_id, research_id, level):
+    ws = get_or_create_worksheet(sheet, "Research", ["ID"] + list(RESEARCH))
+    try:
+        cell = ws.find(str(user_id))
+        row = cell.row
+    except:
+        ws.append_row([str(user_id)] + ["0"] * len(RESEARCH))
+        cell = ws.find(str(user_id))
+        row = cell.row
+    col = list(RESEARCH).index(research_id) + 2
+    ws.update_cell(row, col, str(level))
+
+async def research_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = []
+    for rid, r in RESEARCH.items():
+        keyboard.append([
+            InlineKeyboardButton(f"{r['name']} - {r['desc']}", callback_data=f"research_{rid}")
+        ])
+    await update.message.reply_text(
+        "🧪 *Select a research to begin:*",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode="Markdown"
+    )
+
+async def research_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    user_id = query.from_user.id
+    rid = query.data.replace("research_", "")
+    res = RESEARCH[rid]
+    level = get_research_level(user_id, rid)
+
+    # Load resources
+    resources = resources_sheet.get_all_values()
+    row = next((r for r in resources if r[0] == str(user_id)), None)
+    if not row:
+        await query.answer("No resources found.")
+        return
+
+    gold = int(row[1])
+    tech = int(row[3])
+    cost = res["cost"]
+
+    if gold < cost["gold"] or tech < cost["tech"]:
+        await query.answer("❌ Not enough resources.")
+        return
+
+    # Deduct
+    row_idx = resources.index(row) + 1
+    resources_sheet.update(f'B{row_idx}:B{row_idx}', [[gold - cost["gold"]]])
+    resources_sheet.update(f'D{row_idx}:D{row_idx}', [[tech - cost["tech"]]])
+
+    # Save level
+    save_research_level(user_id, rid, level + 1)
+
+    await query.answer()
+    await query.edit_message_text(
+        f"🔬 Researched *{res['name']}* (Level {level + 1})!
+Bonus: {res['desc']}",
+        parse_mode="Markdown"
+    )
+
+
+} iron, {cost['tech']} tech",
+        parse_mode="Markdown"
+    )
+
+
+
+# ── Training System ─────────────────────────────────────────
+
+UNITS = {
+    "infantry": {
+        "name": "🪖 Infantry",
+        "base_cost": {"gold": 50, "iron": 30},
+        "training_time": 10,
+        "description": "Basic ground unit."
+    },
+    "sniper": {
+        "name": "🎯 Sniper",
+        "base_cost": {"gold": 120, "iron": 80},
+        "training_time": 30,
+        "description": "High damage, slow fire rate."
+    },
+    "tank": {
+        "name": "🛡 Tank",
+        "base_cost": {"gold": 300, "iron": 200},
+        "training_time": 60,
+        "description": "Heavy armor, strong attack."
+    }
+}
+
+def get_unit_count(user_id, unit_id):
+    ws = get_or_create_worksheet(sheet, "Army", ["ID"] + list(UNITS))
+    try:
+        cell = ws.find(str(user_id))
+        row = cell.row
+        col = list(UNITS).index(unit_id) + 2
+        return int(ws.cell(row, col).value or 0)
+    except:
+        return 0
+
+def save_unit_count(user_id, unit_id, new_count):
+    ws = get_or_create_worksheet(sheet, "Army", ["ID"] + list(UNITS))
+    try:
+        cell = ws.find(str(user_id))
+        row = cell.row
+    except:
+        ws.append_row([str(user_id)] + ["0"] * len(UNITS))
+        cell = ws.find(str(user_id))
+        row = cell.row
+    col = list(UNITS).index(unit_id) + 2
+    ws.update_cell(row, col, str(new_count))
+
+async def train_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = []
+    for uid, u in UNITS.items():
+        keyboard.append([
+            InlineKeyboardButton(f"{u['name']} - {u['description']}", callback_data=f"train_{uid}")
+        ])
+    await update.message.reply_text(
+        "🧑‍✈️ *Select a unit to train:*",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode="Markdown"
+    )
+
+async def train_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    user_id = query.from_user.id
+    unit_id = query.data.replace("train_", "")
+    unit = UNITS[unit_id]
+
+    # Get player resources
+    resources = resources_sheet.get_all_values()
+    user_row = next((r for r in resources if r[0] == str(user_id)), None)
+    if not user_row:
+        await query.answer("❌ No resource data found.")
+        return
+
+    current = {
+        "gold": int(user_row[1]),
+        "iron": int(user_row[2]),
+    }
+    cost = unit["base_cost"]
+
+    # Check if player can afford
+    if any(current[k] < cost[k] for k in cost):
+        await query.answer("❌ Not enough resources.")
+        return
+
+    # Deduct and save
+    updated = {
+        "gold": current["gold"] - cost["gold"],
+        "iron": current["iron"] - cost["iron"],
+    }
+    row_idx = resources.index(user_row) + 1
+    resources_sheet.update(f'B{row_idx}:C{row_idx}', [[updated["gold"], updated["iron"]]])
+
+    # Update army count
+    count = get_unit_count(user_id, unit_id)
+    save_unit_count(user_id, unit_id, count + 1)
+
+    await query.answer()
+    await query.edit_message_text(
+        f"✅ Trained 1x *{unit['name']}*!
+Cost: {cost['gold']} gold, {cost['iron']} iron.",
+        parse_mode="Markdown"
+    )
+
+
 def main():
     TOKEN = os.getenv("BOT_TOKEN")
     application = ApplicationBuilder().token(TOKEN).build()
 
     # Core commands
+    application.add_handler(CommandHandler("attack", attack_command))
+    application.add_handler(CommandHandler("research", research_command))
+    application.add_handler(CommandHandler("train", train_command))
+    application.add_handler(CommandHandler("build", build_command))
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("use", use_item_command))
     application.add_handler(CommandHandler("grant", grant_command))
     application.add_handler(CommandHandler("wipe", wipe_command))
 
     # Callback handlers
+    application.add_handler(CallbackQueryHandler(research_callback, pattern="^research_"))
+    application.add_handler(CallbackQueryHandler(train_callback, pattern="^train_"))
+    application.add_handler(CallbackQueryHandler(build_callback, pattern="^build_"))
     application.add_handler(CallbackQueryHandler(command_center_buttons))
     application.add_handler(CallbackQueryHandler(
         lambda u,c: open_command_center_callback(u,c), 
