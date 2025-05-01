@@ -1,1282 +1,1046 @@
+# main.py — SkyHustle Unified Version (Part 1 of X)
 import os
 import json
+import time
 import base64
-import datetime
-import asyncio
+import random
 import logging
-from telegram import (
-    Update,
-    InlineKeyboardMarkup,
-    InlineKeyboardButton,
-)
+import datetime
+
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.constants import ParseMode
 from telegram.ext import (
-    ApplicationBuilder,
-    CommandHandler,
-    CallbackQueryHandler,
-    ContextTypes,
+    ApplicationBuilder, CommandHandler, CallbackQueryHandler,
+    MessageHandler, ContextTypes, filters
 )
+
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
-# ── Setup Logging ─────────────────────────────────────────
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
-)
+# ── Logging ─────────────────────────────────────────────────────
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# ── Google Sheets Auth ───────────────────────────────────
-def auth_sheets():
-    creds_b64 = os.getenv("GOOGLE_CREDS_BASE64")
-    sheet_id = os.getenv("SHEET_ID")
-    if not creds_b64 or not sheet_id:
-        raise Exception("Environment variables missing.")
-    creds_json = base64.b64decode(creds_b64).decode("utf-8")
-    creds_dict = json.loads(creds_json)
-    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    credentials = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-    client = gspread.authorize(credentials)
-    return client.open_by_key(sheet_id)
+# ── Environment Variables ───────────────────────────────────────
+TOKEN = os.getenv("BOT_TOKEN")
+SHEET_KEY = os.getenv("SHEET_KEY")
+BASE64_CREDS = os.getenv("GOOGLE_CREDS")
 
-sheet = auth_sheets()
-players_sheet = sheet.worksheet("Players")
-resources_sheet = sheet.worksheet("Resources")
+# ── Google Sheets Setup ─────────────────────────────────────────
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+creds_json = json.loads(base64.b64decode(BASE64_CREDS).decode())
+creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_json, scope)
+sheet = gspread.authorize(creds).open_by_key(SHEET_KEY)
 
-# ── Command Center UI ─────────────────────────────────────
-async def command_center(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [
-        [InlineKeyboardButton("💰 Resources", callback_data="cmd_resources"),
-         InlineKeyboardButton("🛠 Build", callback_data="cmd_build")],
-        [InlineKeyboardButton("🧬 Research", callback_data="cmd_research"),
-         InlineKeyboardButton("🧑‍✈️ Train", callback_data="cmd_train")],
-        [InlineKeyboardButton("🔍 Spy", callback_data="cmd_spy"),
-         InlineKeyboardButton("⚔️ Attack", callback_data="cmd_attack")],
-        [InlineKeyboardButton("🏪 Store", callback_data="cmd_store"),
-         InlineKeyboardButton("📈 Status Panel", callback_data="cmd_status")],
-    ]
-    await update.message.reply_text(
-        "🏛 *Welcome to your Command Center!*\n\nSelect an option below:",
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode="Markdown"
-    )
-# ── Handle Command Center Buttons ─────────────────────────────
-async def command_center_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    data = query.data
 
-    if data == "cmd_resources":
-        await query.edit_message_text("💰 *Resources Panel* (Coming soon...)", parse_mode="Markdown")
-    elif data == "cmd_build":
-        await query.edit_message_text("🛠 *Build Menu* (Coming soon...)", parse_mode="Markdown")
-    elif data == "cmd_research":
-        await query.edit_message_text("🧬 *Research Menu* (Coming soon...)", parse_mode="Markdown")
-    elif data == "cmd_train":
-        await query.edit_message_text("🧑‍✈️ *Train Troops* (Coming soon...)", parse_mode="Markdown")
-    elif data == "cmd_spy":
-        await query.edit_message_text("🔍 *Spy Operations* (Coming soon...)", parse_mode="Markdown")
-    elif data == "cmd_attack":
-        await query.edit_message_text("⚔️ *Attack Nearby Player* (Coming soon...)", parse_mode="Markdown")
-    elif data == "cmd_store":
-        await query.edit_message_text("🏪 *Game Store* (Coming soon...)", parse_mode="Markdown")
-    elif data == "cmd_status":
-        await query.edit_message_text("📈 *Status Panel* (Coming soon...)", parse_mode="Markdown")
-    else:
-        await query.edit_message_text("❓ Unknown command.")
-
-# ── Helper: Initialize Player on First Start ─────────────────────
-def register_player(user):
+# ── Utility: Get Player Name by ID ──────────────────────────────
+def get_player_name(user_id: str):
     try:
-        players = players_sheet.col_values(1)
-        if str(user.id) not in players:
-            players_sheet.append_row([str(user.id), user.first_name, "None", "0"])
-            resources_sheet.append_row([str(user.id), 1000, 500, 100, 0])  # Gold, Iron, Tech, Crystals
-            logger.info(f"Registered new player: {user.id}")
-    except Exception as e:
-        logger.error(f"Error registering player: {e}")
+        row = players_sheet.find(user_id).row
+        return players_sheet.cell(row, 2).value or user_id
+    except:
+        return user_id
 
-# ── /start Command ───────────────────────────────────────────────
-async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# ── Utility: Get or Create Worksheet ────────────────────────────
+def get_or_create_worksheet(sheet, title, headers):
+    try:
+        ws = sheet.worksheet(title)
+    except:
+        ws = sheet.add_worksheet(title=title, rows="1000", cols=str(len(headers)))
+        ws.append_row(headers)
+    return ws
+
+# ── Core Worksheets ─────────────────────────────────────────────
+resources_sheet = get_or_create_worksheet(sheet, "Resources", ["ID", "gold", "iron", "tech", "crystals"])
+players_sheet = get_or_create_worksheet(sheet, "Players", ["ID", "name", "faction"])
+buildings_sheet = get_or_create_worksheet(sheet, "Buildings", ["ID", "mine", "barracks", "lab"])
+army_sheet = get_or_create_worksheet(sheet, "Army", ["ID", "infantry", "sniper", "tank"])
+research_sheet = get_or_create_worksheet(sheet, "Research", ["ID", "power", "production"])
+zones_sheet = get_or_create_worksheet(sheet, "Zones", ["zone", "owner_id"])
+mission_sheet = get_or_create_worksheet(sheet, "Missions", ["ID", "build", "train", "attack", "capture"])
+base_sheet = get_or_create_worksheet(sheet, "Bases", ["ID", "base_level"])
+daily_sheet = get_or_create_worksheet(sheet, "Daily", ["ID", "last_claim"])
+boss_sheet = get_or_create_worksheet(sheet, "RaidBoss", ["boss_name", "hp"])
+inbox_sheet = get_or_create_worksheet(sheet, "Inbox", ["ID", "message"])
+event_sheet = get_or_create_worksheet(sheet, "Events", ["name", "description", "active"])
+rank_sheet = get_or_create_worksheet(sheet, "Ranks", ["ID", "score"])
+faction_sheet = get_or_create_worksheet(sheet, "Factions", ["Faction", "Points"])
+trade_sheet = get_or_create_worksheet(sheet, "Trades", ["From", "To", "Resource", "Amount"])
+# main.py — SkyHustle Unified Version (Part 2 of X)
+# ── Player Registration ─────────────────────────────────────────
+def register_player(user_id: int, username: str):
+    try:
+        players_sheet.find(str(user_id))
+    except:
+        players_sheet.append_row([str(user_id), username or "Unknown", "none"])
+        resources_sheet.append_row([str(user_id), "500", "300", "0", "0"])
+        buildings_sheet.append_row([str(user_id), "1", "1", "1"])
+        army_sheet.append_row([str(user_id), "0", "0", "0"])
+        research_sheet.append_row([str(user_id), "0", "0"])
+        mission_sheet.append_row([str(user_id), "0", "0", "0", "0"])
+        base_sheet.append_row([str(user_id), "1"])
+        daily_sheet.append_row([str(user_id), "2000-01-01"])
+        rank_sheet.append_row([str(user_id), "0"])
+
+# ── /start Command ──────────────────────────────────────────────
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    register_player(user)
+    register_player(user.id, user.username)
+
+    keyboard = [[InlineKeyboardButton("Enter SkyHustle 🌌", callback_data="main_menu")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
 
     await update.message.reply_text(
-        f"👋 Welcome, *{user.first_name}!* Your empire awaits.\n\nTap below to open your Command Center:",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏛 Open Command Center", callback_data="open_center")]]),
-        parse_mode="Markdown"
+        f"Welcome Commander *{user.first_name}*\n\nYour empire begins now. 🌍\nChoose your path wisely.",
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=reply_markup
     )
-# ── Handle 'Open Command Center' Callback ─────────────────────
-async def open_command_center_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+# ── Main Menu Callback ──────────────────────────────────────────
+async def main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    await command_center(update, context)
+    keyboard = [
+        [InlineKeyboardButton("🏗 Build", callback_data="build_menu"),
+         InlineKeyboardButton("🧑‍✈️ Train", callback_data="train_menu")],
+        [InlineKeyboardButton("⚔️ Attack", callback_data="attack_menu"),
+         InlineKeyboardButton("🧪 Research", callback_data="research_menu")],
+        [InlineKeyboardButton("🏙 Zones", callback_data="zone_menu"),
+         InlineKeyboardButton("🛒 Store", callback_data="store_menu")],
+        [InlineKeyboardButton("🎯 Missions", callback_data="mission_menu"),
+         InlineKeyboardButton("📬 Inbox", callback_data="inbox_menu")],
+        [InlineKeyboardButton("💼 Faction", callback_data="faction_menu"),
+         InlineKeyboardButton("🌐 Events", callback_data="event_menu")],
+        [InlineKeyboardButton("🗺 Base", callback_data="base_menu"),
+         InlineKeyboardButton("👑 Leaderboard", callback_data="rank_menu")],
+    ]
+    await query.edit_message_text(
+        "📟 *Command Panel*\nChoose your next action:",
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+# main.py — SkyHustle Unified Version (Part 3 of X)
+# ── Building Upgrade Logic ──────────────────────────────────────
+def upgrade_building(user_id: int, building: str):
+    col_map = {"mine": 2, "barracks": 3, "lab": 4}
+    if building not in col_map:
+        return False, "Invalid building."
 
-# ── Main Function ─────────────────────────────────────────────
-def main():
-    TOKEN = os.getenv("BOT_TOKEN")
-    if not TOKEN:
-        raise Exception("BOT_TOKEN not found in environment.")
+    row = buildings_sheet.find(str(user_id)).row
+    current_level = int(buildings_sheet.cell(row, col_map[building]).value)
+    cost = current_level * 100
 
-    application = ApplicationBuilder().token(TOKEN).build()
+    res_row = resources_sheet.find(str(user_id)).row
+    gold = int(resources_sheet.cell(res_row, 2).value)
+    if gold < cost:
+        return False, "Not enough gold."
 
-    application.add_handler(CommandHandler("start", start_command))
-    application.add_handler(CommandHandler("use", use_blackmarket_item))
-    application.add_handler(CommandHandler("inventory", show_inventory))
-    application.add_handler(CommandHandler("zones", show_zone_list))
-    application.add_handler(CommandHandler("myzones", show_my_zones))
-    application.add_handler(CommandHandler("status", show_status_panel))
-    application.add_handler(CommandHandler("attack", pvp_attack_command))
-    application.add_handler(CommandHandler("heal", heal_command))
-    application.add_handler(CommandHandler("battlelog", show_battle_log))
-    # ... all other handlers and startup logic
+    resources_sheet.update_cell(res_row, 2, gold - cost)
+    buildings_sheet.update_cell(row, col_map[building], current_level + 1)
 
+    mark_mission(user_id, "build")
+    update_score(user_id, 10)
 
-# ── Zone Buff Rewards Mapping ─────────────────────────────────
-ZONE_REWARDS = {
-    "desert_outpost": {"iron": 20},
-    "tech_ruins": {"tech": 10},
-    "warlord_gate": {"pvp_buff": 1}  # Flag for PvP bonus in combat
+    return True, f"{building.capitalize()} upgraded to level {current_level + 1}!"
+
+# ── Build Menu ──────────────────────────────────────────────────
+async def build_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    keyboard = [
+        [InlineKeyboardButton("Upgrade Mine", callback_data="build_mine")],
+        [InlineKeyboardButton("Upgrade Barracks", callback_data="build_barracks")],
+        [InlineKeyboardButton("Upgrade Lab", callback_data="build_lab")],
+        [InlineKeyboardButton("⬅️ Back", callback_data="main_menu")],
+    ]
+    await query.edit_message_text(
+        "🏗 *Choose a building to upgrade:*",
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+# ── Build Action Handler ────────────────────────────────────────
+async def handle_build_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    user_id = query.from_user.id
+    building = query.data.replace("build_", "")
+    success, msg = upgrade_building(user_id, building)
+    keyboard = [[InlineKeyboardButton("⬅️ Back", callback_data="build_menu")]]
+    await query.edit_message_text(
+        f"🏗 {msg}",
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+# main.py — SkyHustle Unified Version (Part 4 of X)
+# ── Training Logic ──────────────────────────────────────────────
+def train_unit(user_id: int, unit: str):
+    costs = {"infantry": 50, "sniper": 100, "tank": 200}
+    col_map = {"infantry": 2, "sniper": 3, "tank": 4}
+
+    if unit not in costs:
+        return False, "Invalid unit."
+
+    res_row = resources_sheet.find(str(user_id)).row
+    gold = int(resources_sheet.cell(res_row, 2).value)
+    if gold < costs[unit]:
+        return False, "Not enough gold."
+
+    army_row = army_sheet.find(str(user_id)).row
+    current = int(army_sheet.cell(army_row, col_map[unit]).value)
+
+    resources_sheet.update_cell(res_row, 2, gold - costs[unit])
+    army_sheet.update_cell(army_row, col_map[unit], current + 1)
+
+    mark_mission(user_id, "train")
+    update_score(user_id, 5)
+
+    return True, f"Trained 1 {unit.capitalize()} successfully."
+
+# ── Train Menu ──────────────────────────────────────────────────
+async def train_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    keyboard = [
+        [InlineKeyboardButton("Train Infantry (50g)", callback_data="train_infantry")],
+        [InlineKeyboardButton("Train Sniper (100g)", callback_data="train_sniper")],
+        [InlineKeyboardButton("Train Tank (200g)", callback_data="train_tank")],
+        [InlineKeyboardButton("⬅️ Back", callback_data="main_menu")],
+    ]
+    await query.edit_message_text(
+        "🧑‍✈️ *Choose a unit to train:*",
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+# ── Train Action Handler ────────────────────────────────────────
+async def handle_train_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    user_id = query.from_user.id
+    unit = query.data.replace("train_", "")
+    success, msg = train_unit(user_id, unit)
+    keyboard = [[InlineKeyboardButton("⬅️ Back", callback_data="train_menu")]]
+    await query.edit_message_text(
+        f"🧑‍✈️ {msg}",
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+# main.py — SkyHustle Unified Version (Part 5 of X)
+# ── Combat Power Calculation ────────────────────────────────────
+def get_combat_power(user_id: int):
+    try:
+        row = army_sheet.find(str(user_id)).row
+        infantry = int(army_sheet.cell(row, 2).value)
+        sniper = int(army_sheet.cell(row, 3).value)
+        tank = int(army_sheet.cell(row, 4).value)
+        return infantry * 1 + sniper * 3 + tank * 5
+    except:
+        return 0
+
+# ── Attack Menu ─────────────────────────────────────────────────
+async def attack_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text(
+        "⚔️ Send /attack <user_id> to initiate battle.",
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="main_menu")]])
+    )
+
+# ── /attack Command ─────────────────────────────────────────────
+async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    attacker_id = update.effective_user.id
+    if not context.args:
+        return await update.message.reply_text("Usage: /attack <user_id>")
+
+    try:
+        target_id = int(context.args[0])
+    except ValueError:
+        return await update.message.reply_text("❌ Invalid ID format.")
+
+    attacker_power = get_combat_power(attacker_id)
+    defender_power = get_combat_power(target_id)
+
+    if attacker_power == 0:
+        return await update.message.reply_text("⚠️ You have no troops to send.")
+
+    if defender_power == 0:
+        result = "Victory! 🏆 Enemy had no defense."
+        mark_mission(attacker_id, "attack")
+        update_score(attacker_id, 20)
+    elif attacker_power > defender_power:
+        result = "Victory! 🏆 You overpowered the enemy."
+        mark_mission(attacker_id, "attack")
+        update_score(attacker_id, 20)
+    elif attacker_power == defender_power:
+        result = "Draw ⚔️ Equal strength."
+    else:
+        result = "Defeat! 💀 The enemy was stronger."
+
+    await update.message.reply_text(
+        f"⚔️ Combat Result:\nYou: {attacker_power} vs Enemy: {defender_power}\n\n{result}",
+        parse_mode=ParseMode.MARKDOWN
+    )
+# main.py — SkyHustle Unified Version (Part 6 of X)
+# ── /research Command ───────────────────────────────────────────
+async def research(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    try:
+        row = research_sheet.find(str(user_id)).row
+    except:
+        research_sheet.append_row([str(user_id), "0", "0"])
+        row = research_sheet.find(str(user_id)).row
+
+    power = int(research_sheet.cell(row, 2).value)
+    prod = int(research_sheet.cell(row, 3).value)
+    new_power = power + 1
+    new_prod = prod + 1
+
+    research_sheet.update_cell(row, 2, new_power)
+    research_sheet.update_cell(row, 3, new_prod)
+
+    await update.message.reply_text(
+        f"🔬 Research complete!\n+1 Power Bonus, +1 Production Bonus\n\n"
+        f"Current Power: {new_power}\nCurrent Production: {new_prod}",
+        parse_mode=ParseMode.MARKDOWN
+    )
+
+# ── Passive Resource Generation ─────────────────────────────────
+def generate_resources():
+    all_ids = [cell.value for cell in resources_sheet.col_values(1)[1:]]
+    for user_id in all_ids:
+        try:
+            row = resources_sheet.find(user_id).row
+            prod_row = research_sheet.find(user_id).row
+            prod_bonus = int(research_sheet.cell(prod_row, 3).value)
+
+            gold = int(resources_sheet.cell(row, 2).value)
+            iron = int(resources_sheet.cell(row, 3).value)
+            tech = int(resources_sheet.cell(row, 4).value)
+
+            resources_sheet.update_cell(row, 2, gold + 10 + prod_bonus)
+            resources_sheet.update_cell(row, 3, iron + 5 + prod_bonus)
+            resources_sheet.update_cell(row, 4, tech + 2 + prod_bonus)
+        except Exception as e:
+            logger.warning(f"Failed to update resources for {user_id}: {e}")
+
+# ── /collect Command ────────────────────────────────────────────
+async def collect(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    generate_resources()
+    await update.message.reply_text("💰 Resources generated for all users.")
+# main.py — SkyHustle Unified Version (Part 7 of X)
+# ── Zone List ───────────────────────────────────────────────────
+ZONE_LIST = ["Alpha", "Bravo", "Charlie", "Delta"]
+
+# ── Capture Zone Utility ────────────────────────────────────────
+def capture_zone(zone: str, user_id: int):
+    try:
+        cell = zones_sheet.find(zone)
+        zones_sheet.update_cell(cell.row, 2, str(user_id))
+    except:
+        zones_sheet.append_row([zone, str(user_id)])
+    mark_mission(user_id, "capture")
+    update_score(user_id, 15)
+
+# ── /zones Command ──────────────────────────────────────────────
+async def zones(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message = "🌍 *Zone Control Overview*\n\n"
+    for zone in ZONE_LIST:
+        try:
+            cell = zones_sheet.find(zone)
+            owner_id = zones_sheet.cell(cell.row, 2).value
+            message += f"▪️ {zone}: Controlled by `{owner_id}`\n"
+        except:
+            message += f"▪️ {zone}: _Unclaimed_\n"
+    await update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)
+
+# ── /capture Command ────────────────────────────────────────────
+async def capture(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if not context.args:
+        return await update.message.reply_text("Usage: /capture <zone_name>")
+
+    zone = context.args[0].capitalize()
+    if zone not in ZONE_LIST:
+        return await update.message.reply_text("❌ Invalid zone.")
+
+    capture_zone(zone, user_id)
+    await update.message.reply_text(f"✅ You have claimed zone *{zone}*.", parse_mode=ParseMode.MARKDOWN)
+# main.py — SkyHustle Unified Version (Part 8 of X)
+# ── Missions Setup ──────────────────────────────────────────────
+MISSIONS = {
+    "build": {"desc": "Upgrade any building", "reward": 100},
+    "train": {"desc": "Train any unit", "reward": 80},
+    "attack": {"desc": "Win a battle", "reward": 120},
+    "capture": {"desc": "Claim a zone", "reward": 90},
 }
 
-# ── Apply Passive Zone Rewards (Runs Hourly) ──────────────────
-async def zone_income_loop(app):
-    await asyncio.sleep(10)
-    while True:
-        try:
-            zone_ws = sheet.worksheet("ZoneControl")
-            res_ws = sheet.worksheet("Resources")
-            inbox_ws = sheet.worksheet("Inbox")
-
-            zone_rows = zone_ws.get_all_values()
-            res_ids = res_ws.col_values(1)
-
-            for row in zone_rows[1:]:  # skip header
-                zone_key, user_id, _ = row
-                reward = ZONE_REWARDS.get(zone_key, {})
-
-                if not reward or user_id not in res_ids:
-                    continue
-
-                res_row = res_ids.index(user_id) + 1
-
-                # Apply income
-                for res_type, amt in reward.items():
-                    if res_type in ["gold", "iron", "tech", "crystals"]:
-                        col = {"gold": 2, "iron": 3, "tech": 4, "crystals": 5}[res_type]
-                        current = int(res_ws.cell(res_row, col).value)
-                        res_ws.update_cell(res_row, col, current + amt)
-
-                        save_inbox_message(user_id, "Zone Reward",
-                                           f"Passive income from {ZONES[zone_key]['name']}: +{amt} {res_type.title()}")
-        except Exception as e:
-            logger.warning(f"Error in try block at line 144: {e}")
-        except Exception as e:
-            logger.error(f"Zone income loop failed: {e}")
-
-        await asyncio.sleep(3600)  # Run hourly
-# ── /status Command — Show Player Overview ────────────────────
-async def show_status_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    user_id = str(user.id)
-
+# ── Ensure Mission Row Exists ───────────────────────────────────
+def ensure_mission_row(user_id):
     try:
-        # Load faction
-        faction = get_player_faction(user_id).title()
-        if faction == "None":
-            faction = "❓ Not selected"
+        mission_sheet.find(str(user_id))
+    except:
+        mission_sheet.append_row([str(user_id), "0", "0", "0", "0"])
 
-        # Load resources
-        res_ids = resources_sheet.col_values(1)
-        row = res_ids.index(user_id) + 1
-        gold = int(resources_sheet.cell(row, 2).value)
-        iron = int(resources_sheet.cell(row, 3).value)
-        tech = int(resources_sheet.cell(row, 4).value)
-        crystals = int(resources_sheet.cell(row, 5).value)
+# ── Mark Mission Complete ───────────────────────────────────────
+def mark_mission(user_id, mission_key):
+    ensure_mission_row(user_id)
+    row = mission_sheet.find(str(user_id)).row
+    col = list(MISSIONS.keys()).index(mission_key) + 2
+    mission_sheet.update_cell(row, col, "1")
 
-        # Load zones
-        zone_ws = sheet.worksheet("ZoneControl")
-        zone_rows = zone_ws.get_all_values()
-        my_zones = [r[0] for r in zone_rows[1:] if r[1] == user_id]
+# ── /missions Command ───────────────────────────────────────────
+async def missions(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    ensure_mission_row(user_id)
+    row = mission_sheet.find(str(user_id)).row
+    msg = "📋 *Mission Progress:*\n"
+    for idx, key in enumerate(MISSIONS):
+        status = mission_sheet.cell(row, idx + 2).value
+        check = "✅" if status == "1" else "⬜"
+        msg += f"{check} {MISSIONS[key]['desc']}\n"
+    await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN)
 
-        buffs = []
-        if faction == "Technocrats":
-            buffs.append("🧠 20% cheaper upgrades")
-        elif faction == "Nomads":
-            buffs.append("🐺 20% faster training")
-        elif faction == "Warlords":
-            buffs.append("⚔️ 20% PvP damage boost")
+# ── /claim Command ──────────────────────────────────────────────
+async def claim(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    ensure_mission_row(user_id)
+    row = mission_sheet.find(str(user_id)).row
+    res_row = resources_sheet.find(str(user_id)).row
+    total = 0
 
-        for z in my_zones:
-            zone_buff = ZONE_REWARDS.get(z, {})
-            if "iron" in zone_buff:
-                buffs.append("⛓ +20 Iron/hr")
-            if "tech" in zone_buff:
-                buffs.append("🧪 +10 Tech/hr")
-            if "pvp_buff" in zone_buff:
-                buffs.append("⚔️ +5% PvP damage (zone)")
+    for idx, key in enumerate(MISSIONS):
+        completed = mission_sheet.cell(row, idx + 2).value
+        if completed == "1":
+            total += MISSIONS[key]['reward']
+            mission_sheet.update_cell(row, idx + 2, "0")
 
-        buff_list = "\n".join(buffs) if buffs else "None"
+    if total > 0:
+        current_gold = int(resources_sheet.cell(res_row, 2).value)
+        resources_sheet.update_cell(res_row, 2, current_gold + total)
+        await update.message.reply_text(f"🎉 Claimed {total} gold from completed missions!", parse_mode=ParseMode.MARKDOWN)
+    else:
+        await update.message.reply_text("❌ No missions completed.", parse_mode=ParseMode.MARKDOWN)
+# main.py — SkyHustle Unified Version (Part 9 of X)
+# ── Faction Setup ───────────────────────────────────────────────
+FACTIONS = {
+    "faction_tech": "Techlords",
+    "faction_guard": "Guardians",
+    "faction_war": "Warlords",
+}
 
-        zone_names = "\n".join([ZONES[z]["name"] for z in my_zones]) if my_zones else "None"
-
-        text = (
-            f"*📊 Status Panel — {user.first_name}*\n\n"
-            f"🏳️ Faction: *{faction}*\n"
-            f"📍 Controlled Zones:\n{zone_names}\n\n"
-            f"💰 Resources:\n"
-            f"🪙 Gold: `{gold}`\n"
-            f"⛓ Iron: `{iron}`\n"
-            f"🧪 Tech: `{tech}`\n"
-            f"💎 Crystals: `{crystals}`\n\n"
-            f"🔋 Active Buffs:\n{buff_list}"
-        )
-
-        await update.message.reply_text(text, parse_mode="Markdown")
-    except Exception as e:
-        logger.warning(f"Error in try block at line 179: {e}")
-    except Exception as e:
-        logger.error(f"Status panel error for {user_id}: {e}")
-        await update.message.reply_text("⚠️ Failed to load status panel.")
-# ── /attack <player_id> Command — PvP Entry ───────────────────
-async def heal_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    pass
-
-async def pvp_attack_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    attacker = update.effective_user
-    attacker_id = str(attacker.id)
-    if not has_player_name(attacker_id):
-        await update.message.reply_text("⚠️ You must set a name before attacking. Use:\n/setname <your_name>")
-        return
-
-    if not context.args:
-        await update.message.reply_text("Usage: /attack <enemy_id>")
-        return
-
-    target_id = context.args[0]
-
-    if attacker_id == target_id:
-        await update.message.reply_text("❌ You can't attack yourself.")
-        return
-
-    try:
-        # Base damage
-        base_damage = 100
-
-        # Apply Warlords faction buff
-        attacker_faction = get_player_faction(attacker_id)
-        if attacker_faction == "warlords":
-            base_damage = int(base_damage * 1.2)
-
-        # Apply Warlord Gate zone bonus
-        try:
-            zone_ws = sheet.worksheet("ZoneControl")
-            rows = zone_ws.get_all_values()
-            for r in rows[1:]:
-                if r[0] == "warlord_gate" and r[1] == attacker_id:
-                    base_damage = int(base_damage * 1.05)
-        except Exception as e:
-            logger.warning(f"Warlord zone bonus check failed: {e}")
-
-        # Apply damage (stub — replace with your real unit/building logic)
-            # Calculate base_damage (with faction/zone buffs) ...
-        try:
-    
-            # Load defender stats
-            stats = get_pvp_stats(target_id)
-            old_hp = stats["hp"]
-            defense = stats["def"]
-
-            reduced_damage = max(0, base_damage - defense)
-            new_hp = max(0, old_hp - reduced_damage)
-            update_pvp_hp(target_id, new_hp)
-        except Exception as e:
-            logger.warning(f"Damage phase failed: {e}")
-
-result = "🩸 Survived" if new_hp > 0 else "☠️ Defeated"
-await update.message.reply_text(
-f"⚔️ *Battle Summary*\n\nYou attacked `{target_id}`!\n"
-f"🛡 Defense: {defense}\n"
-f"💥 Damage dealt: *{reduced_damage}*\n"
-        f"❤️ HP left: *{new_hp}*\n\n"
-        f"{result}",
-        parse_mode="Markdown"
+# ── /faction Command ────────────────────────────────────────────
+async def faction(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [
+        [InlineKeyboardButton("⚙️ Techlords", callback_data="faction_tech")],
+        [InlineKeyboardButton("🛡 Guardians", callback_data="faction_guard")],
+        [InlineKeyboardButton("💣 Warlords", callback_data="faction_war")],
+        [InlineKeyboardButton("⬅️ Back", callback_data="main_menu")]
+    ]
+    await update.message.reply_text(
+        "🏳 Choose your Faction:",
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-    save_inbox_message(attacker_id, "PvP Attack", f"You hit {target_id} for {reduced_damage}. HP left: {new_hp}")
-    save_inbox_message(target_id, "PvP Defense", f"You were attacked by {attacker_id} — {reduced_damage} dmg. HP: {new_hp}")
-log_battle(attacker_id, target_id, reduced_damage, result)
-
-
-        # Log to inbox
-        save_inbox_message(attacker_id, "PvP Attack", f"You attacked {target_id} for {base_damage} damage.")
-        save_inbox_message(target_id, "PvP Defense", f"You were attacked by {attacker_id} — damage: {base_damage}.")
-
-    except Exception as e:
-        logger.error(f"PvP error: {e}")
-        await update.message.reply_text("⚠️ PvP attack failed.")
-# ── Simple Health System Sheet: PvPHealth ─────────────────────
-# Columns: [user_id, hp, def]
-
-def get_pvp_stats(user_id):
-    try:
-        ws = sheet.worksheet("PvPHealth")
-        ids = ws.col_values(1)
-        if user_id not in ids:
-            ws.append_row([user_id, 100, 20])  # default: 100 HP, 20 defense
-            return {"hp": 100, "def": 20, "row": len(ids) + 1}
-        row = ids.index(user_id) + 1
-        hp = int(ws.cell(row, 2).value)
-        defense = int(ws.cell(row, 3).value)
-        return {"hp": hp, "def": defense, "row": row}
-    except Exception as e:
-        logger.error(f"PvP stat load failed for {user_id}: {e}")
-        return {"hp": 100, "def": 0, "row": -1}
-
-def update_pvp_hp(user_id, new_hp):
-    try:
-        ws = sheet.worksheet("PvPHealth")
-        ids = ws.col_values(1)
-        row = ids.index(user_id) + 1
-        ws.update_cell(row, 2, max(0, new_hp))
-    except Exception as e:
-        logger.error(f"PvP HP update failed: {e}")
-# ── /heal Command ─────────────────────────────────────────────
-async def heal_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = str(update.effective_user.id)
-
-    try:
-        # Check current HP
-        stats = get_pvp_stats(user_id)
-        if stats["hp"] >= 100:
-            await update.message.reply_text("🩺 You're already at full HP.")
-            return
-
-        # Resource cost
-        cost = {"iron": 50, "tech": 20}
-        ids = resources_sheet.col_values(1)
-        if user_id not in ids:
-            await update.message.reply_text("❌ Resource profile not found.")
-            return
-
-        row = ids.index(user_id) + 1
-        iron = int(resources_sheet.cell(row, 3).value)
-        tech = int(resources_sheet.cell(row, 4).value)
-
-        if iron < cost["iron"] or tech < cost["tech"]:
-            await update.message.reply_text("❌ Not enough resources to heal.\nRequires 50 Iron + 20 Tech.")
-            return
-
-        # Deduct
-        resources_sheet.update_cell(row, 3, iron - cost["iron"])
-        resources_sheet.update_cell(row, 4, tech - cost["tech"])
-        update_pvp_hp(user_id, 100)
-
-        await update.message.reply_text("🩺 You've been healed to full HP!")
-        save_inbox_message(user_id, "Healing", "You spent 50 Iron + 20 Tech to heal to full HP.")
-
-    except Exception as e:
-        logger.warning(f"Error in try block at line 343: {e}")
-    except Exception as e:
-        logger.error(f"Heal command failed for {user_id}: {e}")
-        await update.message.reply_text("⚠️ Healing failed.")
-# ── Log PvP to BattleLog Sheet ────────────────────────────────
-def log_battle(attacker_id, target_id, damage, result):
-    try:
-        log_ws = sheet.worksheet("BattleLog")
-        log_ws.append_row([
-            str(attacker_id),
-            str(target_id),
-            int(damage),
-            result,
-            datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-        ])
-    except Exception as e:
-        logger.error(f"Failed to log battle: {e}")
-# ── /battlelog Command — View PvP History ─────────────────────
-async def show_battle_log(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = str(update.effective_user.id)
-    try:
-        log_ws = sheet.worksheet("BattleLog")
-        rows = log_ws.get_all_values()[1:]  # Skip header
-
-        recent = [r for r in rows if r[0] == user_id or r[1] == user_id][-10:]
-
-        if not recent:
-            await update.message.reply_text("🗂 Your battle log is empty.")
-            return
-
-        text = "*📜 Battle Log (Recent 10)*\n\n"
-                for r in recent:
-            attacker, target, dmg, result, time = r
-            attacker_name = get_player_name(attacker)
-            target_name = get_player_name(target)
-
-            if attacker == user_id:
-                you = "You"
-                vs = f"→ {target_name}"
-            elif target == user_id:
-                you = "You"
-                vs = f"← {attacker_name}"
-            else:
-                you = attacker_name
-                vs = f"→ {target_name}"
-
-            text += f"{time} — {you} {vs}\n💥 Damage: {dmg} — {result}\n\n"
-
-        await update.message.reply_text(text, parse_mode="Markdown")
-    except Exception as e:
-        logger.warning(f"Error in try block at line 392: {e}")
-    except Exception as e:
-        logger.error(f"Battle log error: {e}")
-        await update.message.reply_text("⚠️ Failed to load battle log.")
-# ── /rankings Command — PvP Leaderboard ───────────────────────
-async def show_rankings(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        log_ws = sheet.worksheet("BattleLog")
-        rows = log_ws.get_all_values()[1:]  # Skip header
-
-        # Aggregate damage per attacker
-        scores = {}
-        for r in rows:
-            attacker, _, dmg, _, _ = r
-            dmg = int(dmg)
-            scores[attacker] = scores.get(attacker, 0) + dmg
-
-        # Sort by total damage
-        top = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:10]
-
-        if not top:
-            await update.message.reply_text("🏆 No battles have been recorded yet.")
-            return
-
-        text = "*🏆 Top 10 Attackers — PvP Rankings*\n\n"
-        for i, (uid, dmg) in enumerate(top, 1):
-            label = "👑" if i == 1 else f"{i}."
-            text += f"{label} *{get_player_name(uid)}* — `{dmg}` damage\n"
-
-
-        await update.message.reply_text(text, parse_mode="Markdown")
-    except Exception as e:
-        logger.warning(f"Error in try block at line 426: {e}")
-    except Exception as e:
-        logger.error(f"PvP rankings error: {e}")
-        await update.message.reply_text("⚠️ Failed to load rankings.")
-
-application.add_handler(CommandHandler("rankings", show_rankings))
-
-# ── /setname <your_name> ──────────────────────────────────────
-async def set_player_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = str(update.effective_user.id)
-
-    if not context.args:
-        await update.message.reply_text("Usage: /setname <your_name>\nExample: /setname ShadowWolf")
-        return
-
-    chosen_name = " ".join(context.args).strip()
-    if len(chosen_name) > 20:
-        await update.message.reply_text("❌ Name too long. Max 20 characters.")
-        return
-
-    try:
-        ws = sheet.worksheet("Players")
-        ids = ws.col_values(1)
-        if user_id in ids:
-            row = ids.index(user_id) + 1
-            ws.update_cell(row, 2, chosen_name)
-        else:
-            ws.append_row([user_id, chosen_name, "None"])  # Default: no faction
-
-        await update.message.reply_text(f"✅ Your name has been set to *{chosen_name}*!", parse_mode="Markdown")
-    except Exception as e:
-        logger.error(f"Failed to set name: {e}")
-        await update.message.reply_text("⚠️ Failed to save name.")
-def get_player_name(user_id):
-    try:
-        ws = sheet.worksheet("Players")
-        ids = ws.col_values(1)
-        if user_id in ids:
-            row = ids.index(user_id) + 1
-            name = ws.cell(row, 2).value
-            return name or f"User_{user_id[-4:]}"
-        return f"User_{user_id[-4:]}"
-    except:
-        return f"User_{user_id[-4:]}"
-application.add_handler(CommandHandler("setname", set_player_name))
-
-def has_player_name(user_id):
-    try:
-        ws = sheet.worksheet("Players")
-        ids = ws.col_values(1)
-        if user_id in ids:
-            row = ids.index(user_id) + 1
-            name = ws.cell(row, 2).value
-            return bool(name and len(name.strip()) > 1)
-        return False
-    except:
-        return False
-async def show_tech_tree(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = str(update.effective_user.id)
-    faction = get_player_faction(user_id)
-    zone_ws = sheet.worksheet("ZoneControl")
-    owned_zones = [r[0] for r in zone_ws.get_all_values()[1:] if r[1] == user_id]
-
-    tree_ws = sheet.worksheet("TechTree")
-    rows = tree_ws.get_all_values()[1:]
-
-    text = "*🔬 Tech Tree — Available Research:*\n\n"
-    buttons = []
-
-    for row in rows:
-        tech_id, name, desc, cost, zone_req, faction_req = row
-        if faction_req.lower() not in ["none", faction]:
-            continue
-        if zone_req and zone_req not in owned_zones:
-            continue
-        text += f"🧪 *{name}* — {desc}\n💰 Cost: {cost} Tech\n\n"
-        buttons.append([InlineKeyboardButton(f"Unlock {name}", callback_data=f"tech_unlock_{tech_id}")])
-
-    if not buttons:
-        text += "_No available techs. Claim zones or meet faction requirements._"
-
-    buttons.append([InlineKeyboardButton("⬅️ Back to Command Center", callback_data="open_center")])
-
-    await update.message.reply_text(text, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(buttons))
-
-application.add_handler(CommandHandler("techs", show_tech_tree))
-
-
-def setup_game_sheets():
-    sheet_titles = {
-        "Players": ["user_id", "name", "faction"],
-        "Resources": ["user_id", "gold", "iron", "tech", "crystals"],
-        "Buildings": ["user_id", "base", "lab", "barracks", "storage"],
-        "Inbox": ["user_id", "type", "message", "timestamp"],
-        "BuildQueue": ["user_id", "building", "start_time"],
-        "Events": ["event_name", "start_time", "end_time", "status", "participants"],
-        "BlackMarket": ["user_id", "items"],
-        "PvPHealth": ["user_id", "hp", "def"],
-        "BattleLog": ["attacker", "defender", "damage", "result", "timestamp"],
-        "ZoneControl": ["zone_id", "user_id", "claim_time"],
-        "TechTree": ["tech_id", "name", "desc", "cost_tech", "required_zone", 
-        "faction_lock"]
-        "TechUnlocks": ["user_id", "unlocked_techs"]
-
-    }
-
-    for title, headers in sheet_titles.items():
-        try:
-            sheet.worksheet(title)
-            print(f"✅ Sheet exists: {title}")
-        except:
-            sheet.add_worksheet(title=title, rows=100, cols=20)
-            ws = sheet.worksheet(title)
-            ws.append_row(headers)
-            print(f"🆕 Created sheet: {title}")
-async def setup_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = str(update.effective_user.id)
-    if user_id != "YOUR_TELEGRAM_ID":  # Replace with your real Telegram ID
-        await update.message.reply_text("❌ Only the admin can run this command.")
-        return
-
-    try:
-        setup_game_sheets()
-        await update.message.reply_text("✅ Game sheets initialized successfully.")
-    except Exception as e:
-        logger.error(f"Setup error: {e}")
-        await update.message.reply_text("⚠️ Failed to setup sheets.")
-application.add_handler(CommandHandler("setup", setup_command))
-
-async def setup_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = str(update.effective_user.id)
-
-    # 🔐 Replace this with YOUR Telegram user ID (as a string)
-    ADMIN_ID = "7737016510"  
-
-    if user_id != ADMIN_ID:
-        await update.message.reply_text("❌ Only the admin can run this setup.")
-        return
-
-    try:
-        setup_game_sheets()
-        await update.message.reply_text("✅ All game sheets have been created and initialized.")
-    except Exception as e:
-        logger.error(f"Sheet setup failed: {e}")
-        await update.message.reply_text("⚠️ Sheet setup failed. Check logs.")
-# ── Handle Unlock Button Press ────────────────────────────────
-async def handle_tech_unlock(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# ── Handle Faction Selection ────────────────────────────────────
+async def handle_faction_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    user_id = str(query.from_user.id)
+    user_id = query.from_user.id
+    chosen = FACTIONS.get(query.data)
 
-    tech_id = query.data.replace("tech_unlock_", "")
-    tree_ws = sheet.worksheet("TechTree")
-    rows = tree_ws.get_all_values()[1:]
+    if not chosen:
+        return await query.edit_message_text("❌ Invalid faction.")
 
-    tech_row = next((r for r in rows if r[0] == tech_id), None)
-    if not tech_row:
-        await query.edit_message_text("❌ Tech not found.")
-        return
+    row = players_sheet.find(str(user_id)).row
+    players_sheet.update_cell(row, 3, chosen)
+    await query.edit_message_text(f"✅ You joined the *{chosen}* faction!", parse_mode=ParseMode.MARKDOWN)
+# main.py — SkyHustle Unified Version (Part 10 of X)
+# ── Ensure Base Row ─────────────────────────────────────────────
+def ensure_base_row(user_id):
+    try:
+        base_sheet.find(str(user_id))
+    except:
+        base_sheet.append_row([str(user_id), "1"])
 
-    _, name, desc, cost, zone_req, faction_req = tech_row
-    cost = int(cost)
+# ── /base Command ───────────────────────────────────────────────
+async def base(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    ensure_base_row(user_id)
+    row = base_sheet.find(str(user_id)).row
+    level = int(base_sheet.cell(row, 2).value)
+    await update.message.reply_text(f"🏗 Your base is currently at level {level}.")
 
-    # Check faction requirement
-    faction = get_player_faction(user_id)
-    if faction_req.lower() != "none" and faction != faction_req.lower():
-        await query.edit_message_text(f"❌ Requires faction: {faction_req.title()}")
-        return
+# ── /expand Command ─────────────────────────────────────────────
+async def expand(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    ensure_base_row(user_id)
+    row = base_sheet.find(str(user_id)).row
+    res_row = resources_sheet.find(str(user_id)).row
 
-    # Check zone control
-    zone_ws = sheet.worksheet("ZoneControl")
-    owned_zones = [r[0] for r in zone_ws.get_all_values()[1:] if r[1] == user_id]
-    if zone_req and zone_req not in owned_zones:
-        await query.edit_message_text(f"❌ Requires control of: {ZONES[zone_req]['name']}")
-        return
+    level = int(base_sheet.cell(row, 2).value)
+    gold = int(resources_sheet.cell(res_row, 2).value)
+    cost = 200 * level
 
-    # Check tech points
-    ids = resources_sheet.col_values(1)
-    row = ids.index(user_id) + 1
-    tech_points = int(resources_sheet.cell(row, 4).value)
-    if tech_points < cost:
-        await query.edit_message_text("❌ Not enough Tech points.")
-        return
+    if gold < cost:
+        return await update.message.reply_text("❌ Not enough gold to expand base.")
 
-    # Check already unlocked
-    unlock_ws = sheet.worksheet("TechUnlocks")
-    unlock_ids = unlock_ws.col_values(1)
-    if user_id in unlock_ids:
-        u_row = unlock_ids.index(user_id) + 1
-        current = unlock_ws.cell(u_row, 2).value or ""
-        if tech_id in current.split(","):
-            await query.edit_message_text("⚠️ You’ve already unlocked this tech.")
-            return
-        updated = current + f",{tech_id}"
-        unlock_ws.update_cell(u_row, 2, updated)
-    else:
-        unlock_ws.append_row([user_id, tech_id])
+    resources_sheet.update_cell(res_row, 2, gold - cost)
+    base_sheet.update_cell(row, 2, level + 1)
+    update_score(user_id, 15)
 
-    # Deduct cost
-    resources_sheet.update_cell(row, 4, tech_points - cost)
+    await update.message.reply_text(f"🎉 Base expanded to level {level + 1}! Cost: {cost} gold.")
+# main.py — SkyHustle Unified Version (Part 11 of X)
+# ── /daily Command ──────────────────────────────────────────────
+async def daily(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = str(update.effective_user.id)
+    today = datetime.datetime.utcnow().date()
+
+    try:
+        cell = daily_sheet.find(user_id)
+        row = cell.row
+        last_claim_str = daily_sheet.cell(row, 2).value
+        last_claim = datetime.datetime.strptime(last_claim_str, "%Y-%m-%d").date()
+
+        if last_claim == today:
+            return await update.message.reply_text("🕐 You've already claimed today's reward.")
+
+        daily_sheet.update_cell(row, 2, today.isoformat())
+    except:
+        daily_sheet.append_row([user_id, today.isoformat()])
+
+    res_row = resources_sheet.find(user_id).row
+    current_gold = int(resources_sheet.cell(res_row, 2).value)
+    bonus = 150
+
+    resources_sheet.update_cell(res_row, 2, current_gold + bonus)
+    update_score(user_id, 10)
+
+    await update.message.reply_text(f"🎁 You received your daily reward: {bonus} gold! Come back tomorrow.")
+# main.py — SkyHustle Unified Version (Part 12 of X)
+# ── Black Market Item Config ───────────────────────────────────
+BLACK_MARKET_ITEMS = {
+    "revive": {"name": "Revive Boost", "desc": "Revive all troops.", "cost": 500},
+    "shield": {"name": "Shield Generator", "desc": "Block next attack.", "cost": 400},
+    "emp": {"name": "EMP Device", "desc": "Weaken enemy defenses.", "cost": 300},
+}
+
+# ── /blackmarket Command ────────────────────────────────────────
+async def blackmarket(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = []
+    for key, item in BLACK_MARKET_ITEMS.items():
+        btn_text = f"{item['name']} - {item['cost']}g"
+        keyboard.append([InlineKeyboardButton(btn_text, callback_data=f"bm_{key}")])
+    keyboard.append([InlineKeyboardButton("⬅️ Back", callback_data="main_menu")])
+
+    await update.message.reply_text(
+        "🛒 *Black Market Items:*",
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+# ── Handle Black Market Purchase ────────────────────────────────
+async def handle_blackmarket(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    user_id = query.from_user.id
+    item_key = query.data.replace("bm_", "")
+    item = BLACK_MARKET_ITEMS.get(item_key)
+
+    if not item:
+        return await query.edit_message_text("❌ Invalid item.")
+
+    row = resources_sheet.find(str(user_id)).row
+    gold = int(resources_sheet.cell(row, 2).value)
+
+    if gold < item['cost']:
+        return await query.edit_message_text("❌ Not enough gold.")
+
+    resources_sheet.update_cell(row, 2, gold - item['cost'])
+    update_score(user_id, 10)
 
     await query.edit_message_text(
-        f"✅ *{name}* unlocked!\n\n_{desc}_",
-        parse_mode="Markdown"
+        f"✅ You bought *{item['name']}*\n_{item['desc']}_",
+        parse_mode=ParseMode.MARKDOWN
     )
+# main.py — SkyHustle Unified Version (Part 13 of X)
+# ── Inbox Utility ───────────────────────────────────────────────
+def send_inbox(user_id: str, message: str):
+    inbox_sheet.append_row([user_id, message])
 
-    save_inbox_message(user_id, "Tech Unlock", f"You unlocked {name} for {cost} Tech points.")
-elif data.startswith("tech_unlock_"):
-    await handle_tech_unlock(update, context)
-async def grant_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    ADMIN_ID = "7737016510"  # Replace with your Telegram ID
+# ── /inbox Command ──────────────────────────────────────────────
+async def inbox(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
+    rows = inbox_sheet.get_all_records()
+    messages = [row["message"] for row in rows if row["ID"] == user_id]
 
-    if user_id != ADMIN_ID:
-        await update.message.reply_text("❌ Only the admin can use this command.")
-        return
+    if not messages:
+        return await update.message.reply_text("📭 Your inbox is empty.")
 
+    text = "📬 *Inbox Messages:*\n\n" + "\n".join(f"▪️ {msg}" for msg in messages[-10:])
+    await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+# main.py — SkyHustle Unified Version (Part 14 of X)
+# ── PvE Boss Setup ──────────────────────────────────────────────
+boss_data = {"Titan": 5000, "Overlord": 8000}
+
+# ── /raid Command ───────────────────────────────────────────────
+async def raid(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = "🛡 *Available PvE Raids:*\n\n"
+    for name, hp in boss_data.items():
+        try:
+            row = boss_sheet.find(name).row
+            current = int(boss_sheet.cell(row, 2).value)
+        except:
+            boss_sheet.append_row([name, str(hp)])
+            current = hp
+        msg += f"▪️ {name} - {current} HP\n"
+    await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN)
+
+# ── /fight Command ──────────────────────────────────────────────
+async def fight(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        return await update.message.reply_text("Usage: /fight <boss_name>")
+
+    boss_name = context.args[0].capitalize()
+    if boss_name not in boss_data:
+        return await update.message.reply_text("❌ Invalid boss.")
+
+    user_id = update.effective_user.id
+    power = get_combat_power(user_id)
+
+    if power == 0:
+        return await update.message.reply_text("⚠️ You have no units to attack with.")
+
+    try:
+        row = boss_sheet.find(boss_name).row
+        hp = int(boss_sheet.cell(row, 2).value)
+    except:
+        row = boss_sheet.append_row([boss_name, str(boss_data[boss_name])]).row
+        hp = boss_data[boss_name]
+
+    new_hp = max(0, hp - power)
+    boss_sheet.update_cell(row, 2, new_hp)
+    result = "🩸 Survived" if new_hp > 0 else "☠️ Defeated"
+
+    reward = 100 if new_hp == 0 else 30
+    res_row = resources_sheet.find(str(user_id)).row
+    current_gold = int(resources_sheet.cell(res_row, 2).value)
+    resources_sheet.update_cell(res_row, 2, current_gold + reward)
+
+    log_msg = f"You fought {boss_name}, dealt {power} damage. Result: {result}. +{reward} gold."
+    send_inbox(str(user_id), log_msg)
+    update_score(user_id, reward)
+
+    await update.message.reply_text(
+        f"⚔️ You attacked *{boss_name}* dealing *{power}* damage!\n"
+        f"Current HP: {new_hp}\nResult: {result}\nReward: +{reward} gold",
+        parse_mode=ParseMode.MARKDOWN
+    )
+# main.py — SkyHustle Unified Version (Part 15 of X)
+# ── World Event Definitions ─────────────────────────────────────
+events = [
+    {"name": "Radiation Storm", "desc": "Mining yields halved for 1h"},
+    {"name": "Meteor Shower", "desc": "+50% PvE gold for 30 min"},
+    {"name": "War Cry", "desc": "Unit power doubled for 15 min"},
+]
+
+# ── /event Command ──────────────────────────────────────────────
+async def event(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = "🌐 *Active World Events:*\n\n"
+    rows = event_sheet.get_all_records()
+    active = [row for row in rows if row['active'] == '1']
+
+    if not active:
+        msg += "No events currently active."
+    else:
+        for e in active:
+            msg += f"▪️ *{e['name']}* — _{e['description']}_\n"
+
+    await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN)
+
+# ── /trigger_event Command ──────────────────────────────────────
+async def trigger_event(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        return await update.message.reply_text("Usage: /trigger_event <event_name>")
+
+    name = " ".join(context.args).title()
+    found = next((e for e in events if e["name"] == name), None)
+
+    if not found:
+        return await update.message.reply_text("❌ Unknown event name.")
+
+    try:
+        row = event_sheet.find(name).row
+        event_sheet.update_cell(row, 3, "1")
+    except:
+        event_sheet.append_row([name, found["desc"], "1"])
+
+    await update.message.reply_text(f"🌟 *{name}* triggered successfully!", parse_mode=ParseMode.MARKDOWN)
+# main.py — SkyHustle Unified Version (Part 16 of X)
+# ── Update Player Score ─────────────────────────────────────────
+def update_score(user_id: int, amount: int):
+    try:
+        row = rank_sheet.find(str(user_id)).row
+        current = int(rank_sheet.cell(row, 2).value)
+        rank_sheet.update_cell(row, 2, current + amount)
+    except:
+        rank_sheet.append_row([str(user_id), str(amount)])
+
+# ── /leaderboard Command ────────────────────────────────────────
+async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    rows = rank_sheet.get_all_records()
+    top = sorted(rows, key=lambda x: int(x['score']), reverse=True)[:10]
+    msg = "🏆 *Top Players:*\n\n"
+    for i, row in enumerate(top, 1):
+        msg += f"{i}. `{row['ID']}` — {row['score']} pts\n"
+    await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN)
+# main.py — SkyHustle Unified Version (Part 17 of X)
+# ── /spy Command ────────────────────────────────────────────────
+async def spy(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        return await update.message.reply_text("Usage: /spy <user_id>")
+
+    try:
+        target_id = int(context.args[0])
+        army_row = army_sheet.find(str(target_id)).row
+        infantry = army_sheet.cell(army_row, 2).value
+        sniper = army_sheet.cell(army_row, 3).value
+        tank = army_sheet.cell(army_row, 4).value
+
+        await update.message.reply_text(
+            f"🕵️ Spy Report on `{target_id}`:\n"
+            f"Infantry: {infantry}\nSniper: {sniper}\nTank: {tank}",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    except:
+        await update.message.reply_text("❌ Failed to retrieve spy data.")
+# main.py — SkyHustle Unified Version (Part 18 of X)
+# ── /trade Command ───────────────────────────────────────────────
+async def trade(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(context.args) != 3:
-        await update.message.reply_text("Usage: /grant <target_id> <resource> <amount>\nExample: /grant 123456 gold 1000")
-        return
+        return await update.message.reply_text("Usage: /trade <user_id> <resource> <amount>")
 
+    sender_id = str(update.effective_user.id)
     target_id, resource, amount = context.args
     resource = resource.lower()
+
+    if resource not in ["gold", "iron", "tech"]:
+        return await update.message.reply_text("❌ Invalid resource. Use: gold, iron, tech.")
+
     try:
         amount = int(amount)
+        if amount <= 0:
+            raise ValueError
     except:
-        await update.message.reply_text("❌ Amount must be a number.")
-        return
-
-    # Check resource type
-    valid_resources = {"gold": 2, "iron": 3, "tech": 4, "crystals": 5}
-    if resource not in valid_resources:
-        await update.message.reply_text("❌ Invalid resource. Use: gold, iron, tech, crystals")
-        return
+        return await update.message.reply_text("❌ Amount must be a positive number.")
 
     try:
-        ids = resources_sheet.col_values(1)
-        if target_id not in ids:
-            resources_sheet.append_row([target_id, 0, 0, 0, 0])
-            row = len(ids) + 1
-        else:
-            row = ids.index(target_id) + 1
+        # Deduct from sender
+        sender_row = resources_sheet.find(sender_id).row
+        col_map = {"gold": 2, "iron": 3, "tech": 4}
+        sender_current = int(resources_sheet.cell(sender_row, col_map[resource]).value)
 
-        col = valid_resources[resource]
-        current = int(resources_sheet.cell(row, col).value)
-        resources_sheet.update_cell(row, col, current + amount)
+        if sender_current < amount:
+            return await update.message.reply_text("❌ You don't have enough resources.")
 
-        await update.message.reply_text(f"✅ Granted {amount} {resource} to {get_player_name(target_id)}.")
-        save_inbox_message(target_id, "Admin", f"You received +{amount} {resource} from admin.")
-    except Exception as e:
-        logger.error(f"Grant failed: {e}")
-        await update.message.reply_text("⚠️ Failed to grant resource.")
+        resources_sheet.update_cell(sender_row, col_map[resource], sender_current - amount)
 
-application.add_handler(CommandHandler("grant", grant_command))
+        # Add to receiver
+        receiver_row = resources_sheet.find(str(target_id)).row
+        receiver_current = int(resources_sheet.cell(receiver_row, col_map[resource]).value)
+        resources_sheet.update_cell(receiver_row, col_map[resource], receiver_current + amount)
 
-import random
-import datetime
+        # Log trade
+        trade_sheet.append_row([sender_id, target_id, resource, str(amount)])
+        update_score(int(sender_id), 5)
 
-# ── /daily Command — Claim Login Reward ───────────────────────
-async def daily_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = str(update.effective_user.id)
-    now = datetime.datetime.utcnow().strftime("%Y-%m-%d")
-
-    try:
-        ws = sheet.worksheet("DailyClaims")
-        ids = ws.col_values(1)
-        if user_id in ids:
-            row = ids.index(user_id) + 1
-            last_claim = ws.cell(row, 2).value
-            if last_claim == now:
-                await update.message.reply_text("⏳ You’ve already claimed today’s reward.")
-                return
-            ws.update_cell(row, 2, now)
-        else:
-            ws.append_row([user_id, now])
-
-        # Reward (randomized)
-        rewards = {
-            "gold": random.randint(100, 300),
-            "iron": random.randint(80, 200),
-            "tech": random.randint(50, 150),
-            "crystals": random.randint(1, 3)
-        }
-
-        # Add to player resources
-        res_ids = resources_sheet.col_values(1)
-        if user_id not in res_ids:
-            resources_sheet.append_row([user_id, 0, 0, 0, 0])
-            res_row = len(res_ids) + 1
-        else:
-            res_row = res_ids.index(user_id) + 1
-
-        resources_sheet.update_cell(res_row, 2, int(resources_sheet.cell(res_row, 2).value) + rewards["gold"])
-        resources_sheet.update_cell(res_row, 3, int(resources_sheet.cell(res_row, 3).value) + rewards["iron"])
-        resources_sheet.update_cell(res_row, 4, int(resources_sheet.cell(res_row, 4).value) + rewards["tech"])
-        resources_sheet.update_cell(res_row, 5, int(resources_sheet.cell(res_row, 5).value) + rewards["crystals"])
-
-        # Send reward summary
-        text = (
-            "*🎁 Daily Reward Claimed!*\n\n"
-            f"🪙 Gold: +{rewards['gold']}\n"
-            f"⛓ Iron: +{rewards['iron']}\n"
-            f"🧪 Tech: +{rewards['tech']}\n"
-            f"💎 Crystals: +{rewards['crystals']}"
-        )
-        await update.message.reply_text(text, parse_mode="Markdown")
-
-        save_inbox_message(user_id, "Daily Reward", f"You claimed today’s bonus: +{rewards['gold']} gold, +{rewards['crystals']} crystals, etc.")
-    except Exception as e:
-        logger.warning(f"Error in try block at line 713: {e}")
-    except Exception as e:
-        logger.error(f"Daily reward error: {e}")
-        await update.message.reply_text("⚠️ Failed to process daily reward.")
-
-application.add_handler(CommandHandler("daily", daily_command))
-
-"DailyClaims": ["user_id", "last_claim_date"]
-
-def has_tech(user_id, tech_id):
-    try:
-        ws = sheet.worksheet("TechUnlocks")
-        ids = ws.col_values(1)
-        if user_id in ids:
-            row = ids.index(user_id) + 1
-            unlocked = ws.cell(row, 2).value or ""
-            return tech_id in unlocked.split(",")
-        return False
+        await update.message.reply_text(f"✅ You sent {amount} {resource} to `{target_id}`.", parse_mode=ParseMode.MARKDOWN)
     except:
-        return False
+        return await update.message.reply_text("❌ Failed to complete trade.")
+# main.py — SkyHustle Unified Version (Part 19 of X)
+# ── Admin Setup ─────────────────────────────────────────────────
+ADMIN_IDS = ["7737016510"]  # Replace with your actual Telegram ID
 
-# Example: if they unlocked auto_mine, give +10% iron
-if has_tech(user_id, "auto_mine") and "iron" in reward:
-    bonus = int(reward["iron"] * 0.1)
-    res_ws.update_cell(res_row, 3, int(res_ws.cell(res_row, 3).value) + bonus)
-    save_inbox_message(user_id, "Tech Bonus", f"Auto Mine bonus: +{bonus} Iron.")
+def is_admin(user_id):
+    return str(user_id) in ADMIN_IDS
 
-# After other damage boosts:
-if has_tech(attacker_id, "pvp_buff"):
-    base_damage = int(base_damage * 1.10)
+# ── /give_gold Command ──────────────────────────────────────────
+async def give_gold(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if not is_admin(user_id):
+        return await update.message.reply_text("❌ Unauthorized.")
 
-if has_tech(user_id, "builder_discount"):
-    for k in cost:
-        cost[k] = int(cost[k] * 0.9)
-if has_tech(user_id, "fast_training"):
-    duration = int(duration * 0.85)
-
-
-async def wipe_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    ADMIN_ID = "7737016510"  # Replace with your real Telegram ID
-    user_id = str(update.effective_user.id)
-
-    if user_id != ADMIN_ID:
-        await update.message.reply_text("❌ You do not have permission to use this command.")
-        return
+    if len(context.args) != 2:
+        return await update.message.reply_text("Usage: /give_gold <user_id> <amount>")
 
     try:
-        wipe_targets = [
-            "Players", "Resources", "Buildings", "Inbox", "PvPHealth",
-            "TechUnlocks", "ZoneControl", "BattleLog", "BlackMarket", "DailyClaims"
-        ]
+        target_id = str(context.args[0])
+        amount = int(context.args[1])
 
-        for sheet_name in wipe_targets:
-            ws = sheet.worksheet(sheet_name)
-            data = ws.get_all_values()
-            if data:
-                headers = data[0]
-                ws.clear()
-                ws.append_row(headers)
+        row = resources_sheet.find(target_id).row
+        current = int(resources_sheet.cell(row, 2).value)
+        resources_sheet.update_cell(row, 2, current + amount)
 
-        await update.message.reply_text("🧼 All game data has been wiped. The game is now reset.")
-    except Exception as e:
-        logger.warning(f"Error in try block at line 803: {e}")
-    except Exception as e:
-        logger.error(f"Wipe failed: {e}")
-        await update.message.reply_text("⚠️ Wipe failed. Check logs.")
-
-application.add_handler(CommandHandler("wipe", wipe_command))
-
-application.add_handler(CommandHandler("wipe", wipe_command))
-
-def init_building_hp(user_id):
-    try:
-        ws = sheet.worksheet("BuildingHP")
-        ids = ws.col_values(1)
-        if user_id not in ids:
-            ws.append_row([user_id, 100, 100, 100, 100])
-    except Exception as e:
-        logger.error(f"Failed to init Building HP for {user_id}: {e}")
-
-# Pick a random building to damage
-import random
-
-buildings = ["base", "lab", "barracks", "storage"]
-damaged = random.choice(buildings)
-
-ws = sheet.worksheet("BuildingHP")
-ids = ws.col_values(1)
-if target_id not in ids:
-    ws.append_row([target_id, 100, 100, 100, 100])
-    row = len(ids) + 1
-else:
-    row = ids.index(target_id) + 1
-
-# Column index for that building
-col = {"base": 2, "lab": 3, "barracks": 4, "storage": 5}[damaged]
-current_hp = int(ws.cell(row, col).value)
-new_hp = max(0, current_hp - reduced_damage // 2)  # Half damage to structure
-ws.update_cell(row, col, new_hp)
-
-# Inbox & summary
-save_inbox_message(target_id, "Building Damaged", f"{damaged.title()} damaged: {current_hp} → {new_hp}")
-await update.message.reply_text(f"🏚 {damaged.title()} of the target was damaged!")
-
-def get_building_hp(user_id, bld):
-    try:
-        ws = sheet.worksheet("BuildingHP")
-        ids = ws.col_values(1)
-        if user_id in ids:
-            row = ids.index(user_id) + 1
-            col = {"base": 2, "lab": 3, "barracks": 4, "storage": 5}[bld]
-            return int(ws.cell(row, col).value)
+        await update.message.reply_text(f"✅ Gave {amount} gold to `{target_id}`.", parse_mode=ParseMode.MARKDOWN)
     except:
-        return 100
-
-async def repair_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = str(update.effective_user.id)
-    args = context.args
-
-    if not args or args[0] not in ["base", "lab", "barracks", "storage"]:
-        await update.message.reply_text("Usage: /repair <base|lab|barracks|storage>")
-        return
-
-    bld = args[0]
-    col_map = {"base": 2, "lab": 3, "barracks": 4, "storage": 5}
-
+        await update.message.reply_text("❌ Failed to process command.")
+# main.py — SkyHustle Unified Version (Part 20 of X)
+# ── Add Faction Points ──────────────────────────────────────────
+def add_faction_points(faction: str, points: int):
     try:
-        ws = sheet.worksheet("BuildingHP")
-        ids = ws.col_values(1)
-        if user_id not in ids:
-            ws.append_row([user_id, 100, 100, 100, 100])
-            row = len(ids) + 1
-        else:
-            row = ids.index(user_id) + 1
-
-        col = col_map[bld]
-        current_hp = int(ws.cell(row, col).value)
-
-        if current_hp >= 100:
-            await update.message.reply_text(f"✅ Your {bld} is already at full health.")
-            return
-
-        # Repair cost
-        hp_needed = 100 - current_hp
-        gold_cost = hp_needed * 5
-        crystal_cost = 1 if hp_needed >= 50 else 0
-
-        # Check resources
-        res_ids = resources_sheet.col_values(1)
-        res_row = res_ids.index(user_id) + 1
-        gold = int(resources_sheet.cell(res_row, 2).value)
-        crystals = int(resources_sheet.cell(res_row, 5).value)
-
-        if gold < gold_cost or crystals < crystal_cost:
-            await update.message.reply_text(
-                f"❌ You need {gold_cost} Gold and {crystal_cost} Crystals to repair {bld}."
-            )
-            return
-
-        # Deduct resources
-        resources_sheet.update_cell(res_row, 2, gold - gold_cost)
-        if crystal_cost:
-            resources_sheet.update_cell(res_row, 5, crystals - crystal_cost)
-
-        # Apply repair
-        ws.update_cell(row, col, 100)
-
-        await update.message.reply_text(
-            f"🛠️ Your {bld.title()} has been fully repaired!\n💰 Spent: {gold_cost} Gold + {crystal_cost} Crystals"
-        )
-        save_inbox_message(user_id, "Repair Complete", f"{bld.title()} restored to 100 HP.")
-    except Exception as e:
-        logger.warning(f"Error in try block at line 881: {e}")
-    except Exception as e:
-        logger.error(f"Repair failed for {user_id}: {e}")
-        await update.message.reply_text("⚠️ Failed to repair building.")
-
-application.add_handler(CommandHandler("repair", repair_command))
-
-
-"DefenseUpgrades": ["user_id", "level"]
-
-
-async def defend_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = str(update.effective_user.id)
-
-    try:
-        ws = sheet.worksheet("DefenseUpgrades")
-        ids = ws.col_values(1)
-
-        # Get current level
-        if user_id in ids:
-            row = ids.index(user_id) + 1
-            level = int(ws.cell(row, 2).value)
-        else:
-            ws.append_row([user_id, 0])
-            level = 0
-            row = len(ids) + 1
-
-        # Calculate upgrade cost
-        next_level = level + 1
-        gold_cost = 500 * next_level
-        tech_cost = 100 * next_level
-
-        # Check resources
-        res_ids = resources_sheet.col_values(1)
-        res_row = res_ids.index(user_id) + 1
-        gold = int(resources_sheet.cell(res_row, 2).value)
-        tech = int(resources_sheet.cell(res_row, 4).value)
-
-        if gold < gold_cost or tech < tech_cost:
-            await update.message.reply_text(
-                f"❌ You need {gold_cost} Gold and {tech_cost} Tech to upgrade defense to level {next_level}."
-            )
-            return
-
-        # Deduct
-        resources_sheet.update_cell(res_row, 2, gold - gold_cost)
-        resources_sheet.update_cell(res_row, 4, tech - tech_cost)
-
-        # Save upgrade
-        ws.update_cell(row, 2, next_level)
-
-        await update.message.reply_text(
-            f"🛡️ Defense upgraded to level {next_level}!\n"
-            f"Each level reduces incoming PvP damage by 5%."
-        )
-        save_inbox_message(user_id, "Defense Upgrade", f"Your base defense is now level {next_level}.")
-    except Exception as e:
-        logger.warning(f"Error in try block at line 939: {e}")
-    except Exception as e:
-        logger.error(f"Defense upgrade failed: {e}")
-        await update.message.reply_text("⚠️ Failed to upgrade defense.")
-
-
-application.add_handler(CommandHandler("defend", defend_command))
-
-# Defense reduction from upgrades
-def_ws = sheet.worksheet("DefenseUpgrades")
-def_ids = def_ws.col_values(1)
-if target_id in def_ids:
-    def_row = def_ids.index(target_id) + 1
-    level = int(def_ws.cell(def_row, 2).value)
-    reduced_damage = int(reduced_damage * (1 - level * 0.05))
-
-# Defense reduction from upgrades
-def_ws = sheet.worksheet("DefenseUpgrades")
-def_ids = def_ws.col_values(1)
-if target_id in def_ids:
-    def_row = def_ids.index(target_id) + 1
-    level = int(def_ws.cell(def_row, 2).value)
-    reduced_damage = int(reduced_damage * (1 - level * 0.05))
-
-def run_weekly_rewards():
-    try:
-        log_ws = sheet.worksheet("BattleLog")
-        rows = log_ws.get_all_values()[1:]  # Skip header
-
-        # Filter by last 7 days
-        one_week_ago = datetime.datetime.utcnow() - datetime.timedelta(days=7)
-        weekly_rows = [r for r in rows if datetime.datetime.strptime(r[4], "%Y-%m-%d %H:%M:%S") >= one_week_ago]
-
-        scores = {}
-        for r in weekly_rows:
-            attacker, _, dmg, _, _ = r
-            dmg = int(dmg)
-            scores[attacker] = scores.get(attacker, 0) + dmg
-
-        # Sort top 3
-        top = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:3]
-        reward_ws = sheet.worksheet("WeeklyWinners")
-        week_tag = datetime.datetime.utcnow().strftime("%Y-W%U")
-
-        for rank, (uid, total) in enumerate(top, 1):
-            reward = {1: 100, 2: 60, 3: 40}[rank]
-            reward_ws.append_row([week_tag, uid, rank, total, reward])
-
-            # Grant crystals
-            ids = resources_sheet.col_values(1)
-            if uid not in ids:
-                resources_sheet.append_row([uid, 0, 0, 0, 0])
-                row = len(ids) + 1
-            else:
-                row = ids.index(uid) + 1
-            old = int(resources_sheet.cell(row, 5).value)
-            resources_sheet.update_cell(row, 5, old + reward)
-
-            save_inbox_message(uid, "🏆 Weekly PvP Reward", f"You ranked #{rank} in PvP and earned {reward} 💎 Crystals!")
-
-        print(f"✅ Weekly rewards distributed for {week_tag}")
-    except Exception as e:
-        logger.warning(f"Error in try block at line 1005: {e}")
-    except Exception as e:
-        logger.error(f"Weekly reward error: {e}")
-
-
-from datetime import time as dtime
-job_queue = application.job_queue
-job_queue.run_daily(lambda ctx: run_weekly_rewards(), time=dtime(hour=12), days=(6,))
-
-
-async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = str(update.effective_user.id)
-    name = get_player_name(user_id)
-    faction = get_player_faction(user_id).title()
-
-    try:
-        # PvP stats from BattleLog
-        log_ws = sheet.worksheet("BattleLog")
-        logs = [r for r in log_ws.get_all_values()[1:] if r[0] == user_id]
-        total_dmg = sum(int(r[2]) for r in logs)
-        kills = sum(1 for r in logs if r[3] == "☠️ Defeated")
-
-        # Zone count
-        zones = sheet.worksheet("ZoneControl").get_all_values()[1:]
-        owned_zones = [z[0] for z in zones if z[1] == user_id]
-
-        # Defense level
-        def_ws = sheet.worksheet("DefenseUpgrades")
-        def_lvl = "0"
-        if user_id in def_ws.col_values(1):
-            row = def_ws.col_values(1).index(user_id) + 1
-            def_lvl = def_ws.cell(row, 2).value
-
-        # Techs unlocked
-        tech_ws = sheet.worksheet("TechUnlocks")
-        techs = []
-        if user_id in tech_ws.col_values(1):
-            t_row = tech_ws.col_values(1).index(user_id) + 1
-            techs = (tech_ws.cell(t_row, 2).value or "").split(",")
-
-        text = (
-            f"*👤 Player Profile: {name}*\n\n"
-            f"🏳️ Faction: *{faction}*\n"
-            f"⚔️ PvP Damage: `{total_dmg}`\n"
-            f"💀 PvP Kills: `{kills}`\n"
-            f"📍 Zones Owned: `{len(owned_zones)}`\n"
-            f"🛡️ Defense Level: `{def_lvl}`\n"
-            f"🧪 Techs Unlocked: `{len([t for t in techs if t])}`"
-        )
-        await update.message.reply_text(text, parse_mode="Markdown")
-    except Exception as e:
-        logger.warning(f"Error in try block at line 1055: {e}")
-    except Exception as e:
-        logger.error(f"Profile error for {user_id}: {e}")
-        await update.message.reply_text("⚠️ Failed to load profile.")
-
-
-application.add_handler(CommandHandler("profile", profile_command))
-
-
-"Titles": ["user_id", "title"]
-
-
-def get_player_title(user_id):
-    try:
-        ws = sheet.worksheet("Titles")
-        ids = ws.col_values(1)
-        if user_id in ids:
-            row = ids.index(user_id) + 1
-            return ws.cell(row, 2).value or ""
-        return ""
+        row = faction_sheet.find(faction).row
+        current = int(faction_sheet.cell(row, 2).value)
+        faction_sheet.update_cell(row, 2, current + points)
     except:
-        return ""
+        faction_sheet.append_row([faction, str(points)])
 
+# ── /faction_war Command ────────────────────────────────────────
+async def faction_war(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    records = faction_sheet.get_all_records()
+    msg = "⚔️ *Faction War Standings:*\n\n"
 
-name = get_player_name(user_id)
+    if not records:
+        for name in FACTIONS.values():
+            faction_sheet.append_row([name, "0"])
+            msg += f"▪️ {name} — 0 pts\n"
+    else:
+        sorted_factions = sorted(records, key=lambda x: int(x["Points"]), reverse=True)
+        for row in sorted_factions:
+            msg += f"▪️ {row['Faction']} — {row['Points']} pts\n"
 
-title = get_player_title(user_id)
-name = f"{title} {name}" if title else name
+    await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN)
+# main.py — SkyHustle Unified Version (Part 21 of 21)
+# ── Command + Callback Registration ─────────────────────────────
+# main.py — SkyHustle Unified Version (Part 22 of X)
+# ── PvP Logs Sheet ─────────────────────────────────────────────
+pvp_log_sheet = get_or_create_worksheet(sheet, "PvPLogs", ["Attacker", "Defender", "Power", "Result", "Timestamp"])
 
+# ── Utility: Log PvP Battle ─────────────────────────────────────
+def log_battle(attacker_id, defender_id, power, result):
+    timestamp = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M")
+    pvp_log_sheet.append_row([str(attacker_id), str(defender_id), str(power), result, timestamp])
 
-async def set_title_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    ADMIN_ID = "7737016510"
+log_battle(attacker_id, target_id, attacker_power, result)
+
+# ── /my_battles Command ─────────────────────────────────────────
+async def my_battles(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
+    logs = pvp_log_sheet.get_all_records()
+    filtered = [log for log in logs if log["Attacker"] == user_id or log["Defender"] == user_id]
 
-    if user_id != ADMIN_ID:
-        await update.message.reply_text("❌ Only admin can assign titles.")
-        return
+    if not filtered:
+        return await update.message.reply_text("⚔️ No recent PvP activity found.")
 
-    if len(context.args) < 2:
-        await update.message.reply_text("Usage: /title <target_id> <emoji/title>")
-        return
+    msg = "📜 *Your Recent Battles:*\n\n"
+    for log in filtered[-10:][::-1]:
+        msg += (f"▪️ [{log['Timestamp']}] {log['Attacker']} vs {log['Defender']} "
+                f"({log['Power']} power) → *{log['Result']}*\n")
+    await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN)
+# main.py — SkyHustle Unified Version (Part 23 of X)
+# ── Referrals Sheet ─────────────────────────────────────────────
+referral_sheet = get_or_create_worksheet(sheet, "Referrals", ["Referrer", "Referred"])
 
-    target_id = context.args[0]
-    title = " ".join(context.args[1:])
-
-    try:
-        ws = sheet.worksheet("Titles")
-        ids = ws.col_values(1)
-        if target_id in ids:
-            row = ids.index(target_id) + 1
-            ws.update_cell(row, 2, title)
-        else:
-            ws.append_row([target_id, title])
-
-        await update.message.reply_text(f"✅ Title set for {get_player_name(target_id)}: {title}")
-        save_inbox_message(target_id, "🎖 Title Awarded", f"You received the title: {title}")
-    except Exception as e:
-        logger.error(f"Title error: {e}")
-        await update.message.reply_text("⚠️ Failed to assign title.")
-
-
-application.add_handler(CommandHandler("profile", profile_command))
-application.add_handler(CommandHandler("title", set_title_command))
-
-async def announce_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    ADMIN_ID = "7737016510"  # Replace with your Telegram user ID
+# ── /refer Command ──────────────────────────────────────────────
+async def refer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
-
-    if user_id != ADMIN_ID:
-        await update.message.reply_text("❌ You are not authorized to use this command.")
-        return
 
     if not context.args:
-        await update.message.reply_text("Usage: /announce <your message here>")
-        return
+        return await update.message.reply_text("Usage: /refer <referrer_user_id>")
 
-    message = "📢 *Global Announcement*\n\n" + " ".join(context.args)
+    referrer = context.args[0]
+    if referrer == user_id:
+        return await update.message.reply_text("❌ You cannot refer yourself.")
+
+    # Prevent duplicate referrals
+    rows = referral_sheet.get_all_records()
+    if any(row["Referred"] == user_id for row in rows):
+        return await update.message.reply_text("⚠️ Referral already used.")
+
+    referral_sheet.append_row([referrer, user_id])
+
+    # Reward both players
+    for uid in [referrer, user_id]:
+        try:
+            row = resources_sheet.find(str(uid)).row
+            current = int(resources_sheet.cell(row, 2).value)
+            resources_sheet.update_cell(row, 2, current + 100)
+            update_score(int(uid), 5)
+        except:
+            continue
+
+    await update.message.reply_text("🎉 Referral successful! Both users received 100 gold.")
+# main.py — SkyHustle Unified Version (Part 24 of X)
+# ── Timers Sheet for Construction ───────────────────────────────
+timer_sheet = get_or_create_worksheet(sheet, "Timers", ["ID", "Name", "EndsAt"])
+
+# ── /build <name> <duration_in_min> ─────────────────────────────
+async def build_timer(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = str(update.effective_user.id)
+    if len(context.args) != 2:
+        return await update.message.reply_text("Usage: /build <building_name> <duration_in_minutes>")
+
+    name = context.args[0]
+    try:
+        duration = int(context.args[1])
+    except ValueError:
+        return await update.message.reply_text("❌ Invalid duration.")
+
+    end_time = datetime.datetime.utcnow() + datetime.timedelta(minutes=duration)
+    timestamp = end_time.isoformat()
+
+    # Remove old timer if exists
+    try:
+        row = timer_sheet.find(user_id).row
+        timer_sheet.delete_rows(row)
+    except:
+        pass
+
+    timer_sheet.append_row([user_id, name, timestamp])
+    await update.message.reply_text(f"🔧 Building *{name}* started. Ends in {duration} min.", parse_mode=ParseMode.MARKDOWN)
+
+# ── /status Command ─────────────────────────────────────────────
+async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = str(update.effective_user.id)
+    try:
+        row = timer_sheet.find(user_id).row
+        name = timer_sheet.cell(row, 2).value
+        ends_at = datetime.datetime.fromisoformat(timer_sheet.cell(row, 3).value)
+        now = datetime.datetime.utcnow()
+        remaining = (ends_at - now).total_seconds()
+
+        if remaining <= 0:
+            timer_sheet.delete_rows(row)
+            await update.message.reply_text(f"✅ *{name}* construction completed!", parse_mode=ParseMode.MARKDOWN)
+        else:
+            mins = int(remaining // 60)
+            secs = int(remaining % 60)
+            await update.message.reply_text(
+                f"⏳ *{name}* will complete in {mins}m {secs}s.",
+                parse_mode=ParseMode.MARKDOWN
+            )
+    except:
+        await update.message.reply_text("📭 No active construction timer.")
+# main.py — SkyHustle Unified Version (Part 25 of X)
+# ── BM Crate Logic ──────────────────────────────────────────────
+BM_CRATE_REWARDS = [
+    {"type": "gold", "amount": 200},
+    {"type": "iron", "amount": 150},
+    {"type": "tech", "amount": 100},
+    {"type": "infantry", "amount": 3},
+    {"type": "sniper", "amount": 2},
+    {"type": "tank", "amount": 1},
+]
+
+
+# ── /setname Command ─────────────────────────────────────────────
+async def setname(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = str(update.effective_user.id)
+
+    if not context.args:
+        return await update.message.reply_text("Usage: /setname <your_name>")
+
+    new_name = " ".join(context.args).strip()[:20]  # limit to 20 characters
 
     try:
-        players_ws = sheet.worksheet("Players")
-        user_ids = players_ws.col_values(1)[1:]  # Skip header
+        row = players_sheet.find(user_id).row
+        players_sheet.update_cell(row, 2, new_name)
+        await update.message.reply_text(f"✅ Name set to *{new_name}*!", parse_mode=ParseMode.MARKDOWN)
+    except:
+        await update.message.reply_text("❌ Could not update your name.")
 
-        sent = 0
-        for uid in user_ids:
-            try:
-                await context.bot.send_message(chat_id=int(uid), text=message, parse_mode="Markdown")
-                sent += 1
-            except Exception as e:
-                logger.warning(f"Failed to send to {uid}: {e}")
-        await update.message.reply_text(f"✅ Announcement sent to {sent} players.")
-    except Exception as e:
-        logger.error(f"Announce failed: {e}")
-        await update.message.reply_text("⚠️ Announcement failed.")
+# ── /bmcrate Command ────────────────────────────────────────────
+async def bmcrate(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = str(update.effective_user.id)
+    reward = random.choice(BM_CRATE_REWARDS)
 
-application.add_handler(CommandHandler("announce", announce_command))
+    if reward["type"] in ["gold", "iron", "tech"]:
+        row = resources_sheet.find(user_id).row
+        col_map = {"gold": 2, "iron": 3, "tech": 4}
+        col = col_map[reward["type"]]
+        current = int(resources_sheet.cell(row, col).value)
+        resources_sheet.update_cell(row, col, current + reward["amount"])
+    else:
+        row = army_sheet.find(user_id).row
+        col_map = {"infantry": 2, "sniper": 3, "tank": 4}
+        col = col_map[reward["type"]]
+        current = int(army_sheet.cell(row, col).value)
+        army_sheet.update_cell(row, col, current + reward["amount"])
 
-async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    user_id = str(user.id)
-
-    try:
-        # Auto-create player row if needed
-        ws = sheet.worksheet("Players")
-        ids = ws.col_values(1)
-        if user_id not in ids:
-            ws.append_row([user_id, "", "none"])
-            save_inbox_message(user_id, "👋 Welcome!", "You've joined SkyHustle. Start building your empire!")
-        
-        text = (
-            "*🌍 Welcome to SkyHustle!*\n\n"
-            "A Telegram empire-building game where you:\n"
-            "🛠 Build and upgrade your base\n"
-            "⚔️ Attack rivals in PvP\n"
-            "📈 Unlock techs to dominate\n"
-            "💎 Buy rare gear from the Black Market\n"
-            "🧠 Choose a faction and control zones\n\n"
-            "*🔑 Getting Started:*\n"
-            "1️⃣ Set your name: `/setname CommanderX`\n"
-            "2️⃣ View your stats: `/profile`\n"
-            "3️⃣ Claim a zone: `/zones`\n"
-            "4️⃣ Train, build, and upgrade to grow\n"
-            "5️⃣ Use `/attack <player_id>` to conquer enemies\n\n"
-            "🏛 Use `/status` to see your resources\n"
-            "🎁 Claim free rewards daily with `/daily`\n"
-            "👑 Top players earn weekly crystal rewards!\n\n"
-            "Type `/help` or `/profile` anytime to see where you stand.\n"
-            "_Game powered by strategy, resource control, and pure hustle._"
-        )
-        await update.message.reply_text(text, parse_mode="Markdown")
-    except Exception as e:
-        logger.warning(f"Error in try block at line 1189: {e}")
-    except Exception as e:
-        logger.error(f"/start failed for {user_id}: {e}")
-        await update.message.reply_text("⚠️ Error starting the game.")
-
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = (
-        "*🆘 SkyHustle Command Guide*\n\n"
-        "*🧑‍🚀 Player Basics*\n"
-        "`/setname <name>` — Set your player name\n"
-        "`/profile` — View your full stats and title\n"
-        "`/status` — See resources, buffs, and zone effects\n"
-        "`/daily` — Claim your free daily reward\n\n"
-        "*🏗 Base & Buildings*\n"
-        "`/build` — View or upgrade your buildings\n"
-        "`/repair <building>` — Fix a damaged structure\n"
-        "`/defend` — Upgrade your base defense\n\n"
-        "*⚔️ Combat & PvP*\n"
-        "`/attack <player_id>` — Attack another player\n"
-        "`/heal` — Restore your HP (costs crystals)\n"
-        "`/battlelog` — See your recent fights\n"
-        "`/rankings` — View the PvP leaderboard\n\n"
-        "*🧠 Tech & Factions*\n"
-        "`/faction` — Choose a faction with special buffs\n"
-        "`/techs` — View and unlock new technologies\n\n"
-        "*📍 Zone Control*\n"
-        "`/zones` — View available zones\n"
-        "`/myzones` — See which zones you control\n\n"
-        "*🎒 Store & Items*\n"
-        "`/store` — Buy boosts with crystals\n"
-        "`/blackmarket` — Buy rare one-time items\n"
-        "`/inventory` — See and use owned items\n"
-        "`/use <item_id>` — Activate a Black Market item\n\n"
-        "*👑 Prestige & Progression*\n"
-        "`/title` — (admin only) Assign a title to a player\n"
-        "`/profile` — Shows unlocked techs, kills, zones, etc.\n"
-        "`/start` — Restart the welcome message\n\n"
-        "_Type `/profile` to check your power. Rule the map!_"
+    await update.message.reply_text(
+        f"🎁 You opened a BM Crate and received:\n+{reward['amount']} {reward['type'].capitalize()}!",
+        parse_mode=ParseMode.MARKDOWN
     )
 
-    await update.message.reply_text(text, parse_mode="Markdown")
+def main():
+    app = ApplicationBuilder().token(TOKEN).build()
 
-application.add_handler(CommandHandler("help", help_command))
+    # Commands
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("attack", attack))
+    app.add_handler(CommandHandler("research", research))
+    app.add_handler(CommandHandler("collect", collect))
+    app.add_handler(CommandHandler("zones", zones))
+    app.add_handler(CommandHandler("capture", capture))
+    app.add_handler(CommandHandler("missions", missions))
+    app.add_handler(CommandHandler("claim", claim))
+    app.add_handler(CommandHandler("faction", faction))
+    app.add_handler(CommandHandler("base", base))
+    app.add_handler(CommandHandler("expand", expand))
+    app.add_handler(CommandHandler("daily", daily))
+    app.add_handler(CommandHandler("blackmarket", blackmarket))
+    app.add_handler(CommandHandler("spy", spy))
+    app.add_handler(CommandHandler("inbox", inbox))
+    app.add_handler(CommandHandler("raid", raid))
+    app.add_handler(CommandHandler("fight", fight))
+    app.add_handler(CommandHandler("event", event))
+    app.add_handler(CommandHandler("trigger_event", trigger_event))
+    app.add_handler(CommandHandler("leaderboard", leaderboard))
+    app.add_handler(CommandHandler("trade", trade))
+    app.add_handler(CommandHandler("give_gold", give_gold))
+    app.add_handler(CommandHandler("faction_war", faction_war))
+
+    # Callback Queries
+    app.add_handler(CallbackQueryHandler(main_menu, pattern="^main_menu$"))
+    app.add_handler(CallbackQueryHandler(build_menu, pattern="^build_menu$"))
+    app.add_handler(CallbackQueryHandler(handle_build_action, pattern="^build_"))
+    app.add_handler(CallbackQueryHandler(train_menu, pattern="^train_menu$"))
+    app.add_handler(CallbackQueryHandler(handle_train_action, pattern="^train_"))
+    app.add_handler(CallbackQueryHandler(attack_menu, pattern="^attack_menu$"))
+    app.add_handler(CallbackQueryHandler(faction, pattern="^faction_menu$"))
+    app.add_handler(CallbackQueryHandler(handle_faction_choice, pattern="^faction_"))
+    app.add_handler(CallbackQueryHandler(blackmarket, pattern="^store_menu$"))
+    app.add_handler(CallbackQueryHandler(handle_blackmarket, pattern="^bm_"))
+    app.add_handler(CallbackQueryHandler(missions, pattern="^mission_menu$"))
+    app.add_handler(CallbackQueryHandler(inbox, pattern="^inbox_menu$"))
+    app.add_handler(CallbackQueryHandler(event, pattern="^event_menu$"))
+    app.add_handler(CallbackQueryHandler(base, pattern="^base_menu$"))
+    app.add_handler(CallbackQueryHandler(leaderboard, pattern="^rank_menu$"))
+    app.add_handler(CallbackQueryHandler(zones, pattern="^zone_menu$"))
+    app.add_handler(CallbackQueryHandler(research, pattern="^research_menu$"))
+
+    app.add_handler(CommandHandler("setname", setname))
+    app.add_handler(CommandHandler("bmcrate", bmcrate))
+    app.add_handler(CommandHandler("my_battles", my_battles))
+
+    app.run_polling()
+
+# ── Launch Bot ──────────────────────────────────────────────────
+if __name__ == "__main__":
+    main()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
