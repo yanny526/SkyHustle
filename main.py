@@ -36,7 +36,7 @@ BASE64_CREDS = os.getenv("GOOGLE_CREDS")
 
 # ── Google Sheets Setup ─────────────────────────────────────────
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds_json = json.loads(base64.b64decode(BASE64_CREDS).decode())
+creds_json = json.loads(base64.b64decode(BASE64_CREDS.strip()).decode())
 creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_json, scope)
 sheet = gspread.authorize(creds).open_by_key(SHEET_KEY)
 
