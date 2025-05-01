@@ -100,7 +100,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     await update.message.reply_text(
-        f"Welcome Commander *{user.first_name}*\n\nYour empire begins now. 🌍\nChoose your path wisely.",
+        f"Welcome Commander *{user.first_name}*
+
+Your empire begins now. 🌍
+Tap below to enter command mode.",
         parse_mode=ParseMode.MARKDOWN,
         reply_markup=reply_markup
     )
