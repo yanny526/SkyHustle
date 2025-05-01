@@ -1032,6 +1032,18 @@ def main():
     app.add_handler(CommandHandler("bmcrate", bmcrate))
     app.add_handler(CommandHandler("my_battles", my_battles))
 
+    
+    app.add_handler(CallbackQueryHandler(zones, pattern="^zone_menu$"))
+    app.add_handler(CallbackQueryHandler(attack_menu, pattern="^attack_menu$"))
+    app.add_handler(CallbackQueryHandler(research, pattern="^research_menu$"))
+    app.add_handler(CallbackQueryHandler(blackmarket, pattern="^store_menu$"))
+    app.add_handler(CallbackQueryHandler(missions, pattern="^mission_menu$"))
+    app.add_handler(CallbackQueryHandler(inbox, pattern="^inbox_menu$"))
+    app.add_handler(CallbackQueryHandler(faction, pattern="^faction_menu$"))
+    app.add_handler(CallbackQueryHandler(event, pattern="^event_menu$"))
+    app.add_handler(CallbackQueryHandler(base, pattern="^base_menu$"))
+    app.add_handler(CallbackQueryHandler(leaderboard, pattern="^rank_menu$"))
+
     app.run_polling()
 
 # ── Launch Bot ──────────────────────────────────────────────────
