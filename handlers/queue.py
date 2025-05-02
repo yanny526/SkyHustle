@@ -6,53 +6,30 @@ from telegram.constants import ParseMode
 from telegram.ext import CommandHandler, ContextTypes
 from sheets_service import get_rows
 from utils.time_utils import format_hhmmss
-from modules.resource_manager import tick_resources
-from modules.upgrade_manager import complete_upgrades
+from utils.decorators import game_command
 
+@game_command
 async def queue(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    /queue - list pending building upgrades, after ticking resources
-    and notifying of any completed upgrades.
+    /queue - list pending upgrades (tick & upgrades via decorator).
     """
     user = update.effective_user
     uid = str(user.id)
     now = time.time()
 
-    # 1) Tick resources
-    _ = tick_resources(uid)
-
-    # 2) Complete any finished upgrades
-    done = complete_upgrades(uid)
-    if done:
-        msgs = "\n".join(
-            f"✅ {btype} upgrade complete! Now Lvl {lvl}."
-            for btype, lvl in done
-        )
-        await update.message.reply_text(msgs)
-
-    # 3) Fetch pending upgrades safely
     pending = []
     for row in get_rows('Buildings')[1:]:
         if row[0] != uid:
             continue
-
-        # safely parse current level
-        if len(row) > 2 and row[2].isdigit():
-            lvl = int(row[2])
-        else:
-            lvl = 0
-
-        # only attempt end_ts if column exists
+        lvl = int(row[2]) if len(row) > 2 and row[2].isdigit() else 0
         if len(row) > 3 and row[3]:
             try:
                 end_ts = float(row[3])
                 if end_ts > now:
                     pending.append((row[1], lvl + 1, end_ts))
             except ValueError:
-                # skip malformed timestamps
                 continue
 
-    # 4) Respond
     if not pending:
         return await update.message.reply_text("✅ You have no upgrades in progress.")
 
