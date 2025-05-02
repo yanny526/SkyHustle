@@ -1,43 +1,37 @@
-# handlers/leaderboard.py
-
 from telegram import Update
-from telegram.constants import ParseMode
 from telegram.ext import CommandHandler, ContextTypes
-from sheets_service import get_rows
-from utils.decorators import game_command
 
-@game_command
+from sheets_service import get_rows
+
 async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    /leaderboard - show top commanders by power (tick & upgrades via decorator).
+    /leaderboard
+    Fetches the top 10 players by score from the 'Leaderboard' sheet.
     """
-    players = get_rows('Players')[1:]
-    buildings = get_rows('Buildings')[1:]
-    army = get_rows('Army')[1:]
+    # read all rows (skip header)
+    rows = get_rows("Leaderboard")[1:]
+    if not rows:
+        await update.message.reply_text("🏆 Leaderboard is empty—no scores yet.")
+        return
 
-    # Sum building levels
-    build_power = {}
-    for uid, _, lvl_str, *_ in buildings:
-        build_power[uid] = build_power.get(uid, 0) + int(lvl_str)
+    # sort descending by score (3rd column)
+    try:
+        sorted_rows = sorted(
+            rows,
+            key=lambda r: int(r[2]),
+            reverse=True
+        )
+    except (IndexError, ValueError):
+        await update.message.reply_text("⚠️ Error parsing leaderboard data.")
+        return
 
-    # Sum army power
-    army_power = {}
-    for uid, unit, count_str in army:
-        p = int(count_str) * {'infantry': 10, 'tanks': 50, 'artillery': 100}[unit]
-        army_power[uid] = army_power.get(uid, 0) + p
+    # build a message
+    text = "🏆 *Leaderboard* 🏆\n\n"
+    for i, row in enumerate(sorted_rows[:10], start=1):
+        username = row[1]
+        score    = row[2]
+        text += f"{i}. {username} — {score}\n"
 
-    # Compile scores
-    scores = []
-    for uid, commander_name, _, *__ in players:
-        name = commander_name or "Unknown"
-        total = build_power.get(uid, 0) + army_power.get(uid, 0)
-        scores.append((name, total))
-    scores.sort(key=lambda x: x[1], reverse=True)
+    await update.message.reply_markdown(text)
 
-    lines = ["🏆 *Leaderboard* 🏆\n"]
-    for idx, (name, power) in enumerate(scores[:10], start=1):
-        lines.append(f"{idx}. *{name}* — {power} Power")
-
-    await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
-
-handler = CommandHandler('leaderboard', leaderboard)
+handler = CommandHandler("leaderboard", leaderboard)
