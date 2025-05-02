@@ -1,112 +1,71 @@
 # handlers/status.py
 
-import time
 from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import CommandHandler, ContextTypes
+from modules.upgrade_manager import get_pending_upgrades
+from modules.building_manager import get_building_info
+from modules.unit_manager import UNITS
 from sheets_service import get_rows
-from utils.time_utils import format_hhmmss
-from utils.decorators import game_command
-from config import BUILDING_MAX_LEVEL
 
-@game_command
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    /status - show current base status, marking MAXED buildings at cap.
-    """
-    user = update.effective_user
-    uid = str(user.id)
-    now = time.time()
+    """ /status - show current base status, resources, buildings, upgrades, and army counts """
+    uid = str(update.effective_user.id)
 
-    # Fetch player row
-    players = get_rows('Players')
-    commander_name = user.first_name
-    credits = minerals = energy = 0
-    for row in players[1:]:
+    # Player resources
+    players = get_rows('Players')[1:]
+    creds = mins = engy = None
+    commander = None
+    for row in players:
         if row[0] == uid:
-            commander_name = row[1] or commander_name
-            credits = int(row[3])
-            minerals = int(row[4])
-            energy = int(row[5])
+            commander = row[1]
+            creds, mins, engy = map(int, (row[3], row[4], row[5]))
             break
+    if creds is None:
+        return await update.message.reply_text("❗ Run /start first.")
 
-    # Fetch building levels and pending upgrades
-    building_rows = get_rows('Buildings')[1:]
-    buildings = {b: 0 for b in BUILDING_MAX_LEVEL}
-    upgrades = {}
-    for row in building_rows:
-        if row[0] != uid:
-            continue
-        btype = row[1]
-        lvl = int(row[2]) if len(row) > 2 and row[2].isdigit() else 0
-        buildings[btype] = lvl
-        if len(row) > 3 and row[3]:
-            try:
-                end_ts = float(row[3])
-                if end_ts > now:
-                    upgrades[btype] = (lvl + 1, end_ts)
-            except ValueError:
-                pass
+    lines = []
+    lines.append("🏰 *Base Status* 🏰")
+    lines.append(f"Commander: {commander}")
+    lines.append(f"💳 Credits: {creds}   ⛏️ Minerals: {mins}   ⚡ Energy: {engy}")
+    lines.append("")
 
-    # Fetch army counts
-    army_counts = {'infantry': 0, 'tanks': 0, 'artillery': 0}
-    for row in get_rows('Army')[1:]:
-        if row[0] != uid:
-            continue
-        army_counts[row[1].lower()] = int(row[2])
-
-    # Begin status text
-    text = [
-        f"🏰 *Base Status* 🏰",
-        f"Commander: *{commander_name}*",
-        "",
-        f"💳 Credits: {credits}   ⛏️ Minerals: {minerals}   ⚡ Energy: {energy}",
-        ""
-    ]
-
-    # Buildings section
-    text.append("🏢 *Buildings*")
-    # Define display parameters for each building
-    display_info = [
-        ('Mine', '⛏️', 20, 'minerals/hr'),
-        ('Power Plant', '⚡', 10, 'energy/hr'),
-        ('Barracks', '🛡️', 5, '% train time reduction'),
-        ('Workshop', '🔧', 2, '% combat boost'),
-    ]
-    for btype, emoji, factor, unit_desc in display_info:
-        lvl = buildings.get(btype, 0)
-        max_lvl = BUILDING_MAX_LEVEL.get(btype, None)
-        if max_lvl is not None and lvl >= max_lvl:
-            text.append(f" • {emoji} {btype} (Lvl {lvl}) – *MAXED* ")
-        else:
-            if btype in ('Mine', 'Power Plant'):
-                rate = lvl * factor
-                text.append(f" • {emoji} {btype} (Lvl {lvl}) → +{rate} {unit_desc}")
-            elif btype == 'Barracks':
-                reduction = lvl * factor
-                text.append(f" • {emoji} {btype} (Lvl {lvl}) → –{reduction}{unit_desc}")
-            else:  # Workshop
-                boost = lvl * factor
-                text.append(f" • {emoji} {btype} (Lvl {lvl}) → +{boost}{unit_desc}")
+    # Buildings
+    lines.append("🏢 *Buildings*")
+    for bname, lvl, bonus in get_building_info(uid):
+        lines.append(f"• {bname} (Lvl {lvl}) → {bonus}")
+    lines.append("")
 
     # Upgrades in progress
-    text.append("")
-    text.append("🔄 *Upgrades in progress*")
-    if upgrades:
-        for btype, (next_lvl, end_ts) in upgrades.items():
-            rem = format_hhmmss(int(end_ts - now))
-            emoji = dict((bt, em) for bt, em, *_ in display_info).get(btype, '')
-            text.append(f" • {emoji} {btype} → Lvl {next_lvl} ({rem} remaining)")
+    pending = get_pending_upgrades(uid)
+    lines.append("🔧 *Upgrades in progress*")
+    if pending:
+        for name, target_lvl, remaining in pending:
+            lines.append(f"• {name} → Lvl {target_lvl} ({remaining} remaining)")
     else:
-        text.append(" • None")
+        lines.append("• None")
+    lines.append("")
 
-    # Army section
-    text.append("")
-    text.append("🛡️ *Army*")
-    text.append(f" • 👨‍✈️ Infantry: {army_counts['infantry']}")
-    text.append(f" • 🛡️ Tanks: {army_counts['tanks']}")
-    text.append(f" • 🚀 Artillery: {army_counts['artillery']}")
+    # Army counts
+    army_rows = get_rows('Army')[1:]
+    counts = {key: 0 for key in UNITS.keys()}
+    for row in army_rows:
+        if row[0] == uid and row[1] in counts:
+            counts[row[1]] = int(row[2])
 
-    await update.message.reply_text("\n".join(text), parse_mode=ParseMode.MARKDOWN)
+    lines.append("🪖 *Army* ")
+    # Show each unit in tier order
+    # Sort by tier then display name
+    tiers = {}
+    for key, info in UNITS.items():
+        _, emoji, tier, _, _ = info
+        tiers.setdefault(tier, []).append((key, info))
+    for tier in sorted(tiers.keys()):
+        for key, info in sorted(tiers[tier], key=lambda x: x[1][0]):
+            display, emoji, *_ = info
+            cnt = counts.get(key, 0)
+            lines.append(f"• {emoji} {display}: {cnt}")
+
+    await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
 
 handler = CommandHandler('status', status)
