@@ -13,6 +13,7 @@ from handlers.train import handler as train_handler
 from handlers.attack import handler as attack_handler
 from handlers.leaderboard import handler as leaderboard_handler
 from handlers.help import handler as help_handler
+from handlers.army    import handler as army_handler 
 
 from telegram import Update
 from telegram.ext import (
@@ -40,7 +41,8 @@ def main():
     app.add_handler(attack_handler)
     app.add_handler(leaderboard_handler)
     app.add_handler(help_handler)
-
+    app.add_handler(army_handler)
+    
     # 4) Fallback: catch any unknown /command
     async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
