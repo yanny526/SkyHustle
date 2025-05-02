@@ -1,24 +1,19 @@
 # SkyHustle
 
-A simple, strategic, text-based Telegram war game.
+A simple, strategic, text-based Telegram war game built with Python and Google Sheets.
 
-## Setup
+## Features
 
-1. Add your environment variables:
-   - `BASE64_CREDS`
-   - `BOT_TOKEN`
-   - `SHEET_ID`
-2. Deploy to your host (Render/Heroku).
-3. The bot will auto-create required sheets on startup.
+- 🏰 Base building with four structures: Mine, Power Plant, Barracks, Workshop  
+- ⚔️ Train three unit types: Infantry, Tanks, Artillery  
+- 🔨 Upgrade buildings, each level grants production or combat benefits  
+- ⏳ Upgrade queue and status tracking  
+- 🛡️ Combat system with randomness and spoils  
+- 🏆 Leaderboard to rank commanders by Total Power  
 
-## Commands
+## Setup & Deployment
 
-- `/start` - Register & welcome message
-- `/status` - Show base status
-- `/menu` - Show menu
-- `/build <building>` - Upgrade/build
-- `/upgrade <building>` - Alias for /build
-- `/queue` - Show pending upgrades
-- `/train <unit> <count>` - Train units
-- `/attack <user_id>` - Attack another player
-- `/leaderboard` - View top players
+1. **Clone the repository**  
+   ```bash
+   git clone https://github.com/yourusername/skyhustle.git
+   cd skyhustle
