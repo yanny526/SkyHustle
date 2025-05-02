@@ -1,76 +1,67 @@
-# modules/upgrade_manager.py
-
-import time
+from datetime import datetime
 from sheets_service import get_rows, append_row, clear_range
 
-# Range of the Upgrades sheet (columns A–E)
-UPGRADES_RANGE = 'Upgrades!A:E'
+UPGRADES_RANGE = "Upgrades!A:E"
+HEADER_ROW     = ["user_id", "building_key", "target_level", "start_ts", "duration_secs"]
 
-async def initiate_upgrade(user_id: str, building: str, current_lvl: int, duration: int):
-    """
-    Schedule a new building upgrade for user_id.
-    building: name of building (e.g., 'Barracks')
-    current_lvl: its current level
-    duration: seconds until completion
-    """
-    start_ts = int(time.time())
-    target_lvl = current_lvl + 1
-    append_row(UPGRADES_RANGE, [user_id, building, str(target_lvl), str(start_ts), str(duration)])
+def schedule_upgrade(user_id: str, building_key: str, target_level: int, duration_secs: int):
+    """Queue a new building‐upgrade for this user."""
+    start_ts = int(datetime.utcnow().timestamp())
+    append_row("Upgrades", [
+        user_id,
+        building_key,
+        str(target_level),
+        str(start_ts),
+        str(duration_secs),
+    ])
 
-
-def complete_upgrades(user_id: str) -> None:
+def complete_upgrades(user_id: str):
     """
-    Check the Upgrades sheet for any finished upgrades for user_id,
-    apply them and remove completed rows.
+    Remove any fully‐completed upgrades for this user,
+    rewriting the sheet to keep only pending ones.
     """
     rows = get_rows(UPGRADES_RANGE)
-    if not rows or len(rows) < 2:
+    if len(rows) < 2:
         return
-    header, *data = rows
-    keep = []
-    now = int(time.time())
-    for row in data:
+    now = int(datetime.utcnow().timestamp())
+    data_rows = rows[1:]
+    remaining = []
+
+    for row in data_rows:
         if len(row) < 5:
+            remaining.append(row)
             continue
-        uid, building, target_str, start_str, dur_str = row
-        start = int(start_str)
-        dur   = int(dur_str)
-        finish = start + dur
-        if uid == user_id and now >= finish:
-            # apply upgrade
-            from modules.building_manager import set_building_level
-            set_building_level(user_id, building, int(target_str))
-        else:
-            keep.append(row)
-    # rewrite the sheet: clear and re-append header + remaining
-    clear_range(UPGRADES_RANGE)
-    append_row(UPGRADES_RANGE, header)
-    for r in keep:
-        append_row(UPGRADES_RANGE, r)
+        uid, key, lvl, start_ts, duration = row
+        start_ts = int(start_ts); duration = int(duration)
+        # omit only those for this user that are finished
+        if not (uid == user_id and now >= start_ts + duration):
+            remaining.append(row)
 
+    # wipe & rewrite
+    clear_range("Upgrades")
+    append_row("Upgrades", HEADER_ROW)
+    for r in remaining:
+        append_row("Upgrades", r)
 
-def get_pending_upgrades(user_id: str) -> list[tuple[str,int,str]]:
+def get_pending_upgrades(user_id: str) -> list[tuple[str,int]]:
     """
-    Return a list of (building, target_level, remaining_time_str) for all
-    upgrades still in progress for user_id.
+    Return list of (building_key, remaining_seconds)
+    for this user's in‐flight upgrades.
     """
     rows = get_rows(UPGRADES_RANGE)
-    if not rows or len(rows) < 2:
+    if len(rows) < 2:
         return []
+    now = int(datetime.utcnow().timestamp())
     pending = []
-    now = int(time.time())
-    for row in rows[1:]:  # skip header
+
+    for row in rows[1:]:
         if len(row) < 5:
             continue
-        uid, building, target_str, start_str, dur_str = row
+        uid, key, lvl, start_ts, duration = row
         if uid != user_id:
             continue
-        start = int(start_str)
-        dur   = int(dur_str)
-        rem = start + dur - now
-        if rem > 0:
-            h = rem // 3600
-            m = (rem % 3600) // 60
-            s = rem % 60
-            pending.append((building, int(target_str), f"{h:02d}:{m:02d}:{s:02d}"))
+        start_ts = int(start_ts); duration = int(duration)
+        rem = max(0, (start_ts + duration) - now)
+        pending.append((key, rem))
+
     return pending
