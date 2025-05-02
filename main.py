@@ -16,13 +16,13 @@ from handlers.leaderboard import handler as leaderboard_handler
 from telegram.ext import Application
 
 def main():
-    # Ensure Sheets and tabs exist
+    # 1. Ensure all Sheets tabs & headers exist
     sheets_init()
 
-    # Build the Telegram bot application
+    # 2. Build the Telegram bot application
     app = Application.builder().token(BOT_TOKEN).build()
 
-    # Register command handlers
+    # 3. Register your command handlers
     app.add_handler(start_handler)
     app.add_handler(setname_handler)
     app.add_handler(menu_handler)
@@ -33,7 +33,7 @@ def main():
     app.add_handler(attack_handler)
     app.add_handler(leaderboard_handler)
 
-    # Start polling (synchronous)
+    # 4. Start polling (blocks until interrupted)
     app.run_polling()
 
 if __name__ == "__main__":
