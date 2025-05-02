@@ -6,7 +6,7 @@ from telegram.ext import Application
 from config import BOT_TOKEN
 from sheets_service import init as init_sheets
 
-# bring in all your command handlers
+# command handlers
 from handlers.start       import handler as start_handler
 from handlers.setname     import handler as setname_handler
 from handlers.help        import handler as help_handler
@@ -20,13 +20,13 @@ from handlers.army        import handler as army_handler
 from handlers.leaderboard import handler as leaderboard_handler
 
 def main():
-    # ensure your Sheets tabs & headers exist
+    # ensure Sheets tabs & headers exist before any command runs
     init_sheets()
 
-    # build your bot
+    # build the Telegram bot
     app = Application.builder().token(BOT_TOKEN).build()
 
-    # register every command
+    # register all your commands
     app.add_handler(start_handler)       # /start
     app.add_handler(setname_handler)     # /setname
     app.add_handler(help_handler)        # /help
@@ -39,7 +39,7 @@ def main():
     app.add_handler(army_handler)        # /army
     app.add_handler(leaderboard_handler) # /leaderboard
 
-    # start polling
+    # start polling Telegram
     app.run_polling()
 
 if __name__ == "__main__":
