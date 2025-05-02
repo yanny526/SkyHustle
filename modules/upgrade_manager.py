@@ -4,40 +4,78 @@ import time
 from sheets_service import get_rows, update_row
 from config import BUILDING_MAX_LEVEL
 
+
 def complete_upgrades(user_id: str):
     """
-    For each building upgrade whose end_ts has passed, bump the level
-    and clear the upgrade timestamp.
+    For each building upgrade whose end_ts has passed:
+    - Increase the building's level if below cap.
+    - Clear the upgrade timestamp.
     """
     rows = get_rows('Buildings')
     now = int(time.time())
 
-    # rows[0] is header; enumerate starts at 1 to match sheet row indices
+    # Skip header row; enumerate idx starts at 1 for sheet indexing
     for idx, row in enumerate(rows[1:], start=1):
-        if row[0] == user_id and row[3]:
-            end_ts = int(row[3])
-            if now >= end_ts:
-                current_lvl = int(row[2])
-                row[2] = str(current_lvl + 1)  # new level
-                row[3] = ''                   # clear upgrade timestamp
+        # Need at least 4 columns: uid, building, level, end_ts
+        if len(row) < 4:
+            continue
+        uid, btype, lvl_str, ts_str = row[0], row[1], row[2], row[3]
+        if uid != user_id or not ts_str:
+            continue
+
+        # Parse end timestamp
+        try:
+            end_ts = int(float(ts_str))
+        except (ValueError, TypeError):
+            # Invalid timestamp; clear it
+            row[3] = ''
+            update_row('Buildings', idx, row)
+            continue
+
+        # If upgrade has completed:
+        if now >= end_ts:
+            # Determine current level
+            curr_lvl = int(lvl_str) if lvl_str.isdigit() else 0
+            max_lvl = BUILDING_MAX_LEVEL.get(btype)
+            if max_lvl is not None and curr_lvl >= max_lvl:
+                # At cap: just clear the timestamp
+                row[3] = ''
                 update_row('Buildings', idx, row)
+                continue
 
-def get_pending_upgrades(user_id: str) -> list:
+            # Perform the level-up
+            row[2] = str(curr_lvl + 1)
+            row[3] = ''
+            update_row('Buildings', idx, row)
+
+
+def get_pending_upgrades(user_id: str) -> list[tuple[str, str, str]]:
     """
-    Returns a list of (building_type, next_level, seconds_remaining)
-    for all upgrades still in progress.
+    Return a list of (building_name, target_level, remaining_time_str)
+    for all upgrades still in progress for this user.
     """
+    rows = get_rows('Upgrades')[1:]  # skip header
     pending = []
-    now = int(time.time())
-    rows = get_rows('Buildings')[1:]
+    now_ts = time.time()
 
-    for row in rows:
-        if row[0] == user_id and row[3]:
-            btype = row[1]
-            current_lvl = int(row[2])
-            next_lvl = current_lvl + 1
-            end_ts = int(row[3])
-            rem = max(0, end_ts - now)
-            pending.append((btype, next_lvl, rem))
+    for r in rows:
+        # Expect at least [uid, building, start_ts, end_ts, target_level]
+        if len(r) < 5 or r[0] != user_id:
+            continue
+        bname      = r[1]
+        end_ts_str = r[3]
+        target_lvl = r[4]
+
+        try:
+            end_ts = float(end_ts_str)
+        except (ValueError, TypeError):
+            continue
+
+        rem = end_ts - now_ts
+        if rem > 0:
+            hrs, rem_sec = divmod(int(rem), 3600)
+            mins, secs  = divmod(rem_sec, 60)
+            remaining = f"{hrs:02d}:{mins:02d}:{secs:02d}"
+            pending.append((bname, target_lvl, remaining))
 
     return pending
