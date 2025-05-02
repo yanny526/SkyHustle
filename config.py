@@ -1,13 +1,21 @@
 # config.py
 
-import os
-import json
-from base64 import b64decode
+# Telegram bot token (keep yours secret!)
+BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN_HERE"
 
-# Environment variables
-BASE64_CREDS = os.getenv('BASE64_CREDS')
-BOT_TOKEN = os.getenv('BOT_TOKEN')
-SHEET_ID = os.getenv('SHEET_ID')
+# Google Sheets settings
+SHEET_ID = "YOUR_GOOGLE_SHEET_ID_HERE"
 
-# Decode the base64-encoded service account JSON
-SERVICE_ACCOUNT_INFO = json.loads(b64decode(BASE64_CREDS).decode())
+# Maximum levels for each building
+BUILDING_MAX_LEVEL = {
+    'Mine': 10,
+    'Power Plant': 10,
+    'Barracks': 10,
+    'Workshop': 10,
+}
+
+# Unlock requirements for troop tiers
+TIER_UNLOCK = {
+    2: {'Barracks': 3, 'Workshop': 2},  # Tier 2 requires Barracks ≥ 3, Workshop ≥ 2
+    3: {'Barracks': 5, 'Workshop': 4},  # Tier 3 requires Barracks ≥ 5, Workshop ≥ 4
+}
