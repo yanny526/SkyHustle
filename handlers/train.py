@@ -1,111 +1,94 @@
 # handlers/train.py
 
-import time
 from telegram import Update
+from telegram.constants import ParseMode
 from telegram.ext import CommandHandler, ContextTypes
 from sheets_service import get_rows, update_row, append_row
+from modules.resource_manager import tick_resources
+from modules.upgrade_manager import complete_upgrades
 
 async def train(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    /train <unit> <count> - train units instantly, deduct resources and update army count.
+    /train <unit> <count> - train units, tick resources, complete upgrades, deduct energy.
     """
     user = update.effective_user
     uid = str(user.id)
+
+    # tick & upgrades
+    tick_resources(uid)
+    done = complete_upgrades(uid)
+    if done:
+        msgs = "\n".join(f"✅ {b} upgrade done! Now Lvl {lvl}." for b,lvl in done)
+        await update.message.reply_text(msgs)
+
     args = context.args
-
-    if len(args) < 2:
-        await update.message.reply_text(
+    if len(args)<2:
+        return await update.message.reply_text(
             "❗ Usage: `/train <unit> <count>`\n"
-            "Units: infantry, tanks, artillery\n"
-            "Example: `/train infantry 5`",
-            parse_mode='Markdown'
+            "Infantry(1⚡), Tanks(5⚡), Artillery(10⚡)",
+            parse_mode=ParseMode.MARKDOWN
         )
-        return
 
-    unit_input = args[0].lower()
-    # normalize unit type
-    unit_alias = {
-        'infantry': 'infantry',
-        'tank': 'tanks',
-        'tanks': 'tanks',
-        'artillery': 'artillery'
-    }
-    if unit_input not in unit_alias:
-        await update.message.reply_text(
-            f"❌ Unknown unit *{args[0]}*.\nUnits: infantry, tanks, artillery",
-            parse_mode='Markdown'
+    u = args[0].lower()
+    unit_map = {'infantry':'infantry','tanks':'tanks','tank':'tanks','artillery':'artillery'}
+    if u not in unit_map:
+        return await update.message.reply_text(
+            f"❌ Unknown unit *{args[0]}*.",
+            parse_mode=ParseMode.MARKDOWN
         )
-        return
-
-    unit = unit_alias[unit_input]
+    unit = unit_map[u]
     try:
-        count = int(args[1])
-        if count <= 0:
-            raise ValueError()
-    except ValueError:
-        await update.message.reply_text("❌ Count must be a positive integer.")
-        return
+        cnt = int(args[1])
+        if cnt<1: raise
+    except:
+        return await update.message.reply_text("❌ Count must be >0.")
 
-    # define costs per unit
-    UNIT_COSTS = {
-        'infantry': {'credits': 10, 'minerals': 5},
-        'tanks': {'credits': 100, 'minerals': 50},
-        'artillery': {'credits': 200, 'minerals': 100},
+    COSTS = {
+        'infantry': {'c':10,'m':5,'e':1},
+        'tanks':    {'c':100,'m':50,'e':5},
+        'artillery':{'c':200,'m':100,'e':10},
     }
+    cost = COSTS[unit]
+    totC,totM,totE = cost['c']*cnt, cost['m']*cnt, cost['e']*cnt
 
-    cost = UNIT_COSTS[unit]
-    total_credits = cost['credits'] * count
-    total_minerals = cost['minerals'] * count
-
-    # fetch player resources
-    players = get_rows('Players')
-    player_row = None
-    for idx, row in enumerate(players[1:], start=1):
-        if row[0] == uid:
-            player_row = (idx, row.copy())
+    # fetch player row
+    rows = get_rows('Players')
+    for pi,row in enumerate(rows[1:],start=1):
+        if row[0]==uid:
+            prow,row_idx = row.copy(),pi
             break
-    if player_row is None:
-        await update.message.reply_text("❗ You need to run `/start` first.")
-        return
-
-    prow_idx, prow = player_row
-    credits = int(prow[3])
-    minerals = int(prow[4])
-
-    if credits < total_credits or minerals < total_minerals:
-        await update.message.reply_text(
-            f"❌ Insufficient resources.\n"
-            f"Need {total_credits} 💳 and {total_minerals} ⛏️."
-        )
-        return
-
-    # deduct resources
-    prow[3] = str(credits - total_credits)
-    prow[4] = str(minerals - total_minerals)
-    update_row('Players', prow_idx, prow)
-
-    # update army sheet
-    army = get_rows('Army')
-    army_row = None
-    for idx, row in enumerate(army[1:], start=1):
-        if row[0] == uid and row[1].lower() == unit:
-            army_row = (idx, row.copy())
-            break
-
-    if army_row:
-        aidx, arow = army_row
-        current = int(arow[2])
-        arow[2] = str(current + count)
-        update_row('Army', aidx, arow)
     else:
-        append_row('Army', [uid, unit, str(count)])
+        return await update.message.reply_text("❗ Run /start first.")
 
-    # confirmation
-    emoji_map = {'infantry': '👨‍✈️', 'tanks': '🛡️', 'artillery': '🚀'}
-    emoji = emoji_map.get(unit, '')
+    creds,minr,engy = map(int,(prow[3],prow[4],prow[5]))
+    if creds<totC or minr<totM or engy<totE:
+        return await update.message.reply_text(
+            f"❌ Need {totC}💳 {totM}⛏️ {totE}⚡."
+        )
+
+    # deduct
+    prow[3]=str(creds-totC)
+    prow[4]=str(minr-totM)
+    prow[5]=str(engy-totE)
+    update_row('Players',row_idx,prow)
+
+    # update army
+    army = get_rows('Army')
+    found=None
+    for ai,row in enumerate(army[1:],start=1):
+        if row[0]==uid and row[1]==unit:
+            found=(ai,row.copy()); break
+
+    if found:
+        ai,arow = found
+        arow[2]=str(int(arow[2])+cnt)
+        update_row('Army',ai,arow)
+    else:
+        append_row('Army',[uid,unit,str(cnt)])
+
+    emoji = {'infantry':'👨‍✈️','tanks':'🛡️','artillery':'🚀'}[unit]
     await update.message.reply_text(
-        f"{emoji} Trained {count} {unit}! "
-        f"Resources spent: {total_credits} 💳, {total_minerals} ⛏️."
+        f"{emoji} Trained {cnt}×{unit}! Spent {totC}💳 {totM}⛏️ {totE}⚡."
     )
 
 handler = CommandHandler('train', train)
