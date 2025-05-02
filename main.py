@@ -1,6 +1,5 @@
 # main.py
 
-import asyncio
 from config import BOT_TOKEN
 from sheets_service import init as sheets_init
 
@@ -16,7 +15,7 @@ from handlers.leaderboard import handler as leaderboard_handler
 
 from telegram.ext import Application
 
-async def main():
+def main():
     # Ensure Sheets and tabs exist
     sheets_init()
 
@@ -34,8 +33,8 @@ async def main():
     app.add_handler(attack_handler)
     app.add_handler(leaderboard_handler)
 
-    # Start polling
-    await app.run_polling()
+    # Start polling (synchronous)
+    app.run_polling()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
