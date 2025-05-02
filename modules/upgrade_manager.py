@@ -54,7 +54,7 @@ def start_upgrade(user_id: str, building_type: str):
     build_row = None
     for idx, row in enumerate(buildings[1:], start=1):
         if row[0] == user_id and row[1] == building_type:
-            current_level = int(row[2])
+            current_level = int(row[2]) if len(row) > 2 else 0
             build_row = (idx, row.copy())
             break
 
@@ -74,6 +74,9 @@ def start_upgrade(user_id: str, building_type: str):
     end_ts = time.time() + duration
     if build_row:
         b_idx, brow = build_row
+        # ensure we have at least 4 columns
+        while len(brow) < 4:
+            brow.append('')
         brow[3] = str(end_ts)
         update_row('Buildings', b_idx, brow)
     else:
@@ -91,8 +94,8 @@ def get_pending_upgrades(user_id: str) -> list:
     for row in get_rows('Buildings')[1:]:
         if row[0] != user_id:
             continue
-        lvl = int(row[2])
-        end_ts = float(row[3]) if row[3] else 0
+        lvl = int(row[2]) if len(row) > 2 else 0
+        end_ts = float(row[3]) if len(row) > 3 and row[3] else 0
         if end_ts > now:
             pending.append((row[1], lvl + 1, end_ts))
     return pending
@@ -106,10 +109,11 @@ def complete_upgrades(user_id: str) -> list:
     now = time.time()
     rows = get_rows('Buildings')
     for idx, row in enumerate(rows[1:], start=1):
-        if row[0] == user_id and row[3]:
+        # only proceed if there's an end_ts column
+        if row[0] == user_id and len(row) > 3 and row[3]:
             end_ts = float(row[3])
             if end_ts <= now:
-                new_lvl = int(row[2]) + 1
+                new_lvl = int(row[2]) + 1 if len(row) > 2 else 1
                 row[2] = str(new_lvl)
                 row[3] = ''
                 update_row('Buildings', idx, row)
