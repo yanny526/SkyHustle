@@ -6,33 +6,45 @@ from telegram.constants import ParseMode
 from telegram.ext import CommandHandler, ContextTypes
 from sheets_service import get_rows
 from utils.time_utils import format_hhmmss
+from modules.resource_manager import tick_resources
+from modules.upgrade_manager import complete_upgrades
 
 async def queue(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    /queue - list all pending building upgrades with remaining time.
+    /queue - list pending building upgrades, after ticking resources
+    and notifying of any completed upgrades.
     """
     user = update.effective_user
     uid = str(user.id)
     now = time.time()
 
-    # Fetch building upgrade entries
-    rows = get_rows('Buildings')[1:]  # skip header
+    # 1) Tick resources
+    added = tick_resources(uid)
+
+    # 2) Complete any finished upgrades
+    done = complete_upgrades(uid)
+    if done:
+        msgs = "\n".join(
+            f"✅ {btype} upgrade complete! Now Lvl {lvl}."
+            for btype, lvl in done
+        )
+        await update.message.reply_text(msgs)
+
+    # 3) Fetch pending upgrades
     pending = []
-    for row in rows:
+    for row in get_rows('Buildings')[1:]:
         if row[0] != uid:
             continue
-        btype = row[1]
         lvl = int(row[2])
-        if len(row) > 3 and row[3]:
+        if row[3]:
             end_ts = float(row[3])
             if end_ts > now:
-                pending.append((btype, lvl + 1, end_ts))
+                pending.append((row[1], lvl + 1, end_ts))
 
+    # 4) Respond
     if not pending:
-        await update.message.reply_text("✅ You have no upgrades in progress.")
-        return
+        return await update.message.reply_text("✅ You have no upgrades in progress.")
 
-    # Build response
     lines = ["⏳ *Upgrades in Progress* ⏳\n"]
     emoji_map = {
         'Mine': '⛏️', 'Power Plant': '⚡',
