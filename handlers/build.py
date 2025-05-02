@@ -7,6 +7,7 @@ from telegram.ext import CommandHandler, ContextTypes
 from sheets_service import get_rows, append_row, update_row
 from utils.time_utils import format_hhmmss
 from utils.decorators import game_command
+from config import BUILDING_MAX_LEVEL
 
 BUILDINGS = {
     'mine': ('Mine', '⛏️'),
@@ -19,7 +20,8 @@ BUILDINGS = {
 @game_command
 async def build(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    /build <building> - start an upgrade (tick & upgrades via decorator).
+    /build <building> - start an upgrade (tick & upgrades via decorator),
+    enforcing a hard cap on building levels.
     """
     user = update.effective_user
     uid = str(user.id)
@@ -39,9 +41,36 @@ async def build(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode=ParseMode.MARKDOWN
         )
     btype, emoji = BUILDINGS[key]
-    now = time.time()
 
-    # Fetch player
+    # 1) Fetch current level
+    current_lvl = 0
+    buildings = get_rows('Buildings')
+    for row in buildings[1:]:
+        if row[0] == uid and row[1] == btype:
+            current_lvl = int(row[2]) if len(row) > 2 and row[2].isdigit() else 0
+            break
+
+    # 2) Check cap
+    max_lvl = BUILDING_MAX_LEVEL.get(btype, None)
+    if max_lvl is not None and current_lvl >= max_lvl:
+        return await update.message.reply_text(
+            f"🏆 *{btype}* is already max Level {max_lvl}!",
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    # 3) Compute next level & costs
+    L = current_lvl + 1
+    now = time.time()
+    if btype == 'Mine':
+        cC, cM, sec, eC = 100, 50 * L, 30 * 60 * L, 10 * L
+    elif btype == 'Power Plant':
+        cC, cM, sec, eC = 100, 30 * L, 20 * 60 * L, 8 * L
+    elif btype == 'Barracks':
+        cC, cM, sec, eC = 150, 70 * L, 45 * 60 * L, 12 * L
+    else:  # Workshop
+        cC, cM, sec, eC = 200, 100 * L, 60 * 60 * L, 15 * L
+
+    # 4) Fetch & check resources
     players = get_rows('Players')
     for pi, row in enumerate(players[1:], start=1):
         if row[0] == uid:
@@ -51,40 +80,24 @@ async def build(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await update.message.reply_text("❗ Run /start first.")
 
     credits, minerals, energy = map(int, (prow[3], prow[4], prow[5]))
-
-    # Fetch building
-    buildings = get_rows('Buildings')
-    cur_lvl = 0
-    existing = None
-    for bi, row in enumerate(buildings[1:], start=1):
-        if row[0] == uid and row[1] == btype:
-            cur_lvl = int(row[2]) if len(row) > 2 and row[2].isdigit() else 0
-            existing = (bi, row.copy())
-            break
-
-    L = cur_lvl + 1
-    # Compute cost & duration & energy cost
-    if btype == 'Mine':
-        cC, cM, sec, eC = 100, 50 * L, 30 * 60 * L, 10 * L
-    elif btype == 'Power Plant':
-        cC, cM, sec, eC = 100, 30 * L, 20 * 60 * L, 8 * L
-    elif btype == 'Barracks':
-        cC, cM, sec, eC = 150, 70 * L, 45 * 60 * L, 12 * L
-    else:
-        cC, cM, sec, eC = 200, 100 * L, 60 * 60 * L, 15 * L
-
     if credits < cC or minerals < cM or energy < eC:
         return await update.message.reply_text(
             f"❌ Need {cC}💳, {cM}⛏️, {eC}⚡.",
             parse_mode=ParseMode.MARKDOWN
         )
 
-    # Deduct resources
+    # 5) Deduct & schedule
     prow[3], prow[4], prow[5] = str(credits - cC), str(minerals - cM), str(energy - eC)
     update_row('Players', prow_idx, prow)
 
-    # Schedule upgrade
     end_ts = now + sec
+    # ensure we preserve existing row index & columns
+    existing = None
+    for bi, row in enumerate(buildings[1:], start=1):
+        if row[0] == uid and row[1] == btype:
+            existing = (bi, row.copy())
+            break
+
     if existing:
         bi, brow = existing
         while len(brow) < 4:
@@ -92,9 +105,9 @@ async def build(update: Update, context: ContextTypes.DEFAULT_TYPE):
         brow[3] = str(end_ts)
         update_row('Buildings', bi, brow)
     else:
-        append_row('Buildings', [uid, btype, str(cur_lvl), str(end_ts)])
+        append_row('Buildings', [uid, btype, str(current_lvl), str(end_ts)])
 
-    # Confirmation
+    # 6) Confirmation
     await update.message.reply_text(
         f"🔨 Upgrading {emoji} *{btype}* → Lvl {L}\n"
         f"Cost: {cC}💳 {cM}⛏️ {eC}⚡ | {format_hhmmss(sec)}",
