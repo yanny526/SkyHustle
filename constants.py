@@ -1,5 +1,4 @@
 # constants.py
-
 """
 This module defines shared constants for the SkyHustle game.
 """
