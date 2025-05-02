@@ -6,18 +6,24 @@ from telegram.ext import CommandHandler, ContextTypes
 
 async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    /menu - show list of available commands with emojis.
+    /menu - display the SkyHustle command menu, grouped by category
     """
     text = (
-        "🗺️ *Available Commands* 🗺️\n\n"
-        "🔹 `/status` – View your base status\n"
-        "🔹 `/build <building>` – Start or queue an upgrade\n"
-        "🔹 `/queue` – Show pending upgrades\n"
-        "🔹 `/train <unit> <count>` – Train new units\n"
-        "🔹 `/attack <user_id>` – Raid another commander\n"
-        "🔹 `/leaderboard` – See top commanders\n"
-        "\n"
-        "❓ Use `/status` first to see your starting resources!"
+        "📜 *SkyHustle Command Menu*\n\n"
+        "🛠️ *General*\n"
+        " • /start – Register or welcome back\n"
+        " • /help – Show help and command list\n"
+        " • /menu – Display this menu\n\n"
+        "🏰 *Base Management*\n"
+        " • /status – View your base status\n"
+        " • /build <building> – Upgrade a building (mine, powerplant, barracks, workshop)\n"
+        " • /queue – List pending building upgrades\n\n"
+        "⚔️ *Military Operations*\n"
+        " • /train <unit> <count> – Train units (infantry, tanks, artillery)\n"
+        " • /attack <CommanderName> – Attack another commander (costs 5⚡)\n"
+        " • /leaderboard – See top commanders by power\n\n"
+        "🔧 *Profile*\n"
+        " • /setname <name> – Set your unique commander name"
     )
     await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
