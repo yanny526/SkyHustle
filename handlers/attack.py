@@ -2,7 +2,7 @@
 
 import time
 import random
-from telegram import Update, ParseMode
+from telegram import Update
 from telegram.ext import CommandHandler, ContextTypes
 from sheets_service import get_rows, update_row, append_row
 
@@ -18,7 +18,7 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             "❗ Usage: `/attack <user_id>`\n"
             "Example: `/attack 123456789`",
-            parse_mode='Markdown'
+            parse_mode="Markdown"
         )
         return
 
@@ -36,21 +36,21 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
             attacker_row, atk_idx = row.copy(), idx
         if row[0] == target_id:
             defender_row, def_idx = row.copy(), idx
+
     if not defender_row:
         await update.message.reply_text("❌ Commander not found. Use /status to find friend IDs.")
         return
 
-    # Parse resources
+    # Parse credits
     atk_credits = int(attacker_row[3])
     def_credits = int(defender_row[3])
 
     # Load armies
     army = get_rows('Army')
     def get_power(urow):
-        uid = urow[0]
         inf = tanks = art = 0
         for r in army[1:]:
-            if r[0] == uid:
+            if r[0] == urow[0]:
                 if r[1] == 'infantry':
                     inf = int(r[2])
                 elif r[1] == 'tanks':
@@ -66,7 +66,6 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
     atk_roll = atk_power * random.uniform(0.9, 1.1)
     def_roll = def_power * random.uniform(0.9, 1.1)
 
-    # Determine outcome
     timestamp = int(time.time())
     if atk_roll > def_roll:
         result = 'win'
