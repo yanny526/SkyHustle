@@ -6,11 +6,13 @@ from telegram.ext import CommandHandler, ContextTypes
 from sheets_service import get_rows, update_row, append_row
 from utils.decorators import game_command
 from modules.unit_manager import get_unlocked_tier, UNITS
+import re
 
 @game_command
 async def train(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    /train <unit> <count> - train units. Only the current unlocked tier is allowed.
+    /train <unit> <count> - train units. Accepts snake_case, CamelCase, or display name.
+    Only the current unlocked tier is allowed.
     """
     uid = str(update.effective_user.id)
     args = context.args
@@ -21,7 +23,29 @@ async def train(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode=ParseMode.MARKDOWN
         )
 
-    key = args[0].lower()
+    raw_key = args[0]
+    # Normalize input to match unit keys
+    def generate_aliases(k, info):
+        display = info[0]
+        return {
+            k.lower(),
+            k.replace("_", "").lower(),
+            display.replace(" ", "").lower()
+        }
+
+    matches = [k for k, info in UNITS.items() if raw_key.lower() in generate_aliases(k, info)]
+    if not matches:
+        return await update.message.reply_text(
+            f"❌ Unknown unit *{raw_key}*.", parse_mode=ParseMode.MARKDOWN
+        )
+    if len(matches) > 1:
+        return await update.message.reply_text(
+            f"❌ Ambiguous unit name *{raw_key}* matches: {', '.join(matches)}.",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    key = matches[0]
+
+    # Parse count
     try:
         cnt = int(args[1])
         if cnt < 1:
@@ -29,12 +53,6 @@ async def train(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except ValueError:
         return await update.message.reply_text("❌ Count must be a positive integer.")
 
-    # Validate unit
-    if key not in UNITS:
-        return await update.message.reply_text(
-            f"❌ Unknown unit *{args[0]}*.",
-            parse_mode=ParseMode.MARKDOWN
-        )
     name, emoji, tier, power, cost = UNITS[key]
 
     # Check tier
@@ -88,3 +106,4 @@ async def train(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 handler = CommandHandler('train', train)
+```
