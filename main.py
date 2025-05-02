@@ -1,14 +1,12 @@
-# skyhustle-main/main.py
-
 import logging
 import os
 
 from telegram.ext import Application
 
 from config import BOT_TOKEN
-from sheets_service import init_sheets
+from sheets_service import init as init_sheets
 
-# bring in all of your command handlers
+# bring in all your command handlers
 from handlers.start       import handler as start_handler
 from handlers.setname     import handler as setname_handler
 from handlers.help        import handler as help_handler
@@ -22,13 +20,13 @@ from handlers.army        import handler as army_handler
 from handlers.leaderboard import handler as leaderboard_handler
 
 def main():
-    # 1) Ensure all your Google Sheets tabs & headers exist
+    # ensure your Sheets tabs & headers exist
     init_sheets()
 
-    # 2) Build your bot
+    # build your bot
     app = Application.builder().token(BOT_TOKEN).build()
 
-    # 3) Register every command handler
+    # register every command
     app.add_handler(start_handler)       # /start
     app.add_handler(setname_handler)     # /setname
     app.add_handler(help_handler)        # /help
@@ -41,7 +39,7 @@ def main():
     app.add_handler(army_handler)        # /army
     app.add_handler(leaderboard_handler) # /leaderboard
 
-    # 4) Start polling
+    # start polling
     app.run_polling()
 
 if __name__ == "__main__":
