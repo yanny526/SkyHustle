@@ -1,10 +1,26 @@
 #!/usr/bin/env python3
+import os
+import base64
 import logging
 from telegram.ext import Application
 from config import BOT_TOKEN
+
+# —————————————————————————————————————————
+# Decode your service account JSON from BASE64_CREDS
+# into SERVICE_ACCOUNT_INFO so sheets_service.py can load it.
+if not os.getenv("SERVICE_ACCOUNT_INFO"):
+    b64 = os.getenv("BASE64_CREDS")
+    if b64:
+        try:
+            decoded = base64.b64decode(b64).decode()
+            os.environ["SERVICE_ACCOUNT_INFO"] = decoded
+        except Exception as e:
+            logging.error(f"Failed to decode BASE64_CREDS: {e}")
+# —————————————————————————————————————————
+
 from sheets_service import init as sheets_init
 
-# Import every single handler
+# Import every handler so we can register them below
 from handlers.start        import handler as start_handler
 from handlers.setname      import handler as setname_handler
 from handlers.menu         import handler as menu_handler
@@ -18,19 +34,19 @@ from handlers.army         import handler as army_handler
 from handlers.leaderboard  import handler as leaderboard_handler
 
 def main():
-    # 0) Turn on logging so we can see errors in the logs
+    # Turn on logging (so if anything else blows up, it'll end up in your Render logs)
     logging.basicConfig(
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         level=logging.INFO,
     )
 
-    # 1) Make sure all your Google Sheets tabs & headers exist
+    # 1) Ensure your Sheets tabs & headers exist
     sheets_init()
 
-    # 2) Build the Telegram bot application
+    # 2) Build the Telegram bot
     app = Application.builder().token(BOT_TOKEN).build()
 
-    # 3) Register every command handler
+    # 3) Register all the commands
     app.add_handler(start_handler)        # /start
     app.add_handler(setname_handler)     # /setname
     app.add_handler(menu_handler)        # /menu
@@ -43,7 +59,7 @@ def main():
     app.add_handler(army_handler)        # /army
     app.add_handler(leaderboard_handler) # /leaderboard
 
-    # 4) Start polling for updates
+    # 4) Start polling
     app.run_polling()
 
 if __name__ == "__main__":
