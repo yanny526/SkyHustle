@@ -1,4 +1,3 @@
-```python
 # handlers/status.py
 
 import time
@@ -50,14 +49,13 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if regen_min or regen_eng:
         minerals += regen_min
         energy   += regen_eng
-        # update sheet row: [user_id, name, tg_username, credits, minerals, energy, last_seen]
         new_row = [uid, name, row[2], str(credits), str(minerals), str(energy), str(now)]
         update_row('Players', player_idx, new_row)
 
     # 5) Start building the message lines
     lines = []
 
-    # regen header
+    # regeneration header
     if regen_min or regen_eng:
         lines.append(f"🌱 +{regen_min} Minerals, +{regen_eng} Energy\n")
 
@@ -65,7 +63,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lines.append(f"🏰 *Base Status for {name}*")
     lines.append(f"💳 {credits}   ⛏️ {minerals}   ⚡ {energy}\n")
 
-    # buildings with current level and production/effects
+    # buildings with levels and production/effects
     lines.append("🏗️ *Buildings:*" )
     lines.append(f"• ⛏️ Mine (Lvl {binfo['Mine']}) → +{mineral_rate} minerals/hr")
     lines.append(f"• ⚡ Power Plant (Lvl {binfo['Power Plant']}) → +{energy_rate} energy/hr")
@@ -82,11 +80,10 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # army counts
     lines.append("⚔️ *Army:*" )
-    # prepare counts from sheet
     army_rows = get_rows('Army')
     counts = { r[1]: int(r[2]) for r in army_rows[1:] if r[0] == uid }
 
-    # group units by tier
+    # group and display units by tier
     tiers = {}
     for key, (display, emoji, tier, _, _) in UNITS.items():
         tiers.setdefault(tier, []).append((display, emoji, key))
@@ -100,5 +97,5 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
 
+# register handler
 handler = CommandHandler('status', status)
-```
