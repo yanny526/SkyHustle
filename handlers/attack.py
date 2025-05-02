@@ -5,67 +5,87 @@ import random
 from telegram import Update
 from telegram.ext import CommandHandler, ContextTypes
 from sheets_service import get_rows, update_row, append_row
+from modules.resource_manager import tick_resources
+from modules.upgrade_manager import complete_upgrades
 
 async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    /attack <user_id> - attack another commander by their Telegram user_id.
+    /attack <CommanderName> – attack another commander by their unique name.
     """
     user = update.effective_user
     uid = str(user.id)
-    args = context.args
 
+    # 1) Tick resources and complete any finished upgrades
+    tick_resources(uid)
+    done = complete_upgrades(uid)
+    if done:
+        msgs = "\n".join(f"✅ {b} upgrade complete! Now Lvl {lvl}."
+                         for b, lvl in done)
+        await update.message.reply_text(msgs)
+
+    args = context.args
     if not args:
-        await update.message.reply_text(
-            "❗ Usage: `/attack <user_id>`\n"
-            "Example: `/attack 123456789`",
+        return await update.message.reply_text(
+            "❗ Usage: `/attack <CommanderName>`\n"
+            "Example: `/attack IronLegion`",
             parse_mode="Markdown"
         )
-        return
 
-    target_id = args[0]
-    if target_id == uid:
-        await update.message.reply_text("❌ You cannot attack yourself!")
-        return
-
-    # Load players
+    target_name = args[0]
+    # Load all players
     players = get_rows('Players')
     attacker_row = defender_row = None
     atk_idx = def_idx = None
+
     for idx, row in enumerate(players[1:], start=1):
+        # row = [user_id, commander_name, telegram_username, credits, minerals, energy, last_seen]
         if row[0] == uid:
             attacker_row, atk_idx = row.copy(), idx
-        if row[0] == target_id:
+        if row[1] == target_name:
             defender_row, def_idx = row.copy(), idx
 
+    # Validate target exists
     if not defender_row:
-        await update.message.reply_text(
-            "❌ Commander not found. Use /status to find friend IDs.",
+        return await update.message.reply_text(
+            f"❌ Commander *{target_name}* not found. "
+            "Make sure they’ve set their name with `/setname`.",
             parse_mode="Markdown"
         )
-        return
 
-    # Parse credits
+    # Prevent self-attack
+    if defender_row[0] == uid:
+        return await update.message.reply_text(
+            "❌ You cannot attack yourself!",
+            parse_mode="Markdown"
+        )
+
+    # Commander names
+    attacker_name = attacker_row[1] or user.first_name
+
+    # Parse and update credits
     atk_credits = int(attacker_row[3])
     def_credits = int(defender_row[3])
 
-    # Load armies
-    army = get_rows('Army')
-    def get_power(urow):
-        inf = tanks = art = 0
-        for r in army[1:]:
-            if r[0] == urow[0]:
-                if r[1] == 'infantry':
-                    inf = int(r[2])
-                elif r[1] == 'tanks':
-                    tanks = int(r[2])
-                elif r[1] == 'artillery':
-                    art = int(r[2])
-        return inf * 10 + tanks * 50 + art * 100
+    # Calculate power from army
+    def calc_power(urow):
+        total = 0
+        for r in get_rows('Army')[1:]:
+            if r[0] != urow[0]:
+                continue
+            count = int(r[2])
+            unit = r[1].lower()
+            if unit == 'infantry':
+                total += count * 10
+            elif unit == 'tanks':
+                total += count * 50
+            elif unit == 'artillery':
+                total += count * 100
+        return total
 
-    atk_power = get_power(attacker_row)
-    def_power = get_power(defender_row)
+    atk_power = calc_power(attacker_row)
+    def_power = calc_power(defender_row)
 
-    # Apply randomness
+    # Randomized rolls
     atk_roll = atk_power * random.uniform(0.9, 1.1)
     def_roll = def_power * random.uniform(0.9, 1.1)
 
@@ -75,15 +95,21 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
         spoils = max(1, def_credits // 10)
         atk_credits += spoils
         def_credits -= spoils
-        msg = f"🏆 Victory! You stole {spoils} 💳 from Commander {target_id}."
+        msg = (
+            f"🏆 *{attacker_name}* defeated *{target_name}*!\n"
+            f"Stole {spoils}💳."
+        )
     else:
         result = 'loss'
         spoils = max(1, atk_credits // 20)
         atk_credits -= spoils
         def_credits += spoils
-        msg = f"💥 Defeat! Commander {target_id} stole {spoils} 💳 from you."
+        msg = (
+            f"💥 *{attacker_name}* was defeated by *{target_name}*!\n"
+            f"{target_name} stole {spoils}💳 from you."
+        )
 
-    # Update player resources
+    # Update Players sheet
     attacker_row[3] = str(atk_credits)
     defender_row[3] = str(def_credits)
     update_row('Players', atk_idx, attacker_row)
@@ -91,9 +117,14 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Log combat
     append_row('CombatLog', [
-        uid, target_id, str(timestamp), result, str(spoils)
+        uid,
+        defender_row[0],  # target's user_id
+        str(timestamp),
+        result,
+        str(spoils)
     ])
 
-    await update.message.reply_text(msg)
+    # Send result
+    await update.message.reply_text(msg, parse_mode="Markdown")
 
 handler = CommandHandler('attack', attack)
