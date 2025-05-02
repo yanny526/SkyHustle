@@ -38,7 +38,10 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
             defender_row, def_idx = row.copy(), idx
 
     if not defender_row:
-        await update.message.reply_text("❌ Commander not found. Use /status to find friend IDs.")
+        await update.message.reply_text(
+            "❌ Commander not found. Use /status to find friend IDs.",
+            parse_mode="Markdown"
+        )
         return
 
     # Parse credits
@@ -57,7 +60,7 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     tanks = int(r[2])
                 elif r[1] == 'artillery':
                     art = int(r[2])
-        return inf*10 + tanks*50 + art*100
+        return inf * 10 + tanks * 50 + art * 100
 
     atk_power = get_power(attacker_row)
     def_power = get_power(defender_row)
