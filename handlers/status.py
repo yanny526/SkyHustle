@@ -60,7 +60,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lines.append(f"🌱 +{regen_min} Minerals, +{regen_eng} Energy\n")
 
     # base header
-    lines.append(f"🏰 *Base Status for {name}*")
+    lines.append(f"🏰 *Base Status for {name}* 🏰")
     lines.append(f"💳 {credits}   ⛏️ {minerals}   ⚡ {energy}\n")
 
     # buildings with levels and production/effects
