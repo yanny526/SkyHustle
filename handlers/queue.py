@@ -1,7 +1,8 @@
 # handlers/queue.py
 
 import time
-from telegram import Update, ParseMode
+from telegram import Update
+from telegram.constants import ParseMode
 from telegram.ext import CommandHandler, ContextTypes
 from sheets_service import get_rows
 from utils.time_utils import format_hhmmss
