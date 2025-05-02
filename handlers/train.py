@@ -6,7 +6,6 @@ from telegram.ext import CommandHandler, ContextTypes
 from sheets_service import get_rows, update_row, append_row
 from utils.decorators import game_command
 from modules.unit_manager import get_unlocked_tier, UNITS
-import re
 
 @game_command
 async def train(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -106,4 +105,3 @@ async def train(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 handler = CommandHandler('train', train)
-```
