@@ -15,7 +15,16 @@ def format_cost(cost: dict) -> str:
 async def army(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """ /army - show your army counts and tier unlocks """
     uid = str(update.effective_user.id)
-    name = update.effective_user.first_name
+
+    # Fetch the player's in-game name from the Players sheet
+    players = get_rows('Players')[1:]
+    game_name = None
+    for row in players:
+        if row[0] == uid:
+            game_name = row[1]
+            break
+    if not game_name:
+        game_name = update.effective_user.first_name
 
     # Get current counts from the Army sheet
     army_rows = get_rows('Army')[1:]
@@ -29,7 +38,7 @@ async def army(update: Update, context: ContextTypes.DEFAULT_TYPE):
     unlocked = get_unlocked_tier(uid)
     all_units = get_all_units_by_tier()
 
-    lines = [f"🎖️ *{name}’s Army*", ""]
+    lines = [f"🎖️ *{game_name}’s Army*", ""]
     for tier in sorted(all_units.keys()):
         if tier < unlocked:
             status = f"*Tier {tier} – Expired*"
