@@ -1,6 +1,7 @@
 # handlers/menu.py
 
-from telegram import Update, ParseMode
+from telegram import Update
+from telegram.constants import ParseMode
 from telegram.ext import CommandHandler, ContextTypes
 
 async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
