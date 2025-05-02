@@ -1,81 +1,76 @@
 # modules/upgrade_manager.py
 
 import time
-from sheets_service import get_rows, update_row
-from config import BUILDING_MAX_LEVEL
+from sheets_service import get_rows, append_row, clear_range
+
+# Range of the Upgrades sheet (columns A–E)
+UPGRADES_RANGE = 'Upgrades!A:E'
+
+async def initiate_upgrade(user_id: str, building: str, current_lvl: int, duration: int):
+    """
+    Schedule a new building upgrade for user_id.
+    building: name of building (e.g., 'Barracks')
+    current_lvl: its current level
+    duration: seconds until completion
+    """
+    start_ts = int(time.time())
+    target_lvl = current_lvl + 1
+    append_row(UPGRADES_RANGE, [user_id, building, str(target_lvl), str(start_ts), str(duration)])
 
 
-def complete_upgrades(user_id: str):
+def complete_upgrades(user_id: str) -> None:
     """
-    For each building upgrade whose end_ts has passed:
-    - Increase the building's level if below cap.
-    - Clear the upgrade timestamp.
+    Check the Upgrades sheet for any finished upgrades for user_id,
+    apply them and remove completed rows.
     """
-    rows = get_rows('Buildings')
+    rows = get_rows(UPGRADES_RANGE)
+    if not rows or len(rows) < 2:
+        return
+    header, *data = rows
+    keep = []
     now = int(time.time())
-
-    # Skip header row; enumerate idx starts at 1 for sheet indexing
-    for idx, row in enumerate(rows[1:], start=1):
-        # Need at least 4 columns: uid, building, level, end_ts
-        if len(row) < 4:
+    for row in data:
+        if len(row) < 5:
             continue
-        uid, btype, lvl_str, ts_str = row[0], row[1], row[2], row[3]
-        if uid != user_id or not ts_str:
-            continue
-
-        # Parse end timestamp
-        try:
-            end_ts = int(float(ts_str))
-        except (ValueError, TypeError):
-            # Invalid timestamp; clear it
-            row[3] = ''
-            update_row('Buildings', idx, row)
-            continue
-
-        # If upgrade has completed:
-        if now >= end_ts:
-            # Determine current level
-            curr_lvl = int(lvl_str) if lvl_str.isdigit() else 0
-            max_lvl = BUILDING_MAX_LEVEL.get(btype)
-            if max_lvl is not None and curr_lvl >= max_lvl:
-                # At cap: just clear the timestamp
-                row[3] = ''
-                update_row('Buildings', idx, row)
-                continue
-
-            # Perform the level-up
-            row[2] = str(curr_lvl + 1)
-            row[3] = ''
-            update_row('Buildings', idx, row)
+        uid, building, target_str, start_str, dur_str = row
+        start = int(start_str)
+        dur   = int(dur_str)
+        finish = start + dur
+        if uid == user_id and now >= finish:
+            # apply upgrade
+            from modules.building_manager import set_building_level
+            set_building_level(user_id, building, int(target_str))
+        else:
+            keep.append(row)
+    # rewrite the sheet: clear and re-append header + remaining
+    clear_range(UPGRADES_RANGE)
+    append_row(UPGRADES_RANGE, header)
+    for r in keep:
+        append_row(UPGRADES_RANGE, r)
 
 
-def get_pending_upgrades(user_id: str) -> list[tuple[str, str, str]]:
+def get_pending_upgrades(user_id: str) -> list[tuple[str,int,str]]:
     """
-    Return a list of (building_name, target_level, remaining_time_str)
-    for all upgrades still in progress for this user.
+    Return a list of (building, target_level, remaining_time_str) for all
+    upgrades still in progress for user_id.
     """
-    rows = get_rows('Upgrades')[1:]  # skip header
+    rows = get_rows(UPGRADES_RANGE)
+    if not rows or len(rows) < 2:
+        return []
     pending = []
-    now_ts = time.time()
-
-    for r in rows:
-        # Expect at least [uid, building, start_ts, end_ts, target_level]
-        if len(r) < 5 or r[0] != user_id:
+    now = int(time.time())
+    for row in rows[1:]:  # skip header
+        if len(row) < 5:
             continue
-        bname      = r[1]
-        end_ts_str = r[3]
-        target_lvl = r[4]
-
-        try:
-            end_ts = float(end_ts_str)
-        except (ValueError, TypeError):
+        uid, building, target_str, start_str, dur_str = row
+        if uid != user_id:
             continue
-
-        rem = end_ts - now_ts
+        start = int(start_str)
+        dur   = int(dur_str)
+        rem = start + dur - now
         if rem > 0:
-            hrs, rem_sec = divmod(int(rem), 3600)
-            mins, secs  = divmod(rem_sec, 60)
-            remaining = f"{hrs:02d}:{mins:02d}:{secs:02d}"
-            pending.append((bname, target_lvl, remaining))
-
+            h = rem // 3600
+            m = (rem % 3600) // 60
+            s = rem % 60
+            pending.append((building, int(target_str), f"{h:02d}:{m:02d}:{s:02d}"))
     return pending
