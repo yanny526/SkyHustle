@@ -1,15 +1,23 @@
-from telegram import Update
-from telegram.ext import CommandHandler, CallbackContext
+# handlers/menu.py
 
-def handler(update: Update, context: CallbackContext):
+from telegram import Update, ParseMode
+from telegram.ext import CommandHandler, ContextTypes
+
+async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /menu - show list of available commands with emojis.
+    """
     text = (
-        "🔹 /status - Base status\n"
-        "🔹 /build <building> - Upgrade/build\n"
-        "🔹 /queue - Pending upgrades\n"
-        "🔹 /train <unit> <count> - Train units\n"
-        "🔹 /attack <user_id> - Attack player\n"
-        "🔹 /leaderboard - Top players"
+        "🗺️ *Available Commands* 🗺️\n\n"
+        "🔹 `/status` – View your base status\n"
+        "🔹 `/build <building>` – Start or queue an upgrade\n"
+        "🔹 `/queue` – Show pending upgrades\n"
+        "🔹 `/train <unit> <count>` – Train new units\n"
+        "🔹 `/attack <user_id>` – Raid another commander\n"
+        "🔹 `/leaderboard` – See top commanders\n"
+        "\n"
+        "❓ Use `/status` first to see your starting resources!"
     )
-    update.message.reply_text(text)
+    await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
-handler = CommandHandler('menu', handler)
+handler = CommandHandler('menu', menu)
