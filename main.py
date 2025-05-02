@@ -4,7 +4,7 @@ from telegram.ext import Application
 from config import BOT_TOKEN
 from sheets_service import init as sheets_init
 
-# Import every handler
+# Import every single handler
 from handlers.start        import handler as start_handler
 from handlers.setname      import handler as setname_handler
 from handlers.menu         import handler as menu_handler
@@ -18,19 +18,19 @@ from handlers.army         import handler as army_handler
 from handlers.leaderboard  import handler as leaderboard_handler
 
 def main():
-    # Enable logging
+    # 0) Turn on logging so we can see errors in the logs
     logging.basicConfig(
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         level=logging.INFO,
     )
 
-    # 1) Ensure all Sheets tabs & headers exist
+    # 1) Make sure all your Google Sheets tabs & headers exist
     sheets_init()
 
-    # 2) Build the Telegram application
+    # 2) Build the Telegram bot application
     app = Application.builder().token(BOT_TOKEN).build()
 
-    # 3) Register all command handlers
+    # 3) Register every command handler
     app.add_handler(start_handler)        # /start
     app.add_handler(setname_handler)     # /setname
     app.add_handler(menu_handler)        # /menu
@@ -43,7 +43,7 @@ def main():
     app.add_handler(army_handler)        # /army
     app.add_handler(leaderboard_handler) # /leaderboard
 
-    # 4) Start polling
+    # 4) Start polling for updates
     app.run_polling()
 
 if __name__ == "__main__":
