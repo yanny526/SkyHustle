@@ -19,7 +19,7 @@ async def queue(update: Update, context: ContextTypes.DEFAULT_TYPE):
     now = time.time()
 
     # 1) Tick resources
-    added = tick_resources(uid)
+    _ = tick_resources(uid)
 
     # 2) Complete any finished upgrades
     done = complete_upgrades(uid)
@@ -30,16 +30,27 @@ async def queue(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         await update.message.reply_text(msgs)
 
-    # 3) Fetch pending upgrades
+    # 3) Fetch pending upgrades safely
     pending = []
     for row in get_rows('Buildings')[1:]:
         if row[0] != uid:
             continue
-        lvl = int(row[2])
-        if row[3]:
-            end_ts = float(row[3])
-            if end_ts > now:
-                pending.append((row[1], lvl + 1, end_ts))
+
+        # safely parse current level
+        if len(row) > 2 and row[2].isdigit():
+            lvl = int(row[2])
+        else:
+            lvl = 0
+
+        # only attempt end_ts if column exists
+        if len(row) > 3 and row[3]:
+            try:
+                end_ts = float(row[3])
+                if end_ts > now:
+                    pending.append((row[1], lvl + 1, end_ts))
+            except ValueError:
+                # skip malformed timestamps
+                continue
 
     # 4) Respond
     if not pending:
