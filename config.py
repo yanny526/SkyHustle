@@ -6,14 +6,15 @@ These settings include the Telegram Bot API token, Google Sheets API credentials
 and the ID of the Google Sheet used for data storage.
 """
 
+import os
 # Telegram Bot API Token
 # Replace with your actual bot token.
-BOT_TOKEN = "YOUR_BOT_TOKEN"  # Important: Keep this secure! #Will be read from environment variable
+BOT_TOKEN = os.environ["BOT_TOKEN"]
 
 # Google Sheets API Credentials (Base64 encoded JSON)
 #  Replace with the Base64 encoded content of your Google Sheets API credentials JSON file.
-BASE64_CREDS = "YOUR_BASE64_CREDS" #Will be read from environment variable
-# Google Sheets ID
+BASE64_CREDS = os.environ["BASE64_CREDS"]
+SHEET_ID = os.environ["SHEET_ID"]
 # Replace with the ID of your Google Sheet.
 # You can find this in the URL of your Google Sheet.
 SHEET_ID = "YOUR_SHEET_KEY"  # Example: "1BQiubVRjRTFvD-3j6FZoR97Z_65e99cK4" #Will be read from environment variable
