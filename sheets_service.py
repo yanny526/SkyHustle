@@ -1,71 +1,129 @@
+# sheets_service.py
+
+import time
 import os
 import base64
 import json
+from config import SERVICE_ACCOUNT_INFO, SHEET_ID
+from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
-from google.oauth2.service_account import Credentials
 
-from config import BASE64_CREDS, SHEET_ID
-
-# Decode and build credentials
-SERVICE_ACCOUNT_INFO = json.loads(base64.b64decode(BASE64_CREDS).decode())
-SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
+# Google Sheets API setup
+SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 _creds = Credentials.from_service_account_info(SERVICE_ACCOUNT_INFO, scopes=SCOPES)
-_service = build("sheets", "v4", credentials=_creds)
+_service = build('sheets', 'v4', credentials=_creds)
 
-def get_rows(tab_name: str) -> list[list[str]]:
+# List of core tabs your game needs
+REQUIRED_SHEETS = [
+    'Players',
+    'Buildings',
+    'Army',
+    'CombatLog',
+    'Leaderboard',
+    'Upgrades',
+]
+
+# Default header row for each tab
+_HEADERS = {
+    'Players':     ['user_id', 'commander_name', 'telegram_username', 'credits', 'minerals', 'energy', 'last_seen'],
+    'Buildings':   ['user_id', 'building_type', 'level', 'upgrade_end_ts'],
+    'Army':        ['user_id', 'unit_type', 'count'],
+    'CombatLog':   ['attacker_id', 'defender_id', 'timestamp', 'result', 'spoils_credits'],
+    'Leaderboard': ['user_id', 'total_power', 'rank'],
+    'Upgrades':    ['user_id', 'building_type', 'start_ts', 'end_ts', 'target_level'],
+}
+
+def init():
     """
-    Read all values from the given sheet/tab.
-    Returns a list of rows, each row is a list of cell strings.
+    Ensure all REQUIRED_SHEETS exist and have the correct header row.
+    Call this once at startup (your main.py does so via sheets_init()).
     """
-    range_name = f"{tab_name}!A1:Z"
-    try:
-        result = _service.spreadsheets().values().get(
+    # 1) Create any missing sheets
+    resp = _service.spreadsheets().get(spreadsheetId=SHEET_ID, fields='sheets.properties.title').execute()
+    existing = {s['properties']['title'] for s in resp.get('sheets', [])}
+
+    requests = []
+    for title in REQUIRED_SHEETS:
+        if title not in existing:
+            requests.append({'addSheet': {'properties': {'title': title}}})
+
+    if requests:
+        _service.spreadsheets().batchUpdate(
             spreadsheetId=SHEET_ID,
-            range=range_name
+            body={'requests': requests}
         ).execute()
-        return result.get("values", [])
-    except HttpError:
-        # Propagate to caller
-        raise
 
-def update_row(tab_name: str, idx: int, row: list[str]):
+    # 2) Ensure each sheet has the correct header row
+    for sheet_name, header in _HEADERS.items():
+        _ensure_header_row(sheet_name, header)
+
+def _ensure_header_row(sheet_name: str, header: list[str]):
     """
-    Overwrite row at zero-based index `idx` (plus header) with the given list.
+    Check the first row of `sheet_name`; if it doesn't match `header`, overwrite it.
     """
-    range_name = f"{tab_name}!A{idx+1}:Z{idx+1}"
+    range_name = f"{sheet_name}!1:1"
+    result = _service.spreadsheets().values().get(
+        spreadsheetId=SHEET_ID,
+        range=range_name
+    ).execute()
+    existing = result.get('values', [])
+    if not existing or existing[0] != header:
+        _service.spreadsheets().values().update(
+            spreadsheetId=SHEET_ID,
+            range=range_name,
+            valueInputOption='RAW',
+            body={'values': [header]}
+        ).execute()
+
+def get_rows(sheet_name: str) -> list[list[str]]:
+    """
+    Return all rows (including header) from the given sheet.
+    """
+    time.sleep(0.5)  # guard against eventual consistency after modifications
+    range_name = f"{sheet_name}!A1:Z"
+    resp = _service.spreadsheets().values().get(
+        spreadsheetId=SHEET_ID,
+        range=range_name
+    ).execute()
+    return resp.get('values', [])
+
+def update_row(sheet_name: str, row_index: int, values: list[str]):
+    """
+    Overwrite the row at zero-based `row_index` in `sheet_name` with `values`.
+    """
+    a1 = f"{sheet_name}!A{row_index+1}:Z{row_index+1}"
     _service.spreadsheets().values().update(
         spreadsheetId=SHEET_ID,
-        range=range_name,
-        valueInputOption="RAW",
-        body={"values": [row]}
+        range=a1,
+        valueInputOption='RAW',
+        body={'values': [values]}
     ).execute()
 
-def append_row(tab_name: str, row: list[str]):
+def append_row(sheet_name: str, values: list[str]):
     """
-    Append a single new row to the bottom of the sheet.
+    Append a single row of `values` to the bottom of `sheet_name`.
     """
     _service.spreadsheets().values().append(
         spreadsheetId=SHEET_ID,
-        range=f"{tab_name}!A1:Z",
-        valueInputOption="RAW",
-        insertDataOption="INSERT_ROWS",
-        body={"values": [row]}
+        range=f"{sheet_name}!A1:Z",
+        valueInputOption='RAW',
+        insertDataOption='INSERT_ROWS',
+        body={'values': [values]}
     ).execute()
 
-def clear_sheet(tab_name: str):
+def clear_sheet(sheet_name: str):
     """
-    Delete all data below the header in the sheet.
+    Delete all data below the header in `sheet_name`.
     """
     _service.spreadsheets().values().clear(
         spreadsheetId=SHEET_ID,
-        range=f"{tab_name}!A2:Z"
+        range=f"{sheet_name}!A2:Z"
     ).execute()
 
 def ensure_sheet(tab_name: str, header: list[str]):
     """
-    Ensure that a sheet/tab named `tab_name` exists.
-    If missing, create it and write the provided header as row 1.
+    Auto-create a single tab with the given header if it does not exist.
     """
     meta = _service.spreadsheets().get(
         spreadsheetId=SHEET_ID,
@@ -74,12 +132,9 @@ def ensure_sheet(tab_name: str, header: list[str]):
     titles = [s["properties"]["title"] for s in meta.get("sheets", [])]
 
     if tab_name not in titles:
+        # Create the new tab
         _service.spreadsheets().batchUpdate(
             spreadsheetId=SHEET_ID,
-            body={
-                "requests": [
-                    {"addSheet": {"properties": {"title": tab_name}}}
-                ]
-            }
+            body={"requests": [{"addSheet": {"properties": {"title": tab_name}}}]}
         ).execute()
         append_row(tab_name, header)
