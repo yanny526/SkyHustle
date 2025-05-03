@@ -1,5 +1,3 @@
-# handlers/build.py
-
 import time
 from telegram import Update
 from telegram.constants import ParseMode
@@ -116,9 +114,9 @@ async def build(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await update.message.reply_text(confirm_text, parse_mode=ParseMode.MARKDOWN)
 
-    # 7) QUEST PROGRESSION STEP: Upgrade Power Plant
+    # 7) QUEST PROGRESSION STEP 2: Upgrade Power Plant
     if btype == "Power Plant":
-        # ensure prow matches header length
+        # step2 reward
         header = players[0]
         while len(prow) < len(header):
             prow.append("")
@@ -134,5 +132,12 @@ async def build(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "`/train infantry 5`",
                 parse_mode=ParseMode.MARKDOWN
             )
+
+        # ← NEW: track weekly challenge
+        from modules.challenge_manager import load_challenges, update_player_progress
+        for ch in load_challenges('weekly'):
+            if ch.key == 'powerplant_upgrades':
+                update_player_progress(uid, ch)
+                break
 
 handler = CommandHandler('build', build)
