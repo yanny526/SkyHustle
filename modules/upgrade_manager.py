@@ -70,11 +70,8 @@ def apply_building_level(uid: str, building: str, new_level: int):
 def get_pending_upgrades(user_id: str) -> list[dict]:
     """
     Fetch all pending upgrades for the given user.
-    Returns a list of dicts: {
-        'bname': building_name (str),
-        'target_lvl': level (int),
-        'end_ts': timestamp (float)
-    }.
+    Returns a list of dicts:
+      {'bname': str, 'target_lvl': int, 'end_ts': float}
     """
     rows = get_rows('Upgrades')
     pending = []
