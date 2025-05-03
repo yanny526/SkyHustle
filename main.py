@@ -1,8 +1,10 @@
 # main.py
 
+import asyncio
 from config import BOT_TOKEN
 from sheets_service import init as sheets_init
 
+from telegram import BotCommand
 from telegram.ext import (
     Application,
     MessageHandler,
@@ -22,7 +24,18 @@ from handlers.help import handler as help_handler
 from handlers.army import handler as army_handler
 from handlers.callbacks import handler as menu_callback_handler  # ✅ NEW
 
-def main():
+async def set_bot_commands(application):
+    commands = [
+        BotCommand("menu", "Show game menu"),
+        BotCommand("army", "View your army"),
+        BotCommand("status", "View your base status"),
+        BotCommand("queue", "Check build/train queues"),
+        BotCommand("leaderboard", "View top commanders"),
+        BotCommand("help", "Show help and all commands"),
+    ]
+    await application.bot.set_my_commands(commands)
+
+async def main():
     # 1) Auto-create sheets & headers
     sheets_init()
 
@@ -34,7 +47,7 @@ def main():
     app.add_handler(setname_handler)
     app.add_handler(menu_handler)
     app.add_handler(status_handler)
-    app.add_handler(status_callback)    # ← inline-button callbacks
+    app.add_handler(status_callback)
     app.add_handler(build_handler)
     app.add_handler(queue_handler)
     app.add_handler(train_handler)
@@ -42,15 +55,18 @@ def main():
     app.add_handler(leaderboard_handler)
     app.add_handler(help_handler)
     app.add_handler(army_handler)
-    app.add_handler(menu_callback_handler)  # ✅ NEW
+    app.add_handler(menu_callback_handler)
 
-    # 4) Catch-all for unknown commands
+    # 4) Set up Telegram-suggested commands (under chat bar)
+    await set_bot_commands(app)
+
+    # 5) Catch-all for unknown commands
     async def unknown(update, context):
         await update.message.reply_text("❓ Unknown command. Use /help.")
     app.add_handler(MessageHandler(filters.COMMAND, unknown))
 
-    # 5) Start polling
-    app.run_polling()
+    # 6) Start polling
+    await app.run_polling()
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
