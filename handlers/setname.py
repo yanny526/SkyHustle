@@ -8,7 +8,8 @@ from sheets_service import get_rows, update_row
 
 async def setname(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    /setname <name> - Set your unique commander name and unlock your first reward.
+    /setname <name> - set your commander name, grant first reward,
+    then deliver the second quest.
     """
     user = update.effective_user
     uid = str(user.id)
@@ -16,77 +17,71 @@ async def setname(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not args:
         return await update.message.reply_text(
-            "❗ Usage: `/setname <YourName>`\n"
-            "Example: `/setname IronLegion`",
+            "❗ Usage: `/setname <YourName>`\nExample: `/setname IronLegion`",
             parse_mode=ParseMode.MARKDOWN
         )
 
     name = args[0].strip()
     if not name.replace("_", "").isalnum():
         return await update.message.reply_text(
-            "🚫 Invalid name. Only letters, numbers, and underscores are allowed (no spaces or symbols)."
+            "🚫 Invalid name. Letters, numbers & underscores only."
         )
 
     rows = get_rows("Players")
-    name_taken = any(row[1].strip().lower() == name.lower() for row in rows[1:] if len(row) > 1)
-
-    if name_taken:
+    taken = {r[1].strip().lower() for r in rows[1:] if r[1]}
+    if name.lower() in taken:
         return await update.message.reply_text(
-            f"⚠️ The name *{name}* is already taken.\nTry a unique variation like `{name}_X`.",
+            f"⚠️ Name *{name}* is taken. Try `{name}X`.",
             parse_mode=ParseMode.MARKDOWN
         )
 
+    # update name & check first-time
     for idx, row in enumerate(rows):
-        if idx == 0:
-            continue
+        if idx == 0: continue
         if row[0] == uid:
-            is_first_time = row[1].strip() in ["", "leader", "commander"]
-            row[1] = name  # Update the commander name
+            first_time = row[1].strip() == ""
+            row[1] = name
+            # persist name
+            update_row("Players", idx, row)
 
-            # 🏆 First-time reward logic
-            if is_first_time and (len(row) < 8 or row[7].strip() == ""):
-                while len(row) < 8:
-                    row.append("")
-                row[5] = str(int(row[5]) + 500)  # +500 energy
+            if first_time:
+                # reward +500 energy and mark progress
+                energy = int(row[5]) + 500
+                row[5] = str(energy)
                 row[7] = "step1"
                 update_row("Players", idx, row)
 
-                # Send reward + onboarding task
+                # 1) Confirmation & reward
                 await update.message.reply_text(
-                    f"✅ Your new commander name is *{name}*!\n"
-                    "🎁 You’ve earned *+500 ⚡ Energy* for completing your first task!",
+                    f"✅ Commander name set to *{name}*!\n"
+                    "🎁 You’ve earned +500 ⚡ Energy for completing Task 1.",
                     parse_mode=ParseMode.MARKDOWN
                 )
 
-                intro = (
-                    "🌍 *The world is in ruins.*\n"
-                    "You are the last hope of your region.\n"
+                # 2) Next storyline + quest
+                text2 = (
+                    "🛡️ *You are the last hope of your region.*\n"
                     "Command your base, rebuild power, and rise to dominate.\n\n"
-                    "🧰 You’ve received a starter pack:\n"
-                    "💳 1000 Credits\n⛏️ 1000 Minerals\n⚡ 1000 Energy\n\n"
-                    "📋 *Your first task:*\n"
+                    "🧾 *Your second task:*\n"
                     "`/build powerplant` – Start generating energy.\n\n"
-                    "After that, use `/status` to check your base.\n"
-                    "_You can always open /menu for commands._"
+                    "🎁 *On completion you’ll earn:* +100 ⛏️ Minerals\n"
+                    "After that, check `/status` to view your base."
                 )
-
-                reply_markup = ReplyKeyboardMarkup(
+                markup2 = ReplyKeyboardMarkup(
                     [[KeyboardButton("/build powerplant")], [KeyboardButton("/status")]],
                     resize_keyboard=True
                 )
+                return await update.message.reply_text(text2, parse_mode=ParseMode.MARKDOWN, reply_markup=markup2)
 
-                return await update.message.reply_text(intro, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
-
-            # Just a name update, no reward
-            update_row("Players", idx, row)
+            # if not first_time
             return await update.message.reply_text(
-                f"✅ Commander name updated to *{name}*!\n"
-                "Use /menu to begin your conquest.",
+                f"✅ Commander name updated to *{name}*.\nUse /menu to continue.",
                 parse_mode=ParseMode.MARKDOWN
             )
 
+    # not registered
     await update.message.reply_text(
-        "❗ You are not registered yet. Use /start first.",
+        "❗ You need to run `/start` first to register.",
         parse_mode=ParseMode.MARKDOWN
     )
 
