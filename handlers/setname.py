@@ -72,7 +72,7 @@ async def setname(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "🧾 *Your second task:*\n"
                     "`/build powerplant` – Start generating energy.\n\n"
                     "🎁 *On completion you’ll earn:* +100 ⛏️ Minerals\n"
-                    "After that, use `/status` to view your base."
+                    
                 )
                 markup2 = ReplyKeyboardMarkup(
                     [[KeyboardButton("/build powerplant")], [KeyboardButton("/status")]],
