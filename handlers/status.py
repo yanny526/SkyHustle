@@ -31,12 +31,11 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 1) Return cached if still fresh
     cache = STATUS_CACHE.get(uid)
     if cache and now - cache["time"] < CACHE_TTL:
-        await update.message.reply_text(
+        return await update.message.reply_text(
             cache["text"],
             parse_mode=ParseMode.MARKDOWN,
-            reply_markup=cache["keyboard"],
+            reply_markup=cache["keyboard"]
         )
-        return
 
     # 2) Load player row
     players = get_rows("Players")
@@ -46,22 +45,21 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
             credits, minerals, energy = map(int, row[3:6])
             break
     else:
-        await update.message.reply_text("❗ Please run /start first.")
-        return
+        return await update.message.reply_text("❗ Please run /start first.")
 
     # 3) Historical deltas
     prev = cache["resources"] if cache else {}
     deltas = {
         "credits": (credits - prev.get("credits", credits)) if "credits" in prev else None,
         "minerals": (minerals - prev.get("minerals", minerals)) if "minerals" in prev else None,
-        "energy":   (energy   - prev.get("energy", energy))   if "energy"   in prev else None,
+        "energy": (energy - prev.get("energy", energy)) if "energy" in prev else None,
     }
 
     # 4) Buildings & rates
     binfo = get_building_info(uid)
     rates = get_production_rates(binfo)
 
-    # 5) Build header and resource lines
+    # 5) Build lines
     lines = [
         f"🏰 *Status for {name}*",
         "",
@@ -76,9 +74,9 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "",
         "🏗️ *Buildings:*",
     ]
+    health = get_building_health(uid)
     for btype, lvl in binfo.items():
         line = f" • {btype}: Lvl {lvl}"
-        health = get_building_health(uid)
         if btype in health:
             cur, mx = health[btype]["current"], health[btype]["max"]
             line += f" (HP {cur}/{mx})"
@@ -86,8 +84,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # 6) Upgrades in Progress
     pending = get_pending_upgrades(uid)
-    lines.append("")  # spacer
-    lines.append("⏳ *Upgrades in Progress:*")
+    lines += ["", "⏳ *Upgrades in Progress:*"]
     if pending:
         for upg in sorted(pending, key=lambda x: x["end_ts"]):
             rem = int(upg["end_ts"] - now.timestamp())
@@ -99,17 +96,16 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lines.append(" • None")
 
     # 7) Army
-    lines.append("")  # spacer
-    lines.append("⚔️ *Army:*")
     army_rows = get_rows("Army")
     counts = {r[1]: int(r[2]) for r in army_rows[1:] if r[0] == uid}
+    lines += ["", "⚔️ *Army:*"]
     for key, info in UNITS.items():
         disp, emoji, _, _, _ = info
         cnt = counts.get(key, 0)
         if cnt > 0:
             lines.append(f" • {emoji} {disp}: {cnt}")
 
-    # 8) Finalize text and keyboard
+    # 8) Assemble text and keyboard
     text = "\n".join(lines)
     keyboard = InlineKeyboardMarkup.from_row([
         InlineKeyboardButton("Upgrade HQ", callback_data="upgrade_HQ"),
@@ -117,14 +113,14 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         InlineKeyboardButton("View Army", callback_data="view_army"),
     ])
 
-    # 9) Cache and send
+    # 9) Cache & reply
     STATUS_CACHE[uid] = {
         "time": now,
         "text": text,
         "resources": {"credits": credits, "minerals": minerals, "energy": energy},
-        "keyboard": keyboard,
+        "keyboard": keyboard
     }
     await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard)
 
-# This must be named `handler` so main.py can import it
-handler = CommandHandler("st
+# Must be named `handler` for main.py to import
+handler = CommandHandler("status", status)
