@@ -20,7 +20,8 @@ BUILDINGS = {
 @game_command
 async def build(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    /build <building> - start an upgrade (tick & upgrades via decorator).
+    /build <building> - start an upgrade (tick & upgrades via decorator),
+    enforcing a hard cap on building levels.
     """
     user = update.effective_user
     uid = str(user.id)
@@ -66,7 +67,7 @@ async def build(update: Update, context: ContextTypes.DEFAULT_TYPE):
         cC, cM, sec, eC = 100, 30 * L, 20 * 60 * L, 8 * L
     elif btype == 'Barracks':
         cC, cM, sec, eC = 150, 70 * L, 45 * 60 * L, 12 * L
-    else:
+    else:  # Workshop
         cC, cM, sec, eC = 200, 100 * L, 60 * 60 * L, 15 * L
 
     # 4) Fetch & check resources
@@ -87,26 +88,10 @@ async def build(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # 5) Deduct & schedule
     prow[3], prow[4], prow[5] = str(credits - cC), str(minerals - cM), str(energy - eC)
-    
-    # 🏆 Check for quest reward (Power Plant, not yet step2)
-    if btype == "Power Plant":
-        while len(prow) < 8:
-            prow.append("")
-        if prow[7].strip() == "step1":
-            prow[4] = str(int(prow[4]) + 100)  # +100 minerals
-            prow[7] = "step2"
-            await update.message.reply_text(
-                "🎉 *Quest Step 2 Complete!*\n"
-                "You’ve upgraded your first ⚡ *Power Plant*.\n"
-                "🏅 Reward: *+100 ⛏️ Minerals*\n"
-                "Next: Use `/status` to view your base production.",
-                parse_mode=ParseMode.MARKDOWN
-            )
-
     update_row('Players', prow_idx, prow)
 
     end_ts = now + sec
-    # preserve row
+    # ensure we preserve existing row index & columns
     existing = None
     for bi, row in enumerate(buildings[1:], start=1):
         if row[0] == uid and row[1] == btype:
@@ -123,6 +108,27 @@ async def build(update: Update, context: ContextTypes.DEFAULT_TYPE):
         append_row('Buildings', [uid, btype, str(current_lvl), str(end_ts)])
 
     # 6) Confirmation
-    await update.message.reply_text(
+    confirm_text = (
         f"🔨 Upgrading {emoji} *{btype}* → Lvl {L}\n"
-        f"Cost: {cC}💳 {cM}⛏️ {eC}⚡ |
+        f"Cost: {cC}💳 {cM}⛏️ {eC}⚡ | {format_hhmmss(sec)}"
+    )
+    await update.message.reply_text(confirm_text, parse_mode=ParseMode.MARKDOWN)
+
+    # 7) QUEST PROGRESSION STEP: Upgrade Power Plant
+    if btype == "Power Plant":
+        progress_col = 7  # assumes "progress" is column H (index 7)
+        progress_value = prow[progress_col] if len(prow) > progress_col else ""
+        if progress_value != "step2":
+            prow[progress_col] = "step2"
+            prow[4] = str(int(prow[4]) + 100)  # +100 minerals
+            update_row('Players', prow_idx, prow)
+            await update.message.reply_text(
+                "🎉 Mission Update!\n"
+                "✅ You’ve upgraded your Power Plant!\n"
+                "💎 +100 bonus Minerals!\n\n"
+                "Now try training your first unit:\n"
+                "`/train grunt 5`",
+                parse_mode=ParseMode.MARKDOWN
+            )
+
+handler = CommandHandler('build', build)
