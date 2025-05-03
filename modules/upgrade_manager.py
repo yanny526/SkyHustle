@@ -17,6 +17,7 @@ def complete_upgrades(user_id: str):
 
     new_data = []
     for row in data:
+        # Ensure we have at least 5 columns
         if len(row) < 5:
             continue
         uid, bname, start_ts, end_ts, target_lvl = row[:5]
