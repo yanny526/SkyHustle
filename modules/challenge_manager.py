@@ -12,7 +12,6 @@ class Challenge:
         self.reward_minerals = int(reward_minerals)
         self.reward_energy = int(reward_energy)
 
-
 def load_challenges(ch_type: str):
     """Load active challenges of given type ('daily' or 'weekly')."""
     rows = get_rows("Challenges")
@@ -36,7 +35,6 @@ def load_challenges(ch_type: str):
         ))
     return challenges
 
-
 def get_player_challenge(uid: str, cid: str):
     """Return (row_index, row) for a player's challenge entry today."""
     rows = get_rows("PlayerChallenges")
@@ -47,31 +45,43 @@ def get_player_challenge(uid: str, cid: str):
             return i, row
     return None, None
 
-
 def update_player_progress(uid: str, ch: Challenge, increment: int = 1):
     """Increment progress and mark complete if threshold reached."""
+    today = date.today().isoformat()
     pc_idx, prow = get_player_challenge(uid, ch.id)
+
     if prow:
+        # existing entry: bump progress_count
         prog = int(prow[4] or 0) + increment
         prow[4] = str(prog)
+        # if now complete, set date_completed
         if prog >= ch.value and not prow[3]:
-            prow[3] = date.today().isoformat()  # date_completed
+            prow[3] = today
         update_row("PlayerChallenges", pc_idx, prow)
-    else:
-        completed = date.today().isoformat() if increment >= ch.value else ""
-        append_row("PlayerChallenges", [uid, ch.id, today, completed, str(increment)])
 
+    else:
+        # new entry: [player_id,challenge_id,date_assigned,date_completed,progress_count,awarded]
+        completed = today if increment >= ch.value else ""
+        append_row("PlayerChallenges", [
+            uid,
+            ch.id,
+            today,
+            completed,
+            str(increment),
+            ""       # awarded flag
+        ])
 
 def award_challenges(uid: str, ch_type: str):
     """Grant rewards for any completed but not yet awarded challenges."""
     challenges = load_challenges(ch_type)
     for ch in challenges:
         pc_idx, prow = get_player_challenge(uid, ch.id)
-        if prow and prow[3] and prow[5] != 'awarded':  # assuming column 5 is a flag
+        # prow[3] = date_completed, prow[5] = awarded flag
+        if prow and prow[3] and prow[5] != 'awarded':
             # grant resources
             players = get_rows("Players")
-            ph, pd = players[0], players[1:]
-            pidx = [r[0] for r in pd].index(uid) + 1
+            header, pdata = players[0], players[1:]
+            pidx = [r[0] for r in pdata].index(uid) + 1
             row = players[pidx]
             row[3] = str(int(row[3]) + ch.reward_credits)
             row[4] = str(int(row[4]) + ch.reward_minerals)
