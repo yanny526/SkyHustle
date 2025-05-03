@@ -4,7 +4,6 @@ from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import CommandHandler, ContextTypes
 
-from modules.upgrade_manager import complete_upgrades
 from modules.building_manager import get_building_info
 from modules.unit_manager import UNITS
 from sheets_service import get_rows
@@ -13,10 +12,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """ /status – show your base status, resources, buildings, and army counts """
     uid = str(update.effective_user.id)
 
-    # 1) Complete any finished building upgrades
-    complete_upgrades(uid)
-
-    # 2) Fetch player resources row
+    # Fetch player resources row
     players = get_rows('Players')
     for row in players[1:]:
         if row[0] == uid:
@@ -32,13 +28,13 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "🏗️ *Buildings:*"
     ]
 
-    # 3) Buildings
+    # Buildings
     binfo = get_building_info(uid)
     for btype, lvl in binfo.items():
         lines.append(f" • {btype}: Lvl {lvl}")
     lines.append("")
 
-    # 4) Army counts
+    # Army counts
     army_rows = get_rows('Army')
     counts = {}
     for row in army_rows[1:]:
