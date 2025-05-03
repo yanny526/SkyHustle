@@ -23,7 +23,11 @@ from handlers.attack import handler as attack_handler
 from handlers.leaderboard import handler as leaderboard_handler
 from handlers.help import handler as help_handler
 from handlers.army import handler as army_handler
-from handlers.callbacks import handler as menu_callback_handler  # ✅ NEW
+from handlers.callbacks import handler as menu_callback_handler  # Inline button handler
+
+# Import challenge handlers
+from handlers.challenges import daily, weekly  # Daily & Weekly Challenges
+
 
 def main():
     # 1) Auto-create Sheets & headers
@@ -45,7 +49,11 @@ def main():
     app.add_handler(leaderboard_handler)
     app.add_handler(help_handler)
     app.add_handler(army_handler)
-    app.add_handler(menu_callback_handler)  # ✅ handles inline buttons
+    app.add_handler(menu_callback_handler)
+
+    # Register Daily & Weekly challenge commands
+    app.add_handler(CommandHandler('daily', daily))
+    app.add_handler(CommandHandler('weekly', weekly))
 
     # 4) Set visible slash commands in Telegram
     async def set_bot_commands(app):
@@ -55,11 +63,13 @@ def main():
             BotCommand("army", "⚔️ View your army units"),
             BotCommand("queue", "⏳ Pending upgrades"),
             BotCommand("leaderboard", "🏆 Top commanders"),
+            BotCommand("daily", "📅 View daily challenges"),
+            BotCommand("weekly", "📆 View weekly challenges"),
             BotCommand("help", "🆘 Help & all commands"),
         ]
         await app.bot.set_my_commands(commands)
 
-    app.post_init = set_bot_commands  # ✅ ensures commands appear under message bar
+    app.post_init = set_bot_commands  # ensures commands appear under message bar
 
     # 5) Fallback for unknown commands
     async def unknown(update, context):
@@ -68,6 +78,7 @@ def main():
 
     # 6) Start the bot safely (Render-compatible)
     app.run_polling()
+
 
 if __name__ == "__main__":
     main()
