@@ -22,18 +22,18 @@ from handlers.help import handler as help_handler
 from handlers.army import handler as army_handler
 
 def main():
-    # 1) Ensure all sheets exist
+    # 1) Auto-create sheets & headers
     sheets_init()
 
     # 2) Build the bot
     app = Application.builder().token(BOT_TOKEN).build()
 
-    # 3) Register handlers
+    # 3) Register command handlers
     app.add_handler(start_handler)
     app.add_handler(setname_handler)
     app.add_handler(menu_handler)
     app.add_handler(status_handler)
-    app.add_handler(status_callback)   # ← inline-button callbacks
+    app.add_handler(status_callback)    # ← inline-button callbacks
     app.add_handler(build_handler)
     app.add_handler(queue_handler)
     app.add_handler(train_handler)
