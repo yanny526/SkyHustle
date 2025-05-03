@@ -1,3 +1,5 @@
+# handlers/status.py
+
 from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
@@ -26,7 +28,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_user.id)
     now = datetime.utcnow()
 
-    # 1) Serve from cache if fresh
+    # 1) Serve cached if fresh
     cache = STATUS_CACHE.get(uid)
     if cache and now - cache["time"] < CACHE_TTL:
         return await update.message.reply_text(
@@ -57,20 +59,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     binfo = get_building_info(uid)
     rates = get_production_rates(binfo)
 
-    # 5) Next upgrade ETA
-    pending = get_pending_upgrades(uid)
-    if pending:
-        nxt = min(pending, key=lambda x: x["end_ts"])
-        dt = timedelta(seconds=int(nxt["end_ts"] - now.timestamp()))
-        eta = f"{dt.seconds//3600}h {(dt.seconds%3600)//60}m"
-        upg_line = f"⚙️ Next upgrade: {nxt['bname']} → Lvl {nxt['target_lvl']} in {eta}"
-    else:
-        upg_line = "⚙️ No upgrades pending"
-
-    # 6) Building health
-    health = get_building_health(uid)
-
-    # 7) Assemble message lines
+    # 5) Start assembling message
     lines = [
         f"🏰 *Status for {name}*",
         "",
@@ -87,13 +76,27 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     for btype, lvl in binfo.items():
         line = f" • {btype}: Lvl {lvl}"
-        if btype in health:
-            cur, mx = health[btype]["current"], health[btype]["max"]
+        if btype in get_building_health(uid):
+            cur, mx = get_building_health(uid)[btype]["current"], get_building_health(uid)[btype]["max"]
             line += f" (HP {cur}/{mx})"
         lines.append(line)
-    lines += ["", upg_line, ""]
 
-    # 8) Army counts
+    # 6) Upgrades in progress queue
+    pending = get_pending_upgrades(uid)
+    lines.append("")  # blank before upgrades
+    lines.append("⏳ *Upgrades in Progress:*")
+    if pending:
+        for upg in sorted(pending, key=lambda x: x["end_ts"]):
+            rem = int(upg["end_ts"] - now.timestamp())
+            hrs, rem2 = divmod(rem, 3600)
+            mins, secs = divmod(rem2, 60)
+            rem_str = f"{hrs:02d}:{mins:02d}:{secs:02d}"
+            lines.append(f" • {upg['bname']} → Lvl {upg['target_lvl']} ({rem_str} remaining)")
+    else:
+        lines.append(" • None")
+
+    # 7) Army counts
+    lines.append("")  # blank before army
     army = {r[1]: int(r[2]) for r in get_rows("Army")[1:] if r[0] == uid}
     lines.append("⚔️ *Army:*")
     for key, info in UNITS.items():
@@ -101,25 +104,22 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         cnt = army.get(key, 0)
         if cnt > 0:
             lines.append(f" • {emoji} {disp}: {cnt}")
-    lines.append("")
 
+    # 8) Build result string and keyboard
     text = "\n".join(lines)
-
-    # 9) Inline keyboard for quick actions
     keyboard = InlineKeyboardMarkup.from_row([
         InlineKeyboardButton("Upgrade HQ", callback_data="upgrade_HQ"),
         InlineKeyboardButton("Train Units", callback_data="train_units"),
         InlineKeyboardButton("View Army", callback_data="view_army"),
     ])
 
-    # 10) Cache and send
+    # 9) Cache & reply
     STATUS_CACHE[uid] = {
         "time": now,
         "text": text,
         "resources": {"credits": credits, "minerals": minerals, "energy": energy},
         "keyboard": keyboard,
     }
-
     await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard)
 
 handler = CommandHandler("status", status)
