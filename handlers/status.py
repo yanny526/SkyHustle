@@ -1,5 +1,3 @@
-# handlers/status.py
-
 from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
@@ -15,11 +13,10 @@ from modules.unit_manager import UNITS
 from sheets_service import get_rows
 
 # In-memory cache to throttle Sheets calls
-STATUS_CACHE = {}
+STATUS_CACHE: dict = {}
 CACHE_TTL = timedelta(seconds=30)
 
 def render_bar(current: int, maximum: int, length: int = 10) -> str:
-    """Simple ASCII progress bar."""
     if maximum <= 0:
         return ""
     filled = int(current / maximum * length)
@@ -29,7 +26,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_user.id)
     now = datetime.utcnow()
 
-    # 1) Return cached if fresh
+    # 1) Serve from cache if fresh
     cache = STATUS_CACHE.get(uid)
     if cache and now - cache["time"] < CACHE_TTL:
         return await update.message.reply_text(
@@ -38,7 +35,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=cache["keyboard"],
         )
 
-    # 2) Load player row
+    # 2) Fetch player resources
     players = get_rows("Players")
     for row in players[1:]:
         if row[0] == uid:
@@ -51,18 +48,12 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 3) Compute historical deltas
     prev = cache["resources"] if cache else {}
     deltas = {
-        "credits": (credits - prev.get("credits", credits))
-        if "credits" in prev
-        else None,
-        "minerals": (minerals - prev.get("minerals", minerals))
-        if "minerals" in prev
-        else None,
-        "energy": (energy - prev.get("energy", energy))
-        if "energy" in prev
-        else None,
+        "credits": (credits - prev.get("credits", credits)) if "credits" in prev else None,
+        "minerals": (minerals - prev.get("minerals", minerals)) if "minerals" in prev else None,
+        "energy":   (energy   - prev.get("energy", energy))   if "energy"   in prev else None,
     }
 
-    # 4) Building data
+    # 4) Buildings & production
     binfo = get_building_info(uid)
     rates = get_production_rates(binfo)
 
@@ -79,18 +70,15 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 6) Building health
     health = get_building_health(uid)
 
-    # 7) Assemble lines
+    # 7) Assemble message lines
     lines = [
         f"🏰 *Status for {name}*",
         "",
-        f"💳 Credits: {credits}"
-        + (f" ({deltas['credits']:+d})" if deltas["credits"] is not None else ""),
+        f"💳 Credits: {credits}" + (f" ({deltas['credits']:+d})" if deltas["credits"] is not None else ""),
         f"▸ {render_bar(credits, max(credits, rates['credits'] * 5))}",
-        f"⛏️ Minerals: {minerals}"
-        + (f" ({deltas['minerals']:+d})" if deltas["minerals"] is not None else ""),
+        f"⛏️ Minerals: {minerals}" + (f" ({deltas['minerals']:+d})" if deltas["minerals"] is not None else ""),
         f"▸ {render_bar(minerals, max(minerals, rates['minerals'] * 5))}",
-        f"⚡ Energy: {energy}"
-        + (f" ({deltas['energy']:+d})" if deltas["energy"] is not None else ""),
+        f"⚡ Energy: {energy}" + (f" ({deltas['energy']:+d})" if deltas["energy"] is not None else ""),
         f"▸ {render_bar(energy, max(energy, rates['energy'] * 5))}",
         "",
         f"💹 *Production/min:* Credits {rates['credits']}, Minerals {rates['minerals']}, Energy {rates['energy']}",
@@ -105,11 +93,11 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lines.append(line)
     lines += ["", upg_line, ""]
 
-    # 8) Army
+    # 8) Army counts
     army = {r[1]: int(r[2]) for r in get_rows("Army")[1:] if r[0] == uid}
     lines.append("⚔️ *Army:*")
     for key, info in UNITS.items():
-        disp, emoji, _, _, _ = info
+        disp, emoji, tier, _, _ = info
         cnt = army.get(key, 0)
         if cnt > 0:
             lines.append(f" • {emoji} {disp}: {cnt}")
@@ -118,15 +106,13 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = "\n".join(lines)
 
     # 9) Inline keyboard for quick actions
-    keyboard = InlineKeyboardMarkup.from_row(
-        [
-            InlineKeyboardButton("Upgrade HQ", callback_data="upgrade_HQ"),
-            InlineKeyboardButton("Train Units", callback_data="train_units"),
-            InlineKeyboardButton("View Army", callback_data="view_army"),
-        ]
-    )
+    keyboard = InlineKeyboardMarkup.from_row([
+        InlineKeyboardButton("Upgrade HQ", callback_data="upgrade_HQ"),
+        InlineKeyboardButton("Train Units", callback_data="train_units"),
+        InlineKeyboardButton("View Army", callback_data="view_army"),
+    ])
 
-    # 10) Cache & reply
+    # 10) Cache and send
     STATUS_CACHE[uid] = {
         "time": now,
         "text": text,
