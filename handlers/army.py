@@ -49,24 +49,27 @@ async def army(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lines.append(status)
 
         if tier < unlocked:
-            # show counts but untrainable
             for key, display, emoji, power, cost in all_units[tier]:
                 cnt = counts.get(key, 0)
                 lines.append(f" • {emoji} {display}: {cnt}  _(untrainable)_")
         elif tier == unlocked:
-            # available units
             for key, display, emoji, power, cost in all_units[tier]:
                 cnt = counts.get(key, 0)
                 lines.append(
                     f" • {emoji} {display}: {cnt}  (Pwr {power} | Cost {format_cost(cost)})"
                 )
         else:
-            # show unlock requirements for future tiers
             reqs = TIER_UNLOCK.get(tier, {})
             req_text = ", ".join(f"{b}≥Lvl{l}" for b, l in reqs.items())
             lines.append(f" Requires {req_text}")
         lines.append("")
 
-    await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
+    text = "\n".join(lines)
+
+    # ✅ Support both /army and inline button
+    if update.message:
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    elif update.callback_query:
+        await update.callback_query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN)
 
 handler = CommandHandler('army', army)
