@@ -5,6 +5,7 @@ from telegram.constants import ParseMode
 from telegram.ext import CommandHandler, ContextTypes
 from sheets_service import get_rows
 from utils.decorators import game_command
+from modules.unit_manager import UNITS  # Added for dynamic unit power lookup
 
 @game_command
 async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -17,21 +18,35 @@ async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Sum building levels
     build_power = {}
-    for uid, _, lvl_str, *_ in buildings:
-        build_power[uid] = build_power.get(uid, 0) + int(lvl_str)
+    for row in buildings:
+        try:
+            uid, _, lvl_str, *_ = row
+            build_power[uid] = build_power.get(uid, 0) + int(lvl_str)
+        except (ValueError, IndexError):
+            continue
 
     # Sum army power
     army_power = {}
-    for uid, unit, count_str in army:
-        p = int(count_str) * {'infantry': 10, 'tanks': 50, 'artillery': 100}[unit]
-        army_power[uid] = army_power.get(uid, 0) + p
+    for row in army:
+        try:
+            uid, unit, count_str = row
+            _, _, _, power, _ = UNITS[unit]
+            p = int(count_str) * power
+            army_power[uid] = army_power.get(uid, 0) + p
+        except (ValueError, KeyError, IndexError):
+            continue
 
     # Compile scores
     scores = []
-    for uid, commander_name, _, *__ in players:
-        name = commander_name or "Unknown"
-        total = build_power.get(uid, 0) + army_power.get(uid, 0)
-        scores.append((name, total))
+    for row in players:
+        try:
+            uid, commander_name, *_ = row
+            name = commander_name or "Unknown"
+            total = build_power.get(uid, 0) + army_power.get(uid, 0)
+            scores.append((name, total))
+        except (ValueError, IndexError):
+            continue
+
     scores.sort(key=lambda x: x[1], reverse=True)
 
     lines = ["🏆 *Leaderboard* 🏆\n"]
