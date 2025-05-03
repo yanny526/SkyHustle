@@ -1,72 +1,76 @@
-# handlers/status.py
+# modules/upgrade_manager.py
 
-from telegram import Update
-from telegram.constants import ParseMode
-from telegram.ext import CommandHandler, ContextTypes
+import time
+from sheets_service import get_rows, append_row, clear_range
 
-from modules.upgrade_manager import complete_upgrades, get_pending_upgrades
-from modules.building_manager import get_building_info
-from modules.unit_manager import UNITS
-from sheets_service import get_rows
+# Range of the Upgrades sheet (columns A–E)
+UPGRADES_RANGE = 'Upgrades!A:E'
 
-async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """ /status – show your base status, resources, buildings, upgrades, and army counts """
-    uid = str(update.effective_user.id)
+async def initiate_upgrade(user_id: str, building: str, current_lvl: int, duration: int):
+    """
+    Schedule a new building upgrade for user_id.
+    building: name of building (e.g., 'Barracks')
+    current_lvl: its current level
+    duration: seconds until completion
+    """
+    start_ts = int(time.time())
+    target_lvl = current_lvl + 1
+    append_row(UPGRADES_RANGE, [user_id, building, str(target_lvl), str(start_ts), str(duration)])
 
-    # 1) Complete any finished building upgrades
-    complete_upgrades(uid)
 
-    # 2) Fetch player resources row
-    players = get_rows('Players')
-    for row in players[1:]:
-        if row[0] == uid:
-            name = row[1]
-            credits, minerals, energy = map(int, (row[3], row[4], row[5]))
-            break
-    else:
-        return await update.message.reply_text("❗ Please run /start first.")
+def complete_upgrades(user_id: str) -> None:
+    """
+    Check the Upgrades sheet for any finished upgrades for user_id,
+    apply them and remove completed rows.
+    """
+    rows = get_rows(UPGRADES_RANGE)
+    if not rows or len(rows) < 2:
+        return
+    header, *data = rows
+    keep = []
+    now = int(time.time())
+    for row in data:
+        if len(row) < 5:
+            continue
+        uid, building, target_str, start_str, dur_str = row
+        start = int(start_str)
+        dur   = int(dur_str)
+        finish = start + dur
+        if uid == user_id and now >= finish:
+            # apply upgrade
+            from modules.building_manager import set_building_level
+            set_building_level(user_id, building, int(target_str))
+        else:
+            keep.append(row)
+    # rewrite the sheet: clear and re-append header + remaining
+    clear_range(UPGRADES_RANGE)
+    append_row(UPGRADES_RANGE, header)
+    for r in keep:
+        append_row(UPGRADES_RANGE, r)
 
-    lines = [
-        f"🏰 *Base Status for {name}*\n",
-        f"💳 Credits: {credits}   ⛏️ Minerals: {minerals}   ⚡ Energy: {energy}\n",
-        "🏗️ *Buildings:*"
-    ]
 
-    # 3) Buildings
-    binfo = get_building_info(uid)
-    for btype, lvl in binfo.items():
-        lines.append(f" • {btype}: Lvl {lvl}")
-    lines.append("")
-
-    # 4) Pending upgrades
-    pend = get_pending_upgrades(uid)
-    if pend:
-        lines.append("⏳ *Upgrades In Progress:*")
-        for btype, nxt, rem in pend:
-            lines.append(f" • {btype} → Lvl {nxt} ({rem}s remaining)")
-        lines.append("")
-
-    # 5) Army counts
-    army_rows = get_rows('Army')
-    counts = {}
-    for row in army_rows[1:]:
-        if row[0] == uid:
-            counts[row[1]] = int(row[2])
-
-    lines.append("⚔️ *Army:*")
-    # Group units by tier
-    tiers = {}
-    for key, info in UNITS.items():
-        display, emoji, tier, _, _ = info
-        tiers.setdefault(tier, []).append((display, emoji, key))
-
-    for tier in sorted(tiers):
-        lines.append(f"*Tier {tier} Units:*")
-        for display, emoji, key in sorted(tiers[tier], key=lambda x: x[0]):
-            cnt = counts.get(key, 0)
-            lines.append(f" • {emoji} {display}: {cnt}")
-        lines.append("")
-
-    await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
-
-handler = CommandHandler('status', status)
+def get_pending_upgrades(user_id: str) -> list[tuple[str,int,str]]:
+    """
+    Return a list of (building, target_level, remaining_time_str) for all
+    upgrades still in progress for user_id.
+    """
+    rows = get_rows(UPGRADES_RANGE)
+    if not rows or len(rows) < 2:
+        return []
+    pending = []
+    now = int(time.time())
+    for row in rows[1:]:  # skip header
+        if len(row) < 5:
+            continue
+        uid, building, target_str, start_str, dur_str = row
+        if uid != user_id:
+            continue
+        start = int(start_str)
+        dur   = int(dur_str)
+        rem = start + dur - now
+        if rem > 0:
+            h = rem // 3600
+            m = (rem % 3600) // 60
+            s = rem % 60
+            pending.append((building, int(target_str), f"{h:02d}:{m:02d}:{s:02d}"))
+    return pending
