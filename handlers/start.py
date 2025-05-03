@@ -10,7 +10,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     /start - register a new player or welcome back existing one.
     """
-    # Ensure sheets exist
     init()
 
     user = update.effective_user
@@ -38,10 +37,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "💳 1000 Credits\n⛏️ 1000 Minerals\n⚡ 1000 Energy\n\n"
             "📋 *Your first task:*\n"
             "`/build powerplant` – Start generating energy.\n\n"
-            "After that, use `/status` to check your base."
+            "After that, use `/status` to check your base.\n"
+            "_Tip: Set your commander name with `/setname <name>`_"
         )
 
-        # Quick access buttons
         reply_markup = ReplyKeyboardMarkup(
             [[KeyboardButton("/build powerplant")], [KeyboardButton("/status")]],
             resize_keyboard=True
@@ -50,19 +49,24 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(intro, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
 
     else:
-        # Existing player logic
+        # Existing player: update last_seen and respond
         for idx, row in enumerate(rows):
             if idx == 0:
                 continue
             if row[0] == uid:
                 row[6] = str(int(time.time()))
                 update_row('Players', idx, row)
-                commander_name = row[1] or user.first_name
+                commander_name = row[1].strip() or user.first_name
                 break
+
+        if commander_name.lower() in ["", "leader", "commander", user.username.lower() if user.username else ""]:
+            extra = "\n\n⚠️ You haven't picked a unique commander name.\nUse `/setname <your_name>` to stand out!"
+        else:
+            extra = ""
 
         await update.message.reply_text(
             f"🎖️ Welcome back, Commander *{commander_name}*!\n"
-            "Use /menu or /status to continue.",
+            "Use /menu or /status to continue." + extra,
             parse_mode=ParseMode.MARKDOWN
         )
 
