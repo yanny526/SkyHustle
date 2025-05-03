@@ -8,7 +8,7 @@ from sheets_service import get_rows, update_row
 
 async def setname(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    /setname <name> - Set your unique commander name.
+    /setname <name> - Set your unique commander name and unlock your first reward.
     """
     user = update.effective_user
     uid = str(user.id)
@@ -32,7 +32,7 @@ async def setname(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if name_taken:
         return await update.message.reply_text(
-            f"⚠️ The name *{name}* is already taken.\nTry a unique variation like `{name}X` or `{name}_77`.",
+            f"⚠️ The name *{name}* is already taken.\nTry a unique variation like `{name}_X`.",
             parse_mode=ParseMode.MARKDOWN
         )
 
@@ -40,11 +40,30 @@ async def setname(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if idx == 0:
             continue
         if row[0] == uid:
-            row[1] = name
+            is_first_time = row[1].strip() in ["", "leader", "commander"]
+            row[1] = name  # Update the commander name
+
+            # 🏆 First-time reward logic
+            if is_first_time and (len(row) < 8 or row[7].strip() == ""):
+                # Ensure row has enough columns
+                while len(row) < 8:
+                    row.append("")
+                row[5] = str(int(row[5]) + 500)  # +500 energy
+                row[7] = "step1"
+
+                update_row("Players", idx, row)
+                return await update.message.reply_text(
+                    f"✅ Your new commander name is *{name}*!\n"
+                    "🎁 You’ve earned *+500 ⚡ Energy* for completing your first task!\n"
+                    "Next: `/build powerplant` to begin generating energy.",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+
+            # Just a name update, no reward
             update_row("Players", idx, row)
             return await update.message.reply_text(
-                f"✅ Your new commander name is *{name}*!\n"
-                "Now use /build or /status to grow your empire.",
+                f"✅ Commander name updated to *{name}*!\n"
+                "Use /menu to begin your conquest.",
                 parse_mode=ParseMode.MARKDOWN
             )
 
