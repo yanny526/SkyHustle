@@ -1,54 +1,59 @@
-import logging
-import os
+# main.py
 
-from telegram.ext import ApplicationBuilder, CommandHandler
-
-# load your bot token
 from config import BOT_TOKEN
-
-# initialize your Google Sheets client
 from sheets_service import init as sheets_init
 
-# import command handlers
-from handlers.start       import handler as start_handler
-from handlers.help        import handler as help_handler
-from handlers.status      import handler as status_handler
-from handlers.army        import handler as army_handler
-from handlers.upgrade     import handler as upgrade_handler
-from handlers.train       import handler as train_handler
+from handlers.start import handler as start_handler
+from handlers.setname import handler as setname_handler
+from handlers.menu import handler as menu_handler
+from handlers.status import handler as status_handler
+from handlers.build import handler as build_handler
+from handlers.queue import handler as queue_handler
+from handlers.train import handler as train_handler
+from handlers.attack import handler as attack_handler
 from handlers.leaderboard import handler as leaderboard_handler
+from handlers.help import handler as help_handler
+from handlers.army    import handler as army_handler 
 
-async def unknown_command(update, context):
-    await update.message.reply_text(
-        "🤔 I don't recognize that command. Type /help to see what's available."
-    )
+from telegram import Update
+from telegram.ext import (
+    Application,
+    MessageHandler,
+    filters,
+    ContextTypes
+)
 
 def main():
-    # basic logging
-    logging.basicConfig(
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        level=logging.INFO,
-    )
-
-    # init Sheets (must happen before any handler that uses it)
+    # 1) Ensure all Sheets tabs & headers exist
     sheets_init()
 
-    # build the bot
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    # 2) Build the Telegram application
+    app = Application.builder().token(BOT_TOKEN).build()
 
-    # register the handlers
-    app.add_handler(CommandHandler("start",       start_handler))
-    app.add_handler(CommandHandler("help",        help_handler))
-    app.add_handler(CommandHandler("status",      status_handler))
-    app.add_handler(CommandHandler("army",        army_handler))
-    app.add_handler(CommandHandler("upgrade",     upgrade_handler))
-    app.add_handler(CommandHandler("train",       train_handler))
-    app.add_handler(CommandHandler("leaderboard", leaderboard_handler))
+    # 3) Register all command handlers
+    app.add_handler(start_handler)
+    app.add_handler(setname_handler)
+    app.add_handler(menu_handler)
+    app.add_handler(status_handler)
+    app.add_handler(build_handler)
+    app.add_handler(queue_handler)
+    app.add_handler(train_handler)
+    app.add_handler(attack_handler)
+    app.add_handler(leaderboard_handler)
+    app.add_handler(help_handler)
+    app.add_handler(army_handler)
+    
+    # 4) Fallback: catch any unknown /command
+    async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await update.message.reply_text(
+            "❓ Unknown command. Use /help to see valid commands."
+        )
 
-    # catch-all for unknown commands
-    app.add_handler(CommandHandler(None, unknown_command))
+    app.add_handler(
+        MessageHandler(filters.COMMAND, unknown_command)
+    )
 
-    # run until Ctrl‑C
+    # 5) Start polling (blocks until you Ctrl‑C)
     app.run_polling()
 
 if __name__ == "__main__":
