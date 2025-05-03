@@ -6,6 +6,7 @@ from sheets_service import init as sheets_init
 from telegram import BotCommand
 from telegram.ext import (
     Application,
+    CommandHandler,
     MessageHandler,
     filters,
 )
@@ -21,20 +22,9 @@ from handlers.attack import handler as attack_handler
 from handlers.leaderboard import handler as leaderboard_handler
 from handlers.help import handler as help_handler
 from handlers.army import handler as army_handler
-from handlers.callbacks import handler as menu_callback_handler  # ✅ for inline menu
+from handlers.callbacks import handler as menu_callback_handler
 
-async def set_bot_commands(application):
-    commands = [
-        BotCommand("menu", "Show game menu"),
-        BotCommand("army", "View your army"),
-        BotCommand("status", "View your base status"),
-        BotCommand("queue", "Check build/train queues"),
-        BotCommand("leaderboard", "View top commanders"),
-        BotCommand("help", "Show help and all commands"),
-    ]
-    await application.bot.set_my_commands(commands)
-
-async def main():
+def main():
     # 1) Auto-create Sheets & headers
     sheets_init()
 
@@ -56,20 +46,27 @@ async def main():
     app.add_handler(army_handler)
     app.add_handler(menu_callback_handler)
 
-    # 4) Set visible slash commands
-    await set_bot_commands(app)
+    # 4) Set visible slash commands (shown under chat box)
+    async def set_bot_commands():
+        commands = [
+            BotCommand("menu", "Show game menu"),
+            BotCommand("army", "View your army"),
+            BotCommand("status", "View your base status"),
+            BotCommand("queue", "Check build/train queues"),
+            BotCommand("leaderboard", "View top commanders"),
+            BotCommand("help", "Show help and all commands"),
+        ]
+        await app.bot.set_my_commands(commands)
+
+    app.post_init = set_bot_commands
 
     # 5) Fallback for unknown commands
     async def unknown(update, context):
         await update.message.reply_text("❓ Unknown command. Use /help.")
     app.add_handler(MessageHandler(filters.COMMAND, unknown))
 
-    # 6) Start the bot
-    await app.run_polling()
+    # 6) Start bot (this safely manages the loop)
+    app.run_polling()
 
-# ✅ FIXED: Safe event loop for Render
 if __name__ == "__main__":
-    import asyncio
-    loop = asyncio.get_event_loop()
-    loop.create_task(main())
-    loop.run_forever()
+    main()
