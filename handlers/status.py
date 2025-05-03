@@ -1,9 +1,9 @@
 # handlers/status.py
 
 from datetime import datetime, timedelta
-from telegram import Update, ReplyKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
-from telegram.ext import CommandHandler, ContextTypes
+from telegram.ext import CommandHandler, CallbackQueryHandler, ContextTypes
 
 from modules.upgrade_manager import get_pending_upgrades
 from modules.building_manager import (
@@ -28,17 +28,16 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_user.id)
     now = datetime.utcnow()
 
-    # 1) Return cached if still fresh
+    # 1) Cached?
     cache = STATUS_CACHE.get(uid)
     if cache and now - cache["time"] < CACHE_TTL:
-        await update.message.reply_text(
+        return await update.message.reply_text(
             cache["text"],
             parse_mode=ParseMode.MARKDOWN,
             reply_markup=cache["keyboard"],
         )
-        return
 
-    # 2) Fetch player resources
+    # 2) Load resources
     players = get_rows("Players")
     for row in players[1:]:
         if row[0] == uid:
@@ -46,23 +45,22 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
             credits, minerals, energy = map(int, row[3:6])
             break
     else:
-        await update.message.reply_text("❗ Please run /start first.")
-        return
+        return await update.message.reply_text("❗ Please run /start first.")
 
-    # 3) Historical deltas
+    # 3) Deltas
     prev = cache["resources"] if cache else {}
     deltas = {
-        "credits": (credits - prev.get("credits", credits)) if "credits" in prev else None,
+        "credits":  (credits  - prev.get("credits",  credits))  if "credits"  in prev else None,
         "minerals": (minerals - prev.get("minerals", minerals)) if "minerals" in prev else None,
-        "energy":   (energy   - prev.get("energy", energy))   if "energy"   in prev else None,
+        "energy":   (energy   - prev.get("energy",   energy))   if "energy"   in prev else None,
     }
 
-    # 4) Buildings & rates
-    binfo = get_building_info(uid)
-    rates = get_production_rates(binfo)
+    # 4) Buildings + rates + health
+    binfo  = get_building_info(uid)
+    rates  = get_production_rates(binfo)
     health = get_building_health(uid)
 
-    # 5) Build the status text
+    # 5) Assemble lines
     lines = [
         f"🏰 *Status for {name}*",
         "",
@@ -84,7 +82,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
             line += f" (HP {cur}/{mx})"
         lines.append(line)
 
-    # 6) Upgrades in Progress
+    # 6) Upgrades in progress
     pending = get_pending_upgrades(uid)
     lines += ["", "⏳ *Upgrades in Progress:*"]
     if pending:
@@ -99,36 +97,50 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # 7) Army
     army_rows = get_rows("Army")
-    counts = {r[1]: int(r[2]) for r in army_rows[1:] if r[0] == uid}
-    lines += ["", "⚔️ *Army:*"]
+    counts    = {r[1]: int(r[2]) for r in army_rows[1:] if r[0] == uid}
+    lines   += ["", "⚔️ *Army:*"]
     for key, info in UNITS.items():
-        disp, emoji, _, _, _ = info
+        disp, emoji, *_ = info
         cnt = counts.get(key, 0)
         if cnt > 0:
             lines.append(f" • {emoji} {disp}: {cnt}")
 
     text = "\n".join(lines)
 
-    # 8) Reply keyboard so buttons send slash-commands directly
-    keyboard = ReplyKeyboardMarkup(
-        [["/build", "/train", "/army"]],
-        resize_keyboard=True,
-        one_time_keyboard=True
-    )
+    # 8) Inline keyboard
+    keyboard = InlineKeyboardMarkup.from_row([
+        InlineKeyboardButton("Upgrade HQ", callback_data="upgrade_HQ"),
+        InlineKeyboardButton("Train Units", callback_data="train_units"),
+        InlineKeyboardButton("View Army", callback_data="view_army"),
+    ])
 
     # 9) Cache & send
     STATUS_CACHE[uid] = {
-        "time": now,
-        "text": text,
+        "time":      now,
+        "text":      text,
         "resources": {"credits": credits, "minerals": minerals, "energy": energy},
-        "keyboard": keyboard,
+        "keyboard":  keyboard,
     }
+    await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard)
 
-    await update.message.reply_text(
-        text,
-        parse_mode=ParseMode.MARKDOWN,
-        reply_markup=keyboard
-    )
+async def status_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Handle button presses from the /status inline keyboard.
+    We simply re-send the matching slash-command so your existing handlers run.
+    """
+    query = update.callback_query
+    await query.answer()
 
-# Must be named `handler` for main.py to import
-handler = CommandHandler("status", status)
+    mapping = {
+        "upgrade_HQ":   "/build",
+        "train_units":  "/train",
+        "view_army":    "/army",
+    }
+    cmd = mapping.get(query.data)
+    if cmd:
+        await context.bot.send_message(chat_id=query.message.chat_id, text=cmd)
+
+# Export both the command and the callback handlers
+handler        = CommandHandler("status", status)
+callback_handler = CallbackQueryHandler(status_button,
+                                        pattern="^(upgrade_HQ|train_units|view_army)$")
