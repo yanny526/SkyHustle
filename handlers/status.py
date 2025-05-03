@@ -1,91 +1,130 @@
-# modules/upgrade_manager.py
+# handlers/status.py
 
-from datetime import datetime
-from sheets_service import get_rows, update_row, append_row, clear_sheet
-from config import BUILDING_MAX_LEVEL
+from datetime import datetime, timedelta
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.constants import ParseMode
+from telegram.ext import CommandHandler, ContextTypes
 
-def complete_upgrades(user_id: str):
-    """
-    Check the 'Upgrades' sheet for any finished builds,
-    apply their new levels, and rebuild the sheet without completed rows.
-    """
-    rows = get_rows('Upgrades')
-    if not rows:
-        return
-    header, data = rows[0], rows[1:]
-    now_ts = datetime.utcnow().timestamp()
+from modules.upgrade_manager import get_pending_upgrades
+from modules.building_manager import (
+    get_building_info,
+    get_production_rates,
+    get_building_health,
+)
+from modules.unit_manager import UNITS
+from sheets_service import get_rows
 
-    new_data = []
-    for row in data:
-        if len(row) < 5:
-            continue
-        uid, bname, start_ts, end_ts, target_lvl = row[:5]
+# In-memory cache to throttle Sheets calls
+STATUS_CACHE: dict = {}
+CACHE_TTL = timedelta(seconds=30)
 
-        if uid != user_id:
-            new_data.append(row)
-            continue
+def render_bar(current: int, maximum: int, length: int = 10) -> str:
+    if maximum <= 0:
+        return ""
+    filled = int(current / maximum * length)
+    return "▇" * filled + "▁" * (length - filled)
 
-        try:
-            if now_ts >= float(end_ts):
-                apply_building_level(uid, bname, int(target_lvl))
-                continue
-        except ValueError:
-            continue
+async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid = str(update.effective_user.id)
+    now = datetime.utcnow()
 
-        new_data.append(row)
-
-    clear_sheet('Upgrades')
-    append_row('Upgrades', header)
-    for r in new_data:
-        append_row('Upgrades', r)
-
-
-def apply_building_level(uid: str, building: str, new_level: int):
-    """
-    Internal helper: writes the upgraded building level into the 'Buildings' sheet.
-    """
-    b_rows = get_rows('Buildings')
-    if not b_rows:
+    # 1) Return cached if still fresh
+    cache = STATUS_CACHE.get(uid)
+    if cache and now - cache["time"] < CACHE_TTL:
+        await update.message.reply_text(
+            cache["text"],
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=cache["keyboard"],
+        )
         return
 
-    for idx, row in enumerate(b_rows[1:], start=1):
-        if len(row) >= 2 and row[0] == uid and row[1] == building:
-            capped = min(new_level, BUILDING_MAX_LEVEL.get(building, new_level))
-            row[2:3] = [str(capped)]
-            update_row('Buildings', idx, row)
-            return
+    # 2) Load player row
+    players = get_rows("Players")
+    for row in players[1:]:
+        if row[0] == uid:
+            name = row[1]
+            credits, minerals, energy = map(int, row[3:6])
+            break
+    else:
+        await update.message.reply_text("❗ Please run /start first.")
+        return
 
-    capped = min(new_level, BUILDING_MAX_LEVEL.get(building, new_level))
-    append_row('Buildings', [uid, building, str(capped)])
+    # 3) Historical deltas
+    prev = cache["resources"] if cache else {}
+    deltas = {
+        "credits": (credits - prev.get("credits", credits)) if "credits" in prev else None,
+        "minerals": (minerals - prev.get("minerals", minerals)) if "minerals" in prev else None,
+        "energy":   (energy   - prev.get("energy", energy))   if "energy"   in prev else None,
+    }
 
+    # 4) Buildings & rates
+    binfo = get_building_info(uid)
+    rates = get_production_rates(binfo)
 
-def get_pending_upgrades(user_id: str) -> list[dict]:
-    """
-    Fetch all pending upgrades for the given user.
-    Returns a list of dicts, each with:
-      - 'bname': building name (str)
-      - 'target_lvl': level to reach (int)
-      - 'end_ts': UNIX timestamp when it completes (float)
-    """
-    rows = get_rows('Upgrades')
-    pending = []
-    now_ts = datetime.utcnow().timestamp()
+    # 5) Build header and resource lines
+    lines = [
+        f"🏰 *Status for {name}*",
+        "",
+        f"💳 Credits: {credits}" + (f" ({deltas['credits']:+d})" if deltas["credits"] is not None else ""),
+        f"▸ {render_bar(credits, max(credits, rates['credits'] * 5))}",
+        f"⛏️ Minerals: {minerals}" + (f" ({deltas['minerals']:+d})" if deltas["minerals"] is not None else ""),
+        f"▸ {render_bar(minerals, max(minerals, rates['minerals'] * 5))}",
+        f"⚡ Energy: {energy}" + (f" ({deltas['energy']:+d})" if deltas["energy"] is not None else ""),
+        f"▸ {render_bar(energy, max(energy, rates['energy'] * 5))}",
+        "",
+        f"💹 *Production/min:* Credits {rates['credits']}, Minerals {rates['minerals']}, Energy {rates['energy']}",
+        "",
+        "🏗️ *Buildings:*",
+    ]
+    for btype, lvl in binfo.items():
+        line = f" • {btype}: Lvl {lvl}"
+        health = get_building_health(uid)
+        if btype in health:
+            cur, mx = health[btype]["current"], health[btype]["max"]
+            line += f" (HP {cur}/{mx})"
+        lines.append(line)
 
-    for row in rows[1:]:
-        if len(row) < 5:
-            continue
-        uid, bname, start_ts, end_ts, target_lvl = row[:5]
-        if uid != user_id:
-            continue
-        try:
-            end_ts = float(end_ts)
-        except ValueError:
-            continue
-        if end_ts > now_ts:
-            pending.append({
-                'bname': bname,
-                'target_lvl': int(target_lvl),
-                'end_ts': end_ts
-            })
+    # 6) Upgrades in Progress
+    pending = get_pending_upgrades(uid)
+    lines.append("")  # spacer
+    lines.append("⏳ *Upgrades in Progress:*")
+    if pending:
+        for upg in sorted(pending, key=lambda x: x["end_ts"]):
+            rem = int(upg["end_ts"] - now.timestamp())
+            hrs, rem2 = divmod(rem, 3600)
+            mins, secs = divmod(rem2, 60)
+            rem_str = f"{hrs:02d}:{mins:02d}:{secs:02d}"
+            lines.append(f" • {upg['bname']} → Lvl {upg['target_lvl']} ({rem_str} remaining)")
+    else:
+        lines.append(" • None")
 
-    return pending
+    # 7) Army
+    lines.append("")  # spacer
+    lines.append("⚔️ *Army:*")
+    army_rows = get_rows("Army")
+    counts = {r[1]: int(r[2]) for r in army_rows[1:] if r[0] == uid}
+    for key, info in UNITS.items():
+        disp, emoji, _, _, _ = info
+        cnt = counts.get(key, 0)
+        if cnt > 0:
+            lines.append(f" • {emoji} {disp}: {cnt}")
+
+    # 8) Finalize text and keyboard
+    text = "\n".join(lines)
+    keyboard = InlineKeyboardMarkup.from_row([
+        InlineKeyboardButton("Upgrade HQ", callback_data="upgrade_HQ"),
+        InlineKeyboardButton("Train Units", callback_data="train_units"),
+        InlineKeyboardButton("View Army", callback_data="view_army"),
+    ])
+
+    # 9) Cache and send
+    STATUS_CACHE[uid] = {
+        "time": now,
+        "text": text,
+        "resources": {"credits": credits, "minerals": minerals, "energy": energy},
+        "keyboard": keyboard,
+    }
+    await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard)
+
+# This must be named `handler` so main.py can import it
+handler = CommandHandler("st
