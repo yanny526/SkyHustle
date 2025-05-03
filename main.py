@@ -11,6 +11,7 @@ from telegram.ext import (
     filters,
 )
 
+# Import all handler modules
 from handlers.start import handler as start_handler
 from handlers.setname import handler as setname_handler
 from handlers.menu import handler as menu_handler
@@ -22,7 +23,7 @@ from handlers.attack import handler as attack_handler
 from handlers.leaderboard import handler as leaderboard_handler
 from handlers.help import handler as help_handler
 from handlers.army import handler as army_handler
-from handlers.callbacks import handler as menu_callback_handler
+from handlers.callbacks import handler as menu_callback_handler  # ✅ NEW
 
 def main():
     # 1) Auto-create Sheets & headers
@@ -31,7 +32,7 @@ def main():
     # 2) Build bot
     app = Application.builder().token(BOT_TOKEN).build()
 
-    # 3) Register command + callback handlers
+    # 3) Register all command + callback handlers
     app.add_handler(start_handler)
     app.add_handler(setname_handler)
     app.add_handler(menu_handler)
@@ -44,9 +45,9 @@ def main():
     app.add_handler(leaderboard_handler)
     app.add_handler(help_handler)
     app.add_handler(army_handler)
-    app.add_handler(menu_callback_handler)
+    app.add_handler(menu_callback_handler)  # ✅ handles inline buttons
 
-    # ✅ FIXED: correct app argument passed to post_init
+    # 4) Set visible slash commands in Telegram
     async def set_bot_commands(app):
         commands = [
             BotCommand("menu", "Show game menu"),
@@ -58,14 +59,14 @@ def main():
         ]
         await app.bot.set_my_commands(commands)
 
-    app.post_init = set_bot_commands
+    app.post_init = set_bot_commands  # ✅ ensures commands appear under message bar
 
-    # 4) Fallback for unknown commands
+    # 5) Fallback for unknown commands
     async def unknown(update, context):
         await update.message.reply_text("❓ Unknown command. Use /help.")
     app.add_handler(MessageHandler(filters.COMMAND, unknown))
 
-    # 5) Start the bot (Render-safe)
+    # 6) Start the bot safely (Render-compatible)
     app.run_polling()
 
 if __name__ == "__main__":
