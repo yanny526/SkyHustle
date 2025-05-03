@@ -3,68 +3,69 @@
 from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import CommandHandler, ContextTypes
-from modules.upgrade_manager import get_pending_upgrades
+
+from modules.upgrade_manager import complete_upgrades, get_pending_upgrades
 from modules.building_manager import get_building_info
 from modules.unit_manager import UNITS
 from sheets_service import get_rows
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """ /status - show current base status, resources, buildings, upgrades, and army counts """
+    """ /status – show your base status, resources, buildings, upgrades, and army counts """
     uid = str(update.effective_user.id)
 
-    # Player resources
-    players = get_rows('Players')[1:]
-    creds = mins = engy = None
-    commander = None
-    for row in players:
+    # 1) Complete any finished building upgrades
+    complete_upgrades(uid)
+
+    # 2) Fetch player resources row
+    players = get_rows('Players')
+    for row in players[1:]:
         if row[0] == uid:
-            commander = row[1]
-            creds, mins, engy = map(int, (row[3], row[4], row[5]))
+            name = row[1]
+            credits, minerals, energy = map(int, (row[3], row[4], row[5]))
             break
-    if creds is None:
-        return await update.message.reply_text("❗ Run /start first.")
-
-    lines = []
-    lines.append("🏰 *Base Status* 🏰")
-    lines.append(f"Commander: {commander}")
-    lines.append(f"💳 Credits: {creds}   ⛏️ Minerals: {mins}   ⚡ Energy: {engy}")
-    lines.append("")
-
-    # Buildings
-    lines.append("🏢 *Buildings*")
-    for bname, lvl, bonus in get_building_info(uid):
-        lines.append(f"• {bname} (Lvl {lvl}) → {bonus}")
-    lines.append("")
-
-    # Upgrades in progress
-    pending = get_pending_upgrades(uid)
-    lines.append("🔧 *Upgrades in progress*")
-    if pending:
-        for name, target_lvl, remaining in pending:
-            lines.append(f"• {name} → Lvl {target_lvl} ({remaining} remaining)")
     else:
-        lines.append("• None")
+        return await update.message.reply_text("❗ Please run /start first.")
+
+    lines = [
+        f"🏰 *Base Status for {name}*\n",
+        f"💳 Credits: {credits}   ⛏️ Minerals: {minerals}   ⚡ Energy: {energy}\n",
+        "🏗️ *Buildings:*"
+    ]
+
+    # 3) Buildings
+    binfo = get_building_info(uid)
+    for btype, lvl in binfo.items():
+        lines.append(f" • {btype}: Lvl {lvl}")
     lines.append("")
 
-    # Army counts
-    army_rows = get_rows('Army')[1:]
-    counts = {key: 0 for key in UNITS.keys()}
-    for row in army_rows:
-        if row[0] == uid and row[1] in counts:
+    # 4) Pending upgrades
+    pend = get_pending_upgrades(uid)
+    if pend:
+        lines.append("⏳ *Upgrades In Progress:*")
+        for btype, nxt, rem in pend:
+            lines.append(f" • {btype} → Lvl {nxt} ({rem}s remaining)")
+        lines.append("")
+
+    # 5) Army counts
+    army_rows = get_rows('Army')
+    counts = {}
+    for row in army_rows[1:]:
+        if row[0] == uid:
             counts[row[1]] = int(row[2])
 
-    lines.append("🪖 *Army* ")
-    # Show each unit in tier order
-    # Sort by tier then display name
+    lines.append("⚔️ *Army:*")
+    # Group units by tier
     tiers = {}
     for key, info in UNITS.items():
-        _, emoji, tier, _, _ = info
-        tiers.setdefault(tier, []).append((key, info))
-    for tier in sorted(tiers.keys()):
-        for key, info in sorted(tiers[tier], key=lambda x: x[1][0]):
-            display, emoji, *_ = info
+        display, emoji, tier, _, _ = info
+        tiers.setdefault(tier, []).append((display, emoji, key))
+
+    for tier in sorted(tiers):
+        lines.append(f"*Tier {tier} Units:*")
+        for display, emoji, key in sorted(tiers[tier], key=lambda x: x[0]):
             cnt = counts.get(key, 0)
-            lines.append(f"• {emoji} {display}: {cnt}")
+            lines.append(f" • {emoji} {display}: {cnt}")
+        lines.append("")
 
     await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
 
