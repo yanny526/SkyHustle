@@ -1,7 +1,7 @@
 # handlers/start.py
 
 import time
-from telegram import Update, KeyboardButton, ReplyKeyboardMarkup
+from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import CommandHandler, ContextTypes
 from sheets_service import init, get_rows, append_row, update_row
@@ -29,45 +29,35 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             str(int(time.time()))          # last_seen
         ])
 
-        intro = (
+        await update.message.reply_text(
             "🌍 *The world is in ruins.*\n"
             "You are the last hope of your region.\n"
             "Command your base, rebuild power, and rise to dominate.\n\n"
             "🧰 You’ve received a starter pack:\n"
             "💳 1000 Credits\n⛏️ 1000 Minerals\n⚡ 1000 Energy\n\n"
-            "📋 *Your first task:*\n"
-            "`/build powerplant` – Start generating energy.\n\n"
-            "After that, use `/status` to check your base.\n"
-            "_Tip: Set your commander name with `/setname <name>`_"
-        )
-
-        reply_markup = ReplyKeyboardMarkup(
-            [[KeyboardButton("/build powerplant")], [KeyboardButton("/status")]],
-            resize_keyboard=True
-        )
-
-        await update.message.reply_text(intro, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
-
-    else:
-        # Existing player: update last_seen and respond
-        for idx, row in enumerate(rows):
-            if idx == 0:
-                continue
-            if row[0] == uid:
-                row[6] = str(int(time.time()))
-                update_row('Players', idx, row)
-                commander_name = row[1].strip() or user.first_name
-                break
-
-        if commander_name.lower() in ["", "leader", "commander", user.username.lower() if user.username else ""]:
-            extra = "\n\n⚠️ If you haven't picked a unique commander name.\nUse `/setname <your_name>` to stand out!"
-        else:
-            extra = ""
-
-        await update.message.reply_text(
-            f"🎖️ Welcome back, Commander *{commander_name}*!\n"
-            "Use /menu or /status to continue." + extra,
+            "🧾 *Before you begin:*\n"
+            "Choose a unique commander name using:\n"
+            "`/setname <your_name>`\n\n"
+            "_Example: `/setname IronLegion`_",
             parse_mode=ParseMode.MARKDOWN
         )
+        return
+
+    # Existing player: update last_seen
+    for idx, row in enumerate(rows):
+        if idx == 0:
+            continue
+        if row[0] == uid:
+            row[6] = str(int(time.time()))
+            update_row('Players', idx, row)
+            commander_name = row[1].strip() or user.first_name
+            break
+
+    msg = f"🎖️ Welcome back, Commander *{commander_name}*!\nUse /menu or /status to continue."
+
+    if not commander_name or commander_name.lower() in ["commander", "leader", user.username.lower() if user.username else ""]:
+        msg += "\n\n⚠️ Tip: Choose a unique name using `/setname <your_name>` to stand out."
+
+    await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN)
 
 handler = CommandHandler('start', start)
