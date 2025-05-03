@@ -1,5 +1,3 @@
-# handlers/train.py
-
 from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import CommandHandler, ContextTypes
@@ -97,12 +95,10 @@ async def train(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode=ParseMode.MARKDOWN
     )
 
-    # QUEST PROGRESSION STEP 3: First Training Reward
-    # Ensure prow matches header length
+    # QUEST PROGRESSION STEP 3: First Training Reward
     while len(prow) < len(header):
         prow.append("")
-    progress = prow[7]
-    if progress == 'step2':  # just completed build quest
+    if prow[7] == 'step2':
         prow[3] = str(int(prow[3]) + 200)  # +200 credits
         prow[7] = 'step3'
         update_row('Players', prow_idx, prow)
@@ -113,5 +109,12 @@ async def train(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Next: Check your base with `/status` to continue.",
             parse_mode=ParseMode.MARKDOWN
         )
+
+    # ← NEW: track daily Infantry challenge
+    from modules.challenge_manager import load_challenges, update_player_progress
+    for ch in load_challenges('daily'):
+        if ch.key == 'infantry_trained':
+            update_player_progress(uid, ch, cnt)
+            break
 
 handler = CommandHandler('train', train)
