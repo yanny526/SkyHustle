@@ -38,20 +38,19 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lines.append(f" • {btype}: Lvl {lvl}")
     lines.append("")
 
-    # 4) Pending upgrades
+    # 4) Upgrades In Progress (always show this block)
     pend = get_pending_upgrades(uid)
+    lines.append("⏳ *Upgrades In Progress:*")
     if pend:
-        lines.append("⏳ *Upgrades In Progress:*")
         for btype, nxt, rem in pend:
             lines.append(f" • {btype} → Lvl {nxt} ({rem} remaining)")
-        lines.append("")
+    else:
+        lines.append(" • None")
+    lines.append("")
 
     # 5) Army counts
     army_rows = get_rows('Army')
-    counts = {}
-    for row in army_rows[1:]:
-        if row[0] == uid:
-            counts[row[1]] = int(row[2])
+    counts = { row[1]: int(row[2]) for row in army_rows[1:] if row[0] == uid }
 
     lines.append("⚔️ *Army:*")
     # Group units by tier
@@ -67,6 +66,9 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
             lines.append(f" • {emoji} {display}: {cnt}")
         lines.append("")
 
-    await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
+    await update.message.reply_text(
+        "\n".join(lines),
+        parse_mode=ParseMode.MARKDOWN
+    )
 
 handler = CommandHandler('status', status)
