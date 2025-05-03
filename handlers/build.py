@@ -20,8 +20,7 @@ BUILDINGS = {
 @game_command
 async def build(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    /build <building> - start an upgrade (tick & upgrades via decorator),
-    enforcing a hard cap on building levels.
+    /build <building> - start an upgrade (tick & upgrades via decorator).
     """
     user = update.effective_user
     uid = str(user.id)
@@ -47,11 +46,14 @@ async def build(update: Update, context: ContextTypes.DEFAULT_TYPE):
     buildings = get_rows('Buildings')
     for row in buildings[1:]:
         if row[0] == uid and row[1] == btype:
-            current_lvl = int(row[2]) if len(row) > 2 and row[2].isdigit() else 0
+            try:
+                current_lvl = int(row[2])
+            except:
+                current_lvl = 0
             break
 
     # 2) Check cap
-    max_lvl = BUILDING_MAX_LEVEL.get(btype, None)
+    max_lvl = BUILDING_MAX_LEVEL.get(btype)
     if max_lvl is not None and current_lvl >= max_lvl:
         return await update.message.reply_text(
             f"🏆 *{btype}* is already max Level {max_lvl}!",
@@ -82,7 +84,7 @@ async def build(update: Update, context: ContextTypes.DEFAULT_TYPE):
     credits, minerals, energy = map(int, (prow[3], prow[4], prow[5]))
     if credits < cC or minerals < cM or energy < eC:
         return await update.message.reply_text(
-            f"❌ Need {cC}💳, {cM}⛏️, {eC}⚡.",
+            f"❌ Need {cC}💳 {cM}⛏️ {eC}⚡.",
             parse_mode=ParseMode.MARKDOWN
         )
 
@@ -91,19 +93,19 @@ async def build(update: Update, context: ContextTypes.DEFAULT_TYPE):
     update_row('Players', prow_idx, prow)
 
     end_ts = now + sec
-    # ensure we preserve existing row index & columns
+    # preserve existing building row or append new
     existing = None
-    for bi, row in enumerate(buildings[1:], start=1):
-        if row[0] == uid and row[1] == btype:
-            existing = (bi, row.copy())
+    for bi, brow in enumerate(buildings[1:], start=1):
+        if brow[0] == uid and brow[1] == btype:
+            existing = (bi, brow.copy())
             break
 
     if existing:
-        bi, brow = existing
-        while len(brow) < 4:
-            brow.append('')
-        brow[3] = str(end_ts)
-        update_row('Buildings', bi, brow)
+        bi, brow_copy = existing
+        while len(brow_copy) < 4:
+            brow_copy.append('')
+        brow_copy[3] = str(end_ts)
+        update_row('Buildings', bi, brow_copy)
     else:
         append_row('Buildings', [uid, btype, str(current_lvl), str(end_ts)])
 
@@ -116,10 +118,12 @@ async def build(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # 7) QUEST PROGRESSION STEP: Upgrade Power Plant
     if btype == "Power Plant":
-        progress_col = 7  # assumes "progress" is column H (index 7)
-        progress_value = prow[progress_col] if len(prow) > progress_col else ""
-        if progress_value != "step2":
-            prow[progress_col] = "step2"
+        # ensure prow matches header length
+        header = players[0]
+        while len(prow) < len(header):
+            prow.append("")
+        if prow[7] != "step2":
+            prow[7] = "step2"
             prow[4] = str(int(prow[4]) + 100)  # +100 minerals
             update_row('Players', prow_idx, prow)
             await update.message.reply_text(
@@ -127,7 +131,7 @@ async def build(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "✅ You’ve upgraded your Power Plant!\n"
                 "💎 +100 bonus Minerals!\n\n"
                 "Now try training your first unit:\n"
-                "`/train grunt 5`",
+                "`/train infantry 5`",
                 parse_mode=ParseMode.MARKDOWN
             )
 
