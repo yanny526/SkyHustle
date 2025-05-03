@@ -1,10 +1,9 @@
-# utils/decorators.py
-
 from functools import wraps
 from telegram import Update
 from telegram.ext import ContextTypes
 from modules.resource_manager import tick_resources
 from modules.upgrade_manager import complete_upgrades
+from modules.achievement_manager import check_and_award_achievements
 
 def game_command(func):
     @wraps(func)
@@ -33,6 +32,17 @@ def game_command(func):
             await message.reply_text(msgs)
 
         # 3) Run the original command
-        return await func(update, context)
+        result = await func(update, context)
+
+        # 4) Check for newly unlocked achievements
+        awards = check_and_award_achievements(uid)
+        for ach in awards:
+            await message.reply_text(
+                f"🏅 *Achievement unlocked!* {ach.description}\n"
+                f"Rewards: +{ach.reward_credits}💳 +{ach.reward_minerals}⛏️ +{ach.reward_energy}⚡",
+                parse_mode=ContextTypes.MARKDOWN
+            )
+
+        return result
 
     return wrapper
