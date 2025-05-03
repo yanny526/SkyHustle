@@ -43,6 +43,7 @@ def complete_upgrades(user_id: str):
     for r in new_data:
         append_row('Upgrades', r)
 
+
 def apply_building_level(uid: str, building: str, new_level: int):
     """
     Internal helper: writes the upgraded building level into 'Buildings' sheet.
@@ -65,30 +66,35 @@ def apply_building_level(uid: str, building: str, new_level: int):
     capped = min(new_level, BUILDING_MAX_LEVEL.get(building, new_level))
     append_row('Buildings', [uid, building, str(capped)])
 
-def get_pending_upgrades(uid: str) -> list[tuple[str, str, str]]:
+
+def get_pending_upgrades(user_id: str) -> list[dict]:
     """
-    Return a list of (building_name, target_level, remaining_str)
-    for any upgrades still in progress for this user.
+    Fetch all pending upgrades for the given user.
+    Returns a list of dicts: {
+        'bname': building_name (str),
+        'target_lvl': level (int),
+        'end_ts': timestamp (float)
+    }.
     """
-    rows = get_rows('Upgrades')[1:]  # skip header
+    rows = get_rows('Upgrades')
     pending = []
     now_ts = datetime.utcnow().timestamp()
 
-    for r in rows:
-        if len(r) < 5 or r[0] != uid:
+    for row in rows[1:]:
+        if len(row) < 5:
             continue
-
-        bname = r[1]
+        uid, bname, start_ts, end_ts, target_lvl = row[:5]
+        if uid != user_id:
+            continue
         try:
-            end_ts = float(r[3])
-        except (ValueError, IndexError):
+            end = float(end_ts)
+        except ValueError:
             continue
-        target_lvl = r[4]
-        rem_seconds = end_ts - now_ts
-        if rem_seconds > 0:
-            hrs, rem = divmod(int(rem_seconds), 3600)
-            mins, secs = divmod(rem, 60)
-            remaining_str = f"{hrs:02d}:{mins:02d}:{secs:02d}"
-            pending.append((bname, target_lvl, remaining_str))
+        if end > now_ts:
+            pending.append({
+                'bname': bname,
+                'target_lvl': int(target_lvl),
+                'end_ts': end
+            })
 
     return pending
