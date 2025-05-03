@@ -13,6 +13,8 @@ from modules.building_manager import (
 )
 from modules.unit_manager import UNITS
 from sheets_service import get_rows
+# Import the actual army command handler function:
+from handlers.army import army as army_command
 
 # In-memory cache to throttle Sheets calls
 STATUS_CACHE: dict = {}
@@ -28,7 +30,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_user.id)
     now = datetime.utcnow()
 
-    # 1) Cached?
+    # 1) Serve from cache if fresh
     cache = STATUS_CACHE.get(uid)
     if cache and now - cache["time"] < CACHE_TTL:
         return await update.message.reply_text(
@@ -37,7 +39,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=cache["keyboard"],
         )
 
-    # 2) Load resources
+    # 2) Load player row
     players = get_rows("Players")
     for row in players[1:]:
         if row[0] == uid:
@@ -60,7 +62,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     rates  = get_production_rates(binfo)
     health = get_building_health(uid)
 
-    # 5) Assemble lines
+    # 5) Assemble text lines
     lines = [
         f"🏰 *Status for {name}*",
         "",
@@ -95,7 +97,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         lines.append(" • None")
 
-    # 7) Army
+    # 7) Army counts
     army_rows = get_rows("Army")
     counts    = {r[1]: int(r[2]) for r in army_rows[1:] if r[0] == uid}
     lines   += ["", "⚔️ *Army:*"]
@@ -125,18 +127,24 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def status_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    Handle inline-button presses, re-sending the corresponding slash-command.
+    Handle inline-button presses by directly invoking the corresponding command.
     """
     query = update.callback_query
     await query.answer()
-    cmd_map = {
-        "upgrade_HQ":  "/build",
-        "train_units": "/train",
-        "view_army":   "/army",
-    }
-    if query.data in cmd_map:
-        await context.bot.send_message(chat_id=query.message.chat_id, text=cmd_map[query.data])
 
-# Export both handlers
+    if query.data == "view_army":
+        return await army_command(update, context)
+    if query.data == "upgrade_HQ":
+        # similarly call your build handler
+        from handlers.build import build as build_command
+        return await build_command(update, context)
+    if query.data == "train_units":
+        from handlers.train import train as train_command
+        return await train_command(update, context)
+
+# Export both the command and its callback handler
 handler          = CommandHandler("status", status)
-callback_handler = CallbackQueryHandler(status_button, pattern="^(upgrade_HQ|train_units|view_army)$")
+callback_handler = CallbackQueryHandler(
+    status_button,
+    pattern="^(upgrade_HQ|train_units|view_army)$"
+)
