@@ -1,6 +1,4 @@
-# modules/building_manager.py
-
-from sheets_service import get_rows
+from sheets_service import get_rows, ensure_sheet
 from datetime import datetime
 
 # Define per‐level production for each building type
@@ -13,7 +11,7 @@ PRODUCTION_PER_LEVEL = {
 
 def get_building_info(user_id: str) -> dict:
     """
-    Returns { building_name: level } for this user.
+    Returns a dict mapping { building_name: level } for this user.
     """
     rows = get_rows('Buildings')
     info = {}
@@ -37,13 +35,22 @@ def get_production_rates(building_info: dict) -> dict:
 
 def get_building_health(user_id: str) -> dict:
     """
-    Returns { building_name: {'current': int, 'max': int} }.
-    Expects a 'BuildingHealth' sheet with columns: [uid, name, current_hp, max_hp].
+    Returns { building_name: {'current': int, 'max': int} } for this user.
+    Auto-creates the sheet if missing.
     """
+    # Ensure the tab exists with correct header
+    ensure_sheet('BuildingHealth', ['uid', 'building_name', 'current_hp', 'max_hp'])
+
     rows = get_rows('BuildingHealth')
     health = {}
     for row in rows[1:]:
-        if row[0] == user_id and len(row) >= 4:
-            name, cur, mx = row[1], int(row[2]), int(row[3])
-            health[name] = {'current': cur, 'max': mx}
+        if len(row) < 4 or row[0] != user_id:
+            continue
+        try:
+            current_hp = int(row[2])
+            max_hp = int(row[3])
+        except ValueError:
+            continue
+        health[row[1]] = {'current': current_hp, 'max': max_hp}
+
     return health
