@@ -4,13 +4,13 @@ from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import CommandHandler, ContextTypes
 
-from modules.upgrade_manager import complete_upgrades, get_pending_upgrades
+from modules.upgrade_manager import complete_upgrades
 from modules.building_manager import get_building_info
 from modules.unit_manager import UNITS
 from sheets_service import get_rows
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """ /status – show your base status, resources, buildings, upgrades, and army counts """
+    """ /status – show your base status, resources, buildings, and army counts """
     uid = str(update.effective_user.id)
 
     # 1) Complete any finished building upgrades
@@ -38,17 +38,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lines.append(f" • {btype}: Lvl {lvl}")
     lines.append("")
 
-    # 4) Pending upgrades — always show the section
-    pend = get_pending_upgrades(uid)
-    lines.append("⏳ *Upgrades In Progress:*")
-    if pend:
-        for btype, nxt, rem in pend:
-            lines.append(f" • {btype} → Lvl {nxt} ({rem} remaining)")
-    else:
-        lines.append(" • None")
-    lines.append("")
-
-    # 5) Army counts
+    # 4) Army counts
     army_rows = get_rows('Army')
     counts = {}
     for row in army_rows[1:]:
