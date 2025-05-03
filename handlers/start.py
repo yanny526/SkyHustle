@@ -1,24 +1,25 @@
 # handlers/start.py
 
 import time
-from telegram import Update
+from telegram import Update, KeyboardButton, ReplyKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.ext import CommandHandler, ContextTypes
 from sheets_service import init, get_rows, append_row, update_row
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    /start - register a new player or welcome back existing one.
+    /start - register new players or welcome back existing ones,
+    and kick off the first quest step.
     """
     init()
 
     user = update.effective_user
     uid = str(user.id)
     rows = get_rows('Players')
-    existing_ids = {row[0] for row in rows[1:]} if len(rows) > 1 else set()
+    existing_ids = {r[0] for r in rows[1:]} if len(rows) > 1 else set()
 
     if uid not in existing_ids:
-        # New player registration
+        # New registration
         append_row('Players', [
             uid,
             '',                             # commander_name
@@ -26,27 +27,31 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             '1000',                         # credits
             '1000',                         # minerals
             '1000',                         # energy
-            str(int(time.time()))          # last_seen
+            str(int(time.time())),         # last_seen
+            ''                              # progress
         ])
 
-        await update.message.reply_text(
+        # 1) Short captivating story
+        text = (
             "🌍 *The world is in ruins.*\n"
-            "You are the last hope of your region.\n"
-            "Command your base, rebuild power, and rise to dominate.\n\n"
-            "🧰 You’ve received a starter pack:\n"
-            "💳 1000 Credits\n⛏️ 1000 Minerals\n⚡ 1000 Energy\n\n"
-            "🧾 *Before you begin:*\n"
-            "Choose a unique commander name using:\n"
-            "`/setname <your_name>`\n\n"
-            "_Example: `/setname IronLegion`_",
-            parse_mode=ParseMode.MARKDOWN
+            "Ancient powers lie buried beneath the ashes.\n"
+            "Only a true Commander can restore hope.\n\n"
+            "🧾 *Your first task:*\n"
+            "`/setname <your_name>` – Choose your unique commander name.\n\n"
+            "🎁 *On first completion you’ll earn:* +500 ⚡ Energy\n"
         )
-        return
 
-    # Existing player: update last_seen
+        # offer a quick button to /setname
+        markup = ReplyKeyboardMarkup(
+            [[KeyboardButton("/setname YourName")]],
+            resize_keyboard=True
+        )
+
+        return await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=markup)
+
+    # existing player
     for idx, row in enumerate(rows):
-        if idx == 0:
-            continue
+        if idx == 0: continue
         if row[0] == uid:
             row[6] = str(int(time.time()))
             update_row('Players', idx, row)
@@ -54,10 +59,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             break
 
     msg = f"🎖️ Welcome back, Commander *{commander_name}*!\nUse /menu or /status to continue."
-
-    if not commander_name or commander_name.lower() in ["commander", "leader", user.username.lower() if user.username else ""]:
-        msg += "\n\n⚠️ Tip: Choose a unique name using `/setname <your_name>` to stand out."
-
     await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN)
 
 handler = CommandHandler('start', start)
