@@ -1,4 +1,3 @@
-
 # utils/decorators.py
 
 from functools import wraps
@@ -12,10 +11,15 @@ def game_command(func):
     async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
         uid = str(update.effective_user.id)
 
+        # Safe message object (for /commands or button clicks)
+        message = update.message or (update.callback_query and update.callback_query.message)
+        if not message:
+            return
+
         # 1) Tick resources
         added = tick_resources(uid)
         if added['minerals'] or added['energy']:
-            await update.message.reply_text(
+            await message.reply_text(
                 f"🌱 +{added['minerals']} Minerals, +{added['energy']} Energy"
             )
 
@@ -26,7 +30,7 @@ def game_command(func):
                 f"✅ {btype} upgrade complete! Now Lvl {lvl}."
                 for btype, lvl in done
             )
-            await update.message.reply_text(msgs)
+            await message.reply_text(msgs)
 
         # 3) Run the original command
         return await func(update, context)
