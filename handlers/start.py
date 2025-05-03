@@ -60,7 +60,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 break
 
         if commander_name.lower() in ["", "leader", "commander", user.username.lower() if user.username else ""]:
-            extra = "\n\n⚠️ You haven't picked a unique commander name.\nUse `/setname <your_name>` to stand out!"
+            extra = "\n\n⚠️ If you haven't picked a unique commander name.\nUse `/setname <your_name>` to stand out!"
         else:
             extra = ""
 
