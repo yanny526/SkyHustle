@@ -5,7 +5,7 @@ from telegram.constants import ParseMode
 from telegram.ext import CommandHandler, ContextTypes
 from sheets_service import get_rows
 from utils.decorators import game_command
-from modules.unit_manager import UNITS  # Added for dynamic unit power lookup
+from modules.unit_manager import UNITS  # dynamic unit power lookup
 
 @game_command
 async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -53,6 +53,12 @@ async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for idx, (name, power) in enumerate(scores[:10], start=1):
         lines.append(f"{idx}. *{name}* — {power} Power")
 
-    await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
+    text = "\n".join(lines)
+
+    # ✅ Supports both command and inline button
+    if update.message:
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    elif update.callback_query:
+        await update.callback_query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN)
 
 handler = CommandHandler('leaderboard', leaderboard)
