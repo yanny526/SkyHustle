@@ -24,6 +24,7 @@ from handlers.leaderboard import handler as leaderboard_handler
 from handlers.help import handler as help_handler
 from handlers.army import handler as army_handler
 from handlers.callbacks import handler as menu_callback_handler  # Inline button handler
+from handlers.achievements import handler as achievements_handler
 
 # Import challenge handlers
 from handlers.challenges import daily, weekly  # Daily & Weekly Challenges
@@ -50,7 +51,8 @@ def main():
     app.add_handler(help_handler)
     app.add_handler(army_handler)
     app.add_handler(menu_callback_handler)
-
+    app.add_handler(achievements_handler)
+    
     # Register Daily & Weekly challenge commands
     app.add_handler(CommandHandler('daily', daily))
     app.add_handler(CommandHandler('weekly', weekly))
