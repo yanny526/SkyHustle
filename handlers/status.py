@@ -13,10 +13,13 @@ from modules.building_manager import (
 )
 from modules.unit_manager import UNITS
 from sheets_service import get_rows
-# Import the actual army command handler function:
-from handlers.army import army as army_command
 
-# In-memory cache to throttle Sheets calls
+# Import your real command functions
+from handlers.army import army as army_command
+from handlers.build import build as build_command
+from handlers.train import train as train_command
+
+# Cache to throttle Sheets calls
 STATUS_CACHE: dict = {}
 CACHE_TTL = timedelta(seconds=30)
 
@@ -30,7 +33,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_user.id)
     now = datetime.utcnow()
 
-    # 1) Serve from cache if fresh
+    # 1) Serve cached if fresh
     cache = STATUS_CACHE.get(uid)
     if cache and now - cache["time"] < CACHE_TTL:
         return await update.message.reply_text(
@@ -39,7 +42,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=cache["keyboard"],
         )
 
-    # 2) Load player row
+    # 2) Load player resources
     players = get_rows("Players")
     for row in players[1:]:
         if row[0] == uid:
@@ -57,12 +60,12 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "energy":   (energy   - prev.get("energy",   energy))   if "energy"   in prev else None,
     }
 
-    # 4) Buildings + rates + health
+    # 4) Buildings, production & health
     binfo  = get_building_info(uid)
     rates  = get_production_rates(binfo)
     health = get_building_health(uid)
 
-    # 5) Assemble text lines
+    # 5) Build status text
     lines = [
         f"🏰 *Status for {name}*",
         "",
@@ -127,22 +130,31 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def status_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    Handle inline-button presses by directly invoking the corresponding command.
+    Handle inline-button presses by stamping in a valid message
+    on the Update before calling your existing command handlers.
     """
     query = update.callback_query
     await query.answer()
 
+    # Grab the original Message object
+    msg = query.message
+
     if query.data == "view_army":
+        # Monkey-patch update.message and call army()
+        update.message = msg
         return await army_command(update, context)
+
     if query.data == "upgrade_HQ":
-        # similarly call your build handler
-        from handlers.build import build as build_command
+        update.message = msg
+        update.message.text = "/build"
         return await build_command(update, context)
+
     if query.data == "train_units":
-        from handlers.train import train as train_command
+        update.message = msg
+        update.message.text = "/train"
         return await train_command(update, context)
 
-# Export both the command and its callback handler
+# Export both handlers
 handler          = CommandHandler("status", status)
 callback_handler = CallbackQueryHandler(
     status_button,
