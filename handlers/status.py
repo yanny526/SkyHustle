@@ -52,7 +52,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     deltas = {
         "credits": (credits - prev.get("credits", credits)) if "credits" in prev else None,
         "minerals": (minerals - prev.get("minerals", minerals)) if "minerals" in prev else None,
-        "energy": (energy - prev.get("energy", energy)) if "energy" in prev else None,
+        "energy":   (energy   - prev.get("energy", energy))   if "energy"   in prev else None,
     }
 
     # 4) Buildings & rates
@@ -82,10 +82,12 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
             line += f" (HP {cur}/{mx})"
         lines.append(line)
 
-    # 6) Upgrades in Progress
+    # 6) Upgrades in Progress + raw debug output
     pending = get_pending_upgrades(uid)
     lines += ["", "⏳ *Upgrades in Progress:*"]
     if pending:
+        # Debug: show raw pending data
+        lines.append(f"```\n{pending}\n```")
         for upg in sorted(pending, key=lambda x: x["end_ts"]):
             rem = int(upg["end_ts"] - now.timestamp())
             hrs, rem2 = divmod(rem, 3600)
