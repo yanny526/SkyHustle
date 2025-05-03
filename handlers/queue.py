@@ -31,18 +31,23 @@ async def queue(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 continue
 
     if not pending:
-        return await update.message.reply_text("✅ You have no upgrades in progress.")
+        text = "✅ You have no upgrades in progress."
+    else:
+        lines = ["⏳ *Upgrades in Progress* ⏳\n"]
+        emoji_map = {
+            'Mine': '⛏️', 'Power Plant': '⚡',
+            'Barracks': '🛡️', 'Workshop': '🔧'
+        }
+        for btype, next_lvl, end_ts in pending:
+            rem = format_hhmmss(int(end_ts - now))
+            emoji = emoji_map.get(btype, '')
+            lines.append(f" • {emoji} {btype} → Lvl {next_lvl} ({rem} remaining)")
+        text = "\n".join(lines)
 
-    lines = ["⏳ *Upgrades in Progress* ⏳\n"]
-    emoji_map = {
-        'Mine': '⛏️', 'Power Plant': '⚡',
-        'Barracks': '🛡️', 'Workshop': '🔧'
-    }
-    for btype, next_lvl, end_ts in pending:
-        rem = format_hhmmss(int(end_ts - now))
-        emoji = emoji_map.get(btype, '')
-        lines.append(f" • {emoji} {btype} → Lvl {next_lvl} ({rem} remaining)")
-
-    await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
+    # ✅ Support both message and callback trigger
+    if update.message:
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    elif update.callback_query:
+        await update.callback_query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN)
 
 handler = CommandHandler('queue', queue)
