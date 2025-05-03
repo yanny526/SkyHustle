@@ -68,6 +68,7 @@ def main():
             BotCommand("daily", "📅 View daily challenges"),
             BotCommand("weekly", "📆 View weekly challenges"),
             BotCommand("help", "🆘 Help & all commands"),
+            BotCommand("achievements", "🏅 View your achievements"),
         ]
         await app.bot.set_my_commands(commands)
 
