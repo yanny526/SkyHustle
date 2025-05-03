@@ -2,6 +2,8 @@
 
 from telegram import Update
 from telegram.ext import CallbackContext, CallbackQueryHandler
+
+# Import core commands to reuse their logic
 from handlers.status import status as status_handler
 from handlers.queue import queue as queue_handler
 from handlers.army import army as army_handler
@@ -25,4 +27,5 @@ async def menu_callback(update: Update, context: CallbackContext):
     else:
         await query.edit_message_text("❓ Unknown menu option.")
 
+# This is the actual handler to register in main.py
 handler = CallbackQueryHandler(menu_callback)
