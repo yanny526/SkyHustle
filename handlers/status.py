@@ -47,7 +47,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         return await update.message.reply_text("❗ Please run /start first.")
 
-    # 3) Deltas
+    # 3) Historical deltas
     prev = cache["resources"] if cache else {}
     deltas = {
         "credits":  (credits  - prev.get("credits",  credits))  if "credits"  in prev else None,
@@ -82,7 +82,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
             line += f" (HP {cur}/{mx})"
         lines.append(line)
 
-    # 6) Upgrades in progress
+    # 6) Upgrades in Progress
     pending = get_pending_upgrades(uid)
     lines += ["", "⏳ *Upgrades in Progress:*"]
     if pending:
@@ -125,22 +125,18 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def status_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    Handle button presses from the /status inline keyboard.
-    We simply re-send the matching slash-command so your existing handlers run.
+    Handle inline-button presses, re-sending the corresponding slash-command.
     """
     query = update.callback_query
     await query.answer()
-
-    mapping = {
-        "upgrade_HQ":   "/build",
-        "train_units":  "/train",
-        "view_army":    "/army",
+    cmd_map = {
+        "upgrade_HQ":  "/build",
+        "train_units": "/train",
+        "view_army":   "/army",
     }
-    cmd = mapping.get(query.data)
-    if cmd:
-        await context.bot.send_message(chat_id=query.message.chat_id, text=cmd)
+    if query.data in cmd_map:
+        await context.bot.send_message(chat_id=query.message.chat_id, text=cmd_map[query.data])
 
-# Export both the command and the callback handlers
-handler        = CommandHandler("status", status)
-callback_handler = CallbackQueryHandler(status_button,
-                                        pattern="^(upgrade_HQ|train_units|view_army)$")
+# Export both handlers
+handler          = CommandHandler("status", status)
+callback_handler = CallbackQueryHandler(status_button, pattern="^(upgrade_HQ|train_units|view_army)$")
