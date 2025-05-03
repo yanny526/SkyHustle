@@ -20,6 +20,7 @@ from handlers.attack import handler as attack_handler
 from handlers.leaderboard import handler as leaderboard_handler
 from handlers.help import handler as help_handler
 from handlers.army import handler as army_handler
+from handlers.callbacks import handler as menu_callback_handler  # ✅ NEW
 
 def main():
     # 1) Auto-create sheets & headers
@@ -41,6 +42,7 @@ def main():
     app.add_handler(leaderboard_handler)
     app.add_handler(help_handler)
     app.add_handler(army_handler)
+    app.add_handler(menu_callback_handler)  # ✅ NEW
 
     # 4) Catch-all for unknown commands
     async def unknown(update, context):
