@@ -1,7 +1,7 @@
 # handlers/status.py
 
 from datetime import datetime, timedelta
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, ReplyKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.ext import CommandHandler, ContextTypes
 
@@ -31,13 +31,14 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 1) Return cached if still fresh
     cache = STATUS_CACHE.get(uid)
     if cache and now - cache["time"] < CACHE_TTL:
-        return await update.message.reply_text(
+        await update.message.reply_text(
             cache["text"],
             parse_mode=ParseMode.MARKDOWN,
-            reply_markup=cache["keyboard"]
+            reply_markup=cache["keyboard"],
         )
+        return
 
-    # 2) Load player row
+    # 2) Fetch player resources
     players = get_rows("Players")
     for row in players[1:]:
         if row[0] == uid:
@@ -45,7 +46,8 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
             credits, minerals, energy = map(int, row[3:6])
             break
     else:
-        return await update.message.reply_text("❗ Please run /start first.")
+        await update.message.reply_text("❗ Please run /start first.")
+        return
 
     # 3) Historical deltas
     prev = cache["resources"] if cache else {}
@@ -58,8 +60,9 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 4) Buildings & rates
     binfo = get_building_info(uid)
     rates = get_production_rates(binfo)
+    health = get_building_health(uid)
 
-    # 5) Build lines
+    # 5) Build the status text
     lines = [
         f"🏰 *Status for {name}*",
         "",
@@ -74,7 +77,6 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "",
         "🏗️ *Buildings:*",
     ]
-    health = get_building_health(uid)
     for btype, lvl in binfo.items():
         line = f" • {btype}: Lvl {lvl}"
         if btype in health:
@@ -82,12 +84,10 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
             line += f" (HP {cur}/{mx})"
         lines.append(line)
 
-    # 6) Upgrades in Progress + raw debug output
+    # 6) Upgrades in Progress
     pending = get_pending_upgrades(uid)
     lines += ["", "⏳ *Upgrades in Progress:*"]
     if pending:
-        # Debug: show raw pending data
-        lines.append(f"```\n{pending}\n```")
         for upg in sorted(pending, key=lambda x: x["end_ts"]):
             rem = int(upg["end_ts"] - now.timestamp())
             hrs, rem2 = divmod(rem, 3600)
@@ -107,22 +107,28 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if cnt > 0:
             lines.append(f" • {emoji} {disp}: {cnt}")
 
-    # 8) Assemble text and keyboard
     text = "\n".join(lines)
-    keyboard = InlineKeyboardMarkup.from_row([
-        InlineKeyboardButton("Upgrade HQ", callback_data="upgrade_HQ"),
-        InlineKeyboardButton("Train Units", callback_data="train_units"),
-        InlineKeyboardButton("View Army", callback_data="view_army"),
-    ])
 
-    # 9) Cache & reply
+    # 8) Reply keyboard so buttons send slash-commands directly
+    keyboard = ReplyKeyboardMarkup(
+        [["/build", "/train", "/army"]],
+        resize_keyboard=True,
+        one_time_keyboard=True
+    )
+
+    # 9) Cache & send
     STATUS_CACHE[uid] = {
         "time": now,
         "text": text,
         "resources": {"credits": credits, "minerals": minerals, "energy": energy},
-        "keyboard": keyboard
+        "keyboard": keyboard,
     }
-    await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard)
+
+    await update.message.reply_text(
+        text,
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=keyboard
+    )
 
 # Must be named `handler` for main.py to import
 handler = CommandHandler("status", status)
