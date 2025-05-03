@@ -1,6 +1,5 @@
 # main.py
 
-import asyncio
 from config import BOT_TOKEN
 from sheets_service import init as sheets_init
 
@@ -22,7 +21,7 @@ from handlers.attack import handler as attack_handler
 from handlers.leaderboard import handler as leaderboard_handler
 from handlers.help import handler as help_handler
 from handlers.army import handler as army_handler
-from handlers.callbacks import handler as menu_callback_handler  # ✅ NEW
+from handlers.callbacks import handler as menu_callback_handler  # ✅ for inline menu
 
 async def set_bot_commands(application):
     commands = [
@@ -36,13 +35,13 @@ async def set_bot_commands(application):
     await application.bot.set_my_commands(commands)
 
 async def main():
-    # 1) Auto-create sheets & headers
+    # 1) Auto-create Sheets & headers
     sheets_init()
 
-    # 2) Build the bot
+    # 2) Build bot
     app = Application.builder().token(BOT_TOKEN).build()
 
-    # 3) Register command handlers
+    # 3) Register command + callback handlers
     app.add_handler(start_handler)
     app.add_handler(setname_handler)
     app.add_handler(menu_handler)
@@ -57,16 +56,20 @@ async def main():
     app.add_handler(army_handler)
     app.add_handler(menu_callback_handler)
 
-    # 4) Set up Telegram-suggested commands (under chat bar)
+    # 4) Set visible slash commands
     await set_bot_commands(app)
 
-    # 5) Catch-all for unknown commands
+    # 5) Fallback for unknown commands
     async def unknown(update, context):
         await update.message.reply_text("❓ Unknown command. Use /help.")
     app.add_handler(MessageHandler(filters.COMMAND, unknown))
 
-    # 6) Start polling
+    # 6) Start the bot
     await app.run_polling()
 
+# ✅ FIXED: Safe event loop for Render
 if __name__ == "__main__":
-    asyncio.run(main())
+    import asyncio
+    loop = asyncio.get_event_loop()
+    loop.create_task(main())
+    loop.run_forever()
