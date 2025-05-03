@@ -2,7 +2,8 @@ from sheets_service import get_rows, append_row, update_row
 from datetime import date
 
 class Challenge:
-    def __init__(self, cid, ctype, description, key, value, reward_credits, reward_minerals, reward_energy):
+    def __init__(self, cid, ctype, description, key, value,
+                 reward_credits, reward_minerals, reward_energy):
         self.id = cid
         self.type = ctype
         self.description = description
@@ -13,17 +14,14 @@ class Challenge:
         self.reward_energy = int(reward_energy)
 
 def load_challenges(ch_type: str):
-    """Load active challenges of given type ('daily' or 'weekly')."""
     rows = get_rows("Challenges")
     header, data = rows[0], rows[1:]
-    challenges = []
     idx = {col: i for i, col in enumerate(header)}
+    out = []
     for row in data:
-        if row[idx['type']].lower() != ch_type:
-            continue
-        if row[idx['active']].lower() != 'true':
-            continue
-        challenges.append(Challenge(
+        if row[idx['type']].lower() != ch_type: continue
+        if row[idx['active']].lower() != 'true': continue
+        out.append(Challenge(
             cid=row[idx['challenge_id']],
             ctype=row[idx['type']],
             description=row[idx['description']],
@@ -33,56 +31,49 @@ def load_challenges(ch_type: str):
             reward_minerals=row[idx['reward_minerals']],
             reward_energy=row[idx['reward_energy']],
         ))
-    return challenges
+    return out
 
 def get_player_challenge(uid: str, cid: str):
-    """Return (row_index, row) for a player's challenge entry today."""
     rows = get_rows("PlayerChallenges")
     header, data = rows[0], rows[1:]
     today = date.today().isoformat()
     for i, row in enumerate(data, start=1):
-        if row[0] == uid and row[1] == cid and row[2] == today:
+        if row[0]==uid and row[1]==cid and row[2]==today:
             return i, row
     return None, None
 
 def update_player_progress(uid: str, ch: Challenge, increment: int = 1):
-    """Increment progress and mark complete if threshold reached."""
     today = date.today().isoformat()
     pc_idx, prow = get_player_challenge(uid, ch.id)
-
     if prow:
-        # existing entry: bump progress_count
         prog = int(prow[4] or 0) + increment
         prow[4] = str(prog)
-        # if now complete, set date_completed
         if prog >= ch.value and not prow[3]:
             prow[3] = today
         update_row("PlayerChallenges", pc_idx, prow)
     else:
-        # new entry: [player_id,challenge_id,date_assigned,date_completed,progress_count,awarded]
         completed = today if increment >= ch.value else ""
         append_row("PlayerChallenges", [
-            uid,
-            ch.id,
-            today,
-            completed,
-            str(increment),
-            ""       # awarded flag
+            uid, ch.id, today, completed, str(increment), ""
         ])
 
 def award_challenges(uid: str, ch_type: str):
-    """Grant rewards for any completed but not yet awarded challenges."""
+    """
+    Grant rewards for any completed but not yet awarded challenges.
+    Returns list of Challenge objects newly awarded.
+    """
+    awarded = []
     challenges = load_challenges(ch_type)
     for ch in challenges:
         pc_idx, prow = get_player_challenge(uid, ch.id)
         if not prow:
             continue
 
-        # Ensure prow has at least 6 elements: [player_id, cid, assigned, completed, progress_count, awarded]
+        # pad to at least 6 columns
         while len(prow) < 6:
             prow.append('')
 
-        # prow[3] = date_completed, prow[5] = awarded flag
+        # prow[3]=date_completed, prow[5]=awarded flag
         if prow[3] and prow[5] != 'awarded':
             # grant resources
             players = get_rows("Players")
@@ -97,3 +88,6 @@ def award_challenges(uid: str, ch_type: str):
             # mark as awarded
             prow[5] = 'awarded'
             update_row("PlayerChallenges", pc_idx, prow)
+
+            awarded.append(ch)
+    return awarded
