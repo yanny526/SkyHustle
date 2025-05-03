@@ -49,14 +49,14 @@ def main():
 
     # 4) Set visible slash commands in Telegram
     async def set_bot_commands(app):
-    commands = [
-        BotCommand("menu", "📋 Game command menu"),
-        BotCommand("status", "📊 View your base status"),
-        BotCommand("army", "⚔️ View your army units"),
-        BotCommand("queue", "⏳ Pending upgrades"),
-        BotCommand("leaderboard", "🏆 Top commanders"),
-        BotCommand("help", "🆘 Help & all commands"),
-    ]
+        commands = [
+            BotCommand("menu", "📋 Game command menu"),
+            BotCommand("status", "📊 View your base status"),
+            BotCommand("army", "⚔️ View your army units"),
+            BotCommand("queue", "⏳ Pending upgrades"),
+            BotCommand("leaderboard", "🏆 Top commanders"),
+            BotCommand("help", "🆘 Help & all commands"),
+        ]
         await app.bot.set_my_commands(commands)
 
     app.post_init = set_bot_commands  # ✅ ensures commands appear under message bar
