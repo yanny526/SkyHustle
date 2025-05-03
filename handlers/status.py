@@ -1,76 +1,101 @@
-# modules/upgrade_manager.py
+# handlers/status.py
 
 import time
-from sheets_service import get_rows, append_row, clear_range
+from telegram import Update
+from telegram.constants import ParseMode
+from telegram.ext import CommandHandler, ContextTypes
 
-# Range of the Upgrades sheet (columns A–E)
-UPGRADES_RANGE = 'Upgrades!A:E'
+from modules.upgrade_manager import complete_upgrades, get_pending_upgrades
+from modules.building_manager import get_building_info
+from modules.unit_manager import UNITS
+from sheets_service import get_rows, update_row
 
-async def initiate_upgrade(user_id: str, building: str, current_lvl: int, duration: int):
-    """
-    Schedule a new building upgrade for user_id.
-    building: name of building (e.g., 'Barracks')
-    current_lvl: its current level
-    duration: seconds until completion
-    """
-    start_ts = int(time.time())
-    target_lvl = current_lvl + 1
-    append_row(UPGRADES_RANGE, [user_id, building, str(target_lvl), str(start_ts), str(duration)])
+# Constants for production rates per building level
+MINERAL_RATE_PER_LVL = 20  # minerals per hour per Mine level
+ENERGY_RATE_PER_LVL  = 10  # energy per hour per Power Plant level
 
-
-def complete_upgrades(user_id: str) -> None:
-    """
-    Check the Upgrades sheet for any finished upgrades for user_id,
-    apply them and remove completed rows.
-    """
-    rows = get_rows(UPGRADES_RANGE)
-    if not rows or len(rows) < 2:
-        return
-    header, *data = rows
-    keep = []
+async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show your base status: resources, production, buildings, upgrades, and army."""
+    uid = str(update.effective_user.id)
     now = int(time.time())
-    for row in data:
-        if len(row) < 5:
-            continue
-        uid, building, target_str, start_str, dur_str = row
-        start = int(start_str)
-        dur   = int(dur_str)
-        finish = start + dur
-        if uid == user_id and now >= finish:
-            # apply upgrade
-            from modules.building_manager import set_building_level
-            set_building_level(user_id, building, int(target_str))
-        else:
-            keep.append(row)
-    # rewrite the sheet: clear and re-append header + remaining
-    clear_range(UPGRADES_RANGE)
-    append_row(UPGRADES_RANGE, header)
-    for r in keep:
-        append_row(UPGRADES_RANGE, r)
 
+    # 1) Complete any finished building upgrades
+    complete_upgrades(uid)
 
-def get_pending_upgrades(user_id: str) -> list[tuple[str,int,str]]:
-    """
-    Return a list of (building, target_level, remaining_time_str) for all
-    upgrades still in progress for user_id.
-    """
-    rows = get_rows(UPGRADES_RANGE)
-    if not rows or len(rows) < 2:
-        return []
-    pending = []
-    now = int(time.time())
-    for row in rows[1:]:  # skip header
-        if len(row) < 5:
-            continue
-        uid, building, target_str, start_str, dur_str = row
-        if uid != user_id:
-            continue
-        start = int(start_str)
-        dur   = int(dur_str)
-        rem = start + dur - now
-        if rem > 0:
-            h = rem // 3600
-            m = (rem % 3600) // 60
-            s = rem % 60
-            pending.append((building, int(target_str), f"{h:02d}:{m:02d}:{s:02d}"))
-    return pending
+    # 2) Fetch player row and determine index for updates
+    players = get_rows('Players')
+    player_idx = None
+    for idx, row in enumerate(players[1:], start=1):
+        if row[0] == uid:
+            player_idx = idx
+            name = row[1]
+            credits  = int(row[3])
+            minerals = int(row[4])
+            energy   = int(row[5])
+            last_seen_ts = int(row[6]) if len(row) > 6 and row[6].isdigit() else now
+            break
+    else:
+        return await update.message.reply_text("❗ Please run /start to join the game.")
+
+    # 3) Calculate resource regeneration since last_seen
+    delta = now - last_seen_ts
+    binfo = get_building_info(uid)
+    mineral_rate = binfo['Mine'] * MINERAL_RATE_PER_LVL
+    energy_rate  = binfo['Power Plant'] * ENERGY_RATE_PER_LVL
+    regen_min = int(delta * mineral_rate / 3600)
+    regen_eng = int(delta * energy_rate  / 3600)
+
+    # 4) Update player sheet with new resources and last_seen
+    if regen_min or regen_eng:
+        minerals += regen_min
+        energy   += regen_eng
+        new_row = [uid, name, row[2], str(credits), str(minerals), str(energy), str(now)]
+        update_row('Players', player_idx, new_row)
+
+    # 5) Start building the message lines
+    lines = []
+
+    # regeneration header
+    if regen_min or regen_eng:
+        lines.append(f"🌱 +{regen_min} Minerals, +{regen_eng} Energy\n")
+
+    # base header
+    lines.append(f"🏰 *Base Status for {name}*")
+    lines.append(f"💳 {credits}   ⛏️ {minerals}   ⚡ {energy}\n")
+
+    # buildings with levels and production/effects
+    lines.append("🏗️ *Buildings:*" )
+    lines.append(f"• ⛏️ Mine (Lvl {binfo['Mine']}) → +{mineral_rate} minerals/hr")
+    lines.append(f"• ⚡ Power Plant (Lvl {binfo['Power Plant']}) → +{energy_rate} energy/hr")
+    lines.append(f"• 🛡️ Barracks (Lvl {binfo['Barracks']}) → -{binfo['Barracks']*5}% train time")
+    lines.append(f"• 🔧 Workshop (Lvl {binfo['Workshop']}) → +{binfo['Workshop']*2}% combat strength\n")
+
+    # pending upgrades
+    pend = get_pending_upgrades(uid)
+    if pend:
+        lines.append("⏳ *Upgrades in Progress:*" )
+        for btype, target_lvl, remaining in pend:
+            lines.append(f"• ⚡ {btype} → Lvl {target_lvl} ({remaining} remaining)")
+        lines.append("")
+
+    # army counts
+    lines.append("⚔️ *Army:*" )
+    army_rows = get_rows('Army')
+    counts = { r[1]: int(r[2]) for r in army_rows[1:] if r[0] == uid }
+
+    # group and display units by tier
+    tiers = {}
+    for key, (display, emoji, tier, _, _) in UNITS.items():
+        tiers.setdefault(tier, []).append((display, emoji, key))
+
+    for tier in sorted(tiers):
+        lines.append(f"*Tier {tier} Units:*" )
+        for display, emoji, key in sorted(tiers[tier], key=lambda x: x[0]):
+            cnt = counts.get(key, 0)
+            lines.append(f"• {emoji} {display}: {cnt}")
+        lines.append("")
+
+    await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
+
+# register handler
+handler = CommandHandler('status', status)
