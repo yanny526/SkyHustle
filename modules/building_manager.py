@@ -1,11 +1,13 @@
+# modules/building_manager.py
+
 from sheets_service import get_rows, ensure_sheet
 from datetime import datetime
 
 # Define per‐level production for each building type
 PRODUCTION_PER_LEVEL = {
-    'Bank':       ('credits', 20),
-    'Mine':       ('minerals', 10),
-    'PowerPlant': ('energy', 5),
+    'Bank':         ('credits', 20),
+    'Mine':         ('minerals', 10),
+    'Power Plant':  ('energy',   5),   # <— now matches config.py key
     # add any other production buildings here
 }
 
@@ -48,7 +50,7 @@ def get_building_health(user_id: str) -> dict:
             continue
         try:
             current_hp = int(row[2])
-            max_hp = int(row[3])
+            max_hp     = int(row[3])
         except ValueError:
             continue
         health[row[1]] = {'current': current_hp, 'max': max_hp}
