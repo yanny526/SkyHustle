@@ -1,5 +1,3 @@
-# modules/upgrade_manager.py
-
 from datetime import datetime
 from sheets_service import get_rows, update_row, append_row, clear_sheet
 from config import BUILDING_MAX_LEVEL
@@ -17,7 +15,6 @@ def complete_upgrades(user_id: str):
 
     new_data = []
     for row in data:
-        # Ensure we have at least 5 columns
         if len(row) < 5:
             continue
         uid, bname, start_ts, end_ts, target_lvl = row[:5]
@@ -26,23 +23,19 @@ def complete_upgrades(user_id: str):
             new_data.append(row)
             continue
 
-        # If upgrade is finished, apply it; otherwise keep it pending
         try:
             if now_ts >= float(end_ts):
                 apply_building_level(uid, bname, int(target_lvl))
                 continue
         except ValueError:
-            # malformed timestamp, drop the row
             continue
 
         new_data.append(row)
 
-    # Clear everything below the header, then re-append
     clear_sheet('Upgrades')
     append_row('Upgrades', header)
     for r in new_data:
         append_row('Upgrades', r)
-
 
 def apply_building_level(uid: str, building: str, new_level: int):
     """
@@ -62,11 +55,10 @@ def apply_building_level(uid: str, building: str, new_level: int):
     capped = min(new_level, BUILDING_MAX_LEVEL.get(building, new_level))
     append_row('Buildings', [uid, building, str(capped)])
 
-
 def get_pending_upgrades(user_id: str) -> list[dict]:
     """
     Fetch all pending upgrades for the given user.
-    Returns a list of dicts with keys:
+    Returns a list of dicts with:
       - 'bname': building name (str)
       - 'target_lvl': level to reach (int)
       - 'end_ts': UNIX timestamp when it completes (float)
