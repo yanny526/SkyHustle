@@ -1,6 +1,7 @@
 # sheets_service.py
 
 import time
+import os
 from config import SERVICE_ACCOUNT_INFO, SHEET_ID
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
@@ -16,7 +17,8 @@ REQUIRED_SHEETS = [
     'Buildings',
     'Army',
     'CombatLog',
-    'Leaderboard'
+    'Leaderboard',
+    'Upgrades',              # ← newly added
 ]
 
 # Default headers for each sheet
@@ -26,31 +28,29 @@ _HEADERS = {
     'Army':        ['user_id', 'unit_type', 'count'],
     'CombatLog':   ['attacker_id', 'defender_id', 'timestamp', 'result', 'spoils_credits'],
     'Leaderboard': ['user_id', 'total_power', 'rank'],
+    'Upgrades':    ['user_id', 'building_type', 'start_ts', 'end_ts', 'target_level'],  # ← newly added
 }
 
+# Ensure all sheets exist and have the right header row
 def init():
-    """
-    Ensure the spreadsheet has all required sheets and headers.
-    Call this once at bot startup.
-    """
-    # Fetch existing sheets
-    spreadsheet = _service.spreadsheets().get(spreadsheetId=SHEET_ID).execute()
-    existing_titles = {s['properties']['title'] for s in spreadsheet.get('sheets', [])}
-
-    # Prepare addSheet requests for missing tabs
+    # 1) Create any missing sheets
     requests = []
+    existing = _service.spreadsheets().get(spreadsheetId=SHEET_ID).execute().get('sheets', [])
+    existing_titles = {s['properties']['title'] for s in existing}
+
     for title in REQUIRED_SHEETS:
         if title not in existing_titles:
-            requests.append({'addSheet': {'properties': {'title': title}}})
+            requests.append({
+                'addSheet': { 'properties': { 'title': title } }
+            })
 
-    # Create missing sheets in one batch
     if requests:
         _service.spreadsheets().batchUpdate(
             spreadsheetId=SHEET_ID,
             body={'requests': requests}
         ).execute()
 
-    # Ensure each sheet has the correct header row
+    # 2) Ensure each sheet has the correct header row
     for title, header in _HEADERS.items():
         _ensure_header_row(title, header)
 
@@ -71,16 +71,33 @@ def _ensure_header_row(sheet_name: str, header: list):
             body={'values': [header]}
         ).execute()
 
-def get_rows(sheet_name: str) -> list:
+def get_rows(sheet_name: str) -> list[list[str]]:
     """
-    Return all rows (as lists) from the given sheet.
-    Row 0 is the header.
+    Return all rows (as lists) from the given sheet, including the header.
     """
+    # slight pause in case the sheet was just modified
+    time.sleep(0.5)
+    # read everything from column A through Z (adjust if you have more columns)
+    range_name = f"{sheet_name}!A1:Z"
     resp = _service.spreadsheets().values().get(
         spreadsheetId=SHEET_ID,
-        range=sheet_name
+        range=range_name
     ).execute()
     return resp.get('values', [])
+
+def clear_sheet(sheet_name: str):
+    """
+    Remove all rows below the header in `sheet_name`.
+    """
+    # fetch how many rows exist
+    rows = get_rows(sheet_name)
+    if len(rows) <= 1:
+        return
+    # clear A2:Z (all data rows)
+    _service.spreadsheets().values().clear(
+        spreadsheetId=SHEET_ID,
+        range=f"{sheet_name}!A2:Z"
+    ).execute()
 
 def append_row(sheet_name: str, values: list):
     """
@@ -88,7 +105,7 @@ def append_row(sheet_name: str, values: list):
     """
     _service.spreadsheets().values().append(
         spreadsheetId=SHEET_ID,
-        range=sheet_name,
+        range=f"{sheet_name}!A:Z",
         valueInputOption='RAW',
         insertDataOption='INSERT_ROWS',
         body={'values': [values]}
@@ -99,10 +116,13 @@ def update_row(sheet_name: str, row_index: int, values: list):
     Overwrite the row at zero-based `row_index` in `sheet_name` with `values`.
     """
     # Convert zero-based index to A1 notation (1-based)
-    a1 = f"{sheet_name}!A{row_index + 1}"
+    a1 = f"{sheet_name}!A{row_index + 1}:Z{row_index + 1}"
     _service.spreadsheets().values().update(
         spreadsheetId=SHEET_ID,
         range=a1,
         valueInputOption='RAW',
         body={'values': [values]}
     ).execute()
+
+# Initialize on import
+init()
