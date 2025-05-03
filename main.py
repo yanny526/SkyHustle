@@ -3,13 +3,10 @@
 from config import BOT_TOKEN
 from sheets_service import init as sheets_init
 
-from telegram import Update
 from telegram.ext import (
     Application,
     MessageHandler,
-    CallbackQueryHandler,
     filters,
-    ContextTypes,
 )
 
 from handlers.start import handler as start_handler
@@ -25,18 +22,18 @@ from handlers.help import handler as help_handler
 from handlers.army import handler as army_handler
 
 def main():
-    # 1) Ensure all sheets/tabs exist
+    # 1) Ensure all sheets exist
     sheets_init()
 
-    # 2) Build the bot application
+    # 2) Build the bot
     app = Application.builder().token(BOT_TOKEN).build()
 
-    # 3) Register your command handlers
+    # 3) Register handlers
     app.add_handler(start_handler)
     app.add_handler(setname_handler)
     app.add_handler(menu_handler)
     app.add_handler(status_handler)
-    app.add_handler(status_callback)      # ← inline-button callback registrations
+    app.add_handler(status_callback)   # ← inline-button callbacks
     app.add_handler(build_handler)
     app.add_handler(queue_handler)
     app.add_handler(train_handler)
@@ -45,14 +42,12 @@ def main():
     app.add_handler(help_handler)
     app.add_handler(army_handler)
 
-    # 4) Fallback: catch any unknown /command
-    async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-        await update.message.reply_text(
-            "❓ Unknown command. Use /help to see valid commands."
-        )
-    app.add_handler(MessageHandler(filters.COMMAND, unknown_command))
+    # 4) Catch-all for unknown commands
+    async def unknown(update, context):
+        await update.message.reply_text("❓ Unknown command. Use /help.")
+    app.add_handler(MessageHandler(filters.COMMAND, unknown))
 
-    # 5) Start polling (blocks until you Ctrl-C)
+    # 5) Start polling
     app.run_polling()
 
 if __name__ == "__main__":
