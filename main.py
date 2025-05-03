@@ -46,8 +46,8 @@ def main():
     app.add_handler(army_handler)
     app.add_handler(menu_callback_handler)
 
-    # 4) Set visible slash commands (shown under chat box)
-    async def set_bot_commands():
+    # ✅ FIXED: correct app argument passed to post_init
+    async def set_bot_commands(app):
         commands = [
             BotCommand("menu", "Show game menu"),
             BotCommand("army", "View your army"),
@@ -60,12 +60,12 @@ def main():
 
     app.post_init = set_bot_commands
 
-    # 5) Fallback for unknown commands
+    # 4) Fallback for unknown commands
     async def unknown(update, context):
         await update.message.reply_text("❓ Unknown command. Use /help.")
     app.add_handler(MessageHandler(filters.COMMAND, unknown))
 
-    # 6) Start bot (this safely manages the loop)
+    # 5) Start the bot (Render-safe)
     app.run_polling()
 
 if __name__ == "__main__":
