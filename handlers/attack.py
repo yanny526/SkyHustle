@@ -1,5 +1,3 @@
-# handlers/attack.py
-
 import time
 import random
 from telegram import Update
@@ -94,13 +92,18 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Send the battle result
     await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN)
 
-    # QUEST PROGRESSION STEP 5: First Attack Reward
-    # Only if they have completed step4
+    # ← NEW: track daily Attacks challenge
+    from modules.challenge_manager import load_challenges, update_player_progress
+    for ch in load_challenges('daily'):
+        if ch.key == 'attacks':
+            update_player_progress(uid, ch)
+            break
+
+    # QUEST PROGRESSION STEP 5: First Attack Reward
     players = get_rows('Players')
     header = players[0]
     for pi, prow in enumerate(players[1:], start=1):
         if prow[0] == uid:
-            # Ensure prow has correct length
             while len(prow) < len(header): prow.append("")
             progress = prow[7]
             break
@@ -108,24 +111,19 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if progress == 'step4':
-        # grant 5 infantry and 1 tank
-        # update energy counts in Army sheet
+        # grant 5 infantry +1 tank
         army_rows = get_rows('Army')
-        # helper to add units
         def add_unit(unit_key, quantity):
             for ai, arow in enumerate(army_rows[1:], start=1):
                 if arow[0] == uid and arow[1] == unit_key:
-                    # update existing row
                     arow[2] = str(int(arow[2]) + quantity)
                     update_row('Army', ai, arow)
                     return
-            # else append new row
             append_row('Army', [uid, unit_key, str(quantity)])
 
         add_unit('infantry', 5)
         add_unit('tanks', 1)
 
-        # update progress
         prow[7] = 'step5'
         update_row('Players', pi, prow)
 
