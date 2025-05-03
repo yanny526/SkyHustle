@@ -21,7 +21,11 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/leaderboard – See top commanders\n"
         "/help – Show this help message"
     )
-    await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+
+    # ✅ Respond to both command or inline
+    if update.message:
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    elif update.callback_query:
+        await update.callback_query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN)
 
 handler = CommandHandler('help', help_command)
-
