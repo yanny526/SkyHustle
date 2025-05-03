@@ -43,7 +43,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if pend:
         lines.append("⏳ *Upgrades In Progress:*")
         for btype, nxt, rem in pend:
-            lines.append(f" • {btype} → Lvl {nxt} ({rem}s remaining)")
+            lines.append(f" • {btype} → Lvl {nxt} ({rem} remaining)")
         lines.append("")
 
     # 5) Army counts
