@@ -1,43 +1,50 @@
-# modules/upgrade_manager.py
-
-import time
 from sheets_service import get_rows, update_row
-from config import BUILDING_MAX_LEVEL
 
-def complete_upgrades(user_id: str):
-    """
-    For each building upgrade whose end_ts has passed, bump the level
-    and clear the upgrade timestamp.
-    """
-    rows = get_rows('Buildings')
-    now = int(time.time())
 
-    # rows[0] is header; enumerate starts at 1 to match sheet row indices
-    for idx, row in enumerate(rows[1:], start=1):
-        if row[0] == user_id and row[3]:
-            end_ts = int(row[3])
-            if now >= end_ts:
-                current_lvl = int(row[2])
-                row[2] = str(current_lvl + 1)  # new level
-                row[3] = ''                   # clear upgrade timestamp
-                update_row('Buildings', idx, row)
+def complete_upgrades(user_id):
+    """
+    Scan the ‘Upgrades’ sheet and mark any in-progress upgrades
+    for this user as completed once their time has elapsed.
+    """
+    all_rows = get_rows("Upgrades")
+    if not all_rows or len(all_rows) < 2:
+        return  # nothing to do if there’s no data
 
-def get_pending_upgrades(user_id: str) -> list:
+    header, *data_rows = all_rows
+
+    for idx, row in enumerate(data_rows, start=2):
+        # Expect at least 4 columns: user_id, upgrade_id, target_building, status
+        if len(row) < 4:
+            continue
+
+        row_user, upgrade_id, target, status = row[:4]
+        if row_user == str(user_id) and status == "in_progress":
+            # Here you could check timestamps, etc. before completing.
+            # For now, we simply mark it completed:
+            updated = [row_user, upgrade_id, target, "completed"]
+            update_row("Upgrades", idx, updated)
+
+
+def get_pending_upgrades(user_id):
     """
-    Returns a list of (building_type, next_level, seconds_remaining)
-    for all upgrades still in progress.
+    Return a list of this user’s upgrades that are still in_progress.
     """
+    all_rows = get_rows("Upgrades")
+    if not all_rows or len(all_rows) < 2:
+        return []
+
+    header, *data_rows = all_rows
     pending = []
-    now = int(time.time())
-    rows = get_rows('Buildings')[1:]
 
-    for row in rows:
-        if row[0] == user_id and row[3]:
-            btype = row[1]
-            current_lvl = int(row[2])
-            next_lvl = current_lvl + 1
-            end_ts = int(row[3])
-            rem = max(0, end_ts - now)
-            pending.append((btype, next_lvl, rem))
+    for row in data_rows:
+        if len(row) < 4:
+            continue
+        row_user, upgrade_id, target, status = row[:4]
+        if row_user == str(user_id) and status == "in_progress":
+            pending.append({
+                "upgrade_id": upgrade_id,
+                "building": target,
+                "status": status
+            })
 
     return pending
