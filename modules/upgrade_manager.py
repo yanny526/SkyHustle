@@ -1,97 +1,65 @@
-# modules/upgrade_manager.py
+# modules/building_manager.py
 
+from sheets_service import get_rows
 from datetime import datetime
-from sheets_service import get_rows, update_row, append_row, clear_sheet
-from config import BUILDING_MAX_LEVEL
 
-def complete_upgrades(user_id: str):
+# Define per‐level production for each building type
+PRODUCTION_PER_LEVEL = {
+    'Bank':       ('credits', 20),
+    'Mine':       ('minerals', 10),
+    'PowerPlant': ('energy', 5),
+    # add any other production buildings here
+}
+
+def get_building_info(user_id: str) -> dict:
     """
-    Check the 'Upgrades' sheet for any finished builds,
-    apply their new levels, and rebuild the sheet without completed rows.
+    Returns { building_name: level } for this user.
     """
-    rows = get_rows('Upgrades')
-    if not rows:
-        return
-    header, data = rows[0], rows[1:]
-    now_ts = datetime.utcnow().timestamp()
-
-    new_data = []
-    for row in data:
-        # Ensure we have at least 5 columns
-        if len(row) < 5:
-            continue
-        uid, bname, start_ts, end_ts, target_lvl = row[:5]
-
-        if uid != user_id:
-            new_data.append(row)
-            continue
-
-        # If upgrade is finished, apply it; otherwise keep it pending
-        try:
-            if now_ts >= float(end_ts):
-                apply_building_level(uid, bname, int(target_lvl))
-                continue
-        except ValueError:
-            # malformed timestamp, drop the row
-            continue
-
-        new_data.append(row)
-
-    # Clear everything below the header, then re-append
-    clear_sheet('Upgrades')
-    append_row('Upgrades', header)
-    for r in new_data:
-        append_row('Upgrades', r)
-
-
-def apply_building_level(uid: str, building: str, new_level: int):
-    """
-    Internal helper: writes the upgraded building level into 'Buildings' sheet.
-    """
-    b_rows = get_rows('Buildings')
-    if not b_rows:
-        # ensure header exists, but this shouldn't normally happen
-        return
-
-    # Look for existing entry
-    for idx, row in enumerate(b_rows[1:], start=1):
-        if len(row) >= 2 and row[0] == uid and row[1] == building:
-            # Cap the level
-            capped = min(new_level, BUILDING_MAX_LEVEL.get(building, new_level))
-            row[2:3] = [str(capped)]
-            update_row('Buildings', idx, row)
-            return
-
-    # Not found: append new
-    capped = min(new_level, BUILDING_MAX_LEVEL.get(building, new_level))
-    append_row('Buildings', [uid, building, str(capped)])
-
-
-def get_pending_upgrades(user_id: str) -> list[dict]:
-    """
-    Fetch all pending upgrades for the given user.
-    Returns a list of dicts:
-      {'bname': str, 'target_lvl': int, 'end_ts': float}
-    """
-    rows = get_rows('Upgrades')
-    pending = []
-    now_ts = datetime.utcnow().timestamp()
-
+    rows = get_rows('Buildings')
+    info = {}
     for row in rows[1:]:
-        if len(row) < 5:
+        if row[0] == user_id:
+            name, lvl = row[1], int(row[2])
+            info[name] = lvl
+    return info
+
+def get_production_rates(building_info: dict) -> dict:
+    """
+    Given building_info (name→level), returns production per minute:
+    e.g. { 'credits': 100, 'minerals': 50, 'energy': 20 }
+    """
+    rates = {'credits': 0, 'minerals': 0, 'energy': 0}
+    for bname, lvl in building_info.items():
+        if bname in PRODUCTION_PER_LEVEL:
+            resource, per_lvl = PRODUCTION_PER_LEVEL[bname]
+            rates[resource] += per_lvl * lvl
+    return rates
+
+def get_building_health(user_id: str) -> dict:
+    """
+    Returns { building_name: {'current': int, 'max': int} }.
+    Expects a 'BuildingHealth' sheet with columns: [uid, name, current_hp, max_hp].
+    If the sheet is missing or invalid, returns {}.
+    """
+    try:
+        rows = get_rows('BuildingHealth')
+    except Exception:
+        # Sheet not found or bad range → no health data
+        return {}
+
+    if not rows or len(rows) < 2:
+        return {}
+
+    health = {}
+    for row in rows[1:]:
+        if len(row) < 4 or row[0] != user_id:
             continue
-        uid, bname, start_ts, end_ts, target_lvl = row[:5]
-        if uid != user_id:
-            continue
+        name = row[1]
         try:
-            end = float(end_ts)
+            current_hp = int(row[2])
+            max_hp = int(row[3])
         except ValueError:
             continue
-        if end > now_ts:
-            pending.append({
-                'bname': bname,
-                'target_lvl': int(target_lvl),
-                'end_ts': end
-            })
+        health[name] = {'current': current_hp, 'max': max_hp}
 
-    return pending
+    return health
