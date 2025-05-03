@@ -45,13 +45,12 @@ def get_player_achievement(uid: str, aid: str):
 
 def _current_stat(uid: str, key: str) -> int:
     """Compute the user’s current value for a given requirement_key."""
-    # Combat log: total attacks or wins
+    # Combat log counts: total attacks or wins
     if key in ('attacks_total', 'attacks_won'):
         log = get_rows('CombatLog')[1:]
         if key == 'attacks_total':
             return sum(1 for r in log if r[0] == uid)
-        else:
-            return sum(1 for r in log if r[0] == uid and r[3] == 'win')
+        return sum(1 for r in log if r[0] == uid and r[3] == 'win')
 
     # Building level checks
     if key.startswith('build_level_'):
@@ -69,13 +68,42 @@ def _current_stat(uid: str, key: str) -> int:
         army_rows = get_rows('Army')[1:]
         return sum(int(r[2]) for r in army_rows if r[0] == uid and r[1] == unit_key)
 
-    # Leaderboard rank
+    # Leaderboard rank calculation
     if key == 'leaderboard_rank':
-        # compute ranks
-        from modules.leaderboard_manager import get_rank
-        return get_rank(uid)
+        # build power
+        buildings = get_rows('Buildings')[1:]
+        build_power = {}
+        for r in buildings:
+            try:
+                puid, _, lvl_str, *_ = r
+                build_power[puid] = build_power.get(puid, 0) + int(lvl_str)
+            except:
+                continue
+        # army power
+        army = get_rows('Army')[1:]
+        army_power = {}
+        from modules.unit_manager import UNITS
+        for r in army:
+            try:
+                puid, unit, cnt_str = r
+                _, _, _, power, _ = UNITS[unit]
+                army_power[puid] = army_power.get(puid, 0) + int(cnt_str) * power
+            except:
+                continue
+        # compile and rank
+        players = get_rows('Players')[1:]
+        scores = []
+        for r in players:
+            puid = r[0]
+            total = build_power.get(puid, 0) + army_power.get(puid, 0)
+            scores.append((puid, total))
+        scores.sort(key=lambda x: x[1], reverse=True)
+        for idx, (puid, _) in enumerate(scores, start=1):
+            if puid == uid:
+                return idx
+        return len(scores) + 1
 
-    # Unknown key
+    # Unknown requirement
     return 0
 
 
@@ -98,7 +126,7 @@ def check_and_award_achievements(uid: str):
 
         # Grant rewards
         players = get_rows("Players")
-        header, pdata = players[0], players[1:]
+        pdata = players[1:]
         pidx = [r[0] for r in pdata].index(uid) + 1
         row = players[pidx]
         row[3] = str(int(row[3]) + a.reward_credits)
