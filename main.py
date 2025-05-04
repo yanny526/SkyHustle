@@ -52,8 +52,8 @@ def main():
     app.add_handler(army_handler)
     app.add_handler(achievements_handler)
     app.add_handler(announce_handler)
-    app.add_handler(CommandHandler('daily', daily))
-    app.add_handler(CommandHandler('weekly', weekly))
+    app.add_handler(CommandHandler("daily", daily))
+    app.add_handler(CommandHandler("weekly", weekly))
     app.add_handler(whisper_handler)
     app.add_handler(inbox_handler)
     app.add_handler(chaos_handler)  # ➡️ Preview Random Chaos Storms
