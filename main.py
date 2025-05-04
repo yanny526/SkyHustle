@@ -1,11 +1,13 @@
+# main.py
+
 from config import BOT_TOKEN
 from sheets_service import init as sheets_init
 
-from datetime import time as dtime
 from telegram import BotCommand
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
+from datetime import time as dtime
 
-# Import all handler modules
+# Handlers
 from handlers.start import handler as start_handler
 from handlers.setname import handler as setname_handler
 from handlers.menu import handler as menu_handler
@@ -23,19 +25,21 @@ from handlers.challenges import daily, weekly
 from handlers.whisper import handler as whisper_handler
 from handlers.inbox import handler as inbox_handler
 
-# ⚡ Chaos Storms
+# Chaos system
 from handlers.chaos import handler as chaos_handler
-from handlers.chaos_event import chaos_event_job
 from handlers.chaos_test import handler as chaos_test_handler
+from handlers.chaos_event import chaos_event_job
+from handlers.chaos_pre_notice import chaos_pre_notice_job
+
 
 def main():
-    # 1) Auto-create Sheets & headers
+    # 1) Initialize Sheets & headers
     sheets_init()
 
     # 2) Build bot
     app = Application.builder().token(BOT_TOKEN).build()
 
-    # 3) Register all command + callback handlers
+    # 3) Register handlers
     app.add_handler(start_handler)
     app.add_handler(setname_handler)
     app.add_handler(menu_handler)
@@ -54,10 +58,12 @@ def main():
     app.add_handler(CommandHandler("weekly", weekly))
     app.add_handler(whisper_handler)
     app.add_handler(inbox_handler)
-    app.add_handler(chaos_handler)  # ➡️ Preview Random Chaos Storms
-    app.add_handler(chaos_test_handler)  # Admin test command for Chaos Storms
 
-    # 4) Set visible slash commands in Telegram
+    # Chaos commands
+    app.add_handler(chaos_handler)       # /chaos preview
+    app.add_handler(chaos_test_handler)  # /chaos_test (admin)
+
+    # 4) Slash commands
     async def set_bot_commands(app):
         commands = [
             BotCommand("menu",        "📋 Show command menu"),
@@ -68,32 +74,37 @@ def main():
             BotCommand("daily",       "📅 View daily challenges"),
             BotCommand("weekly",      "📆 View weekly challenges"),
             BotCommand("achievements","🏅 View your achievements"),
-            BotCommand("announce",    "📣 [Admin] Broadcast an announcement"),
+            BotCommand("announce",    "📣[Admin] Broadcast an announcement"),
             BotCommand("chaos",       "🌪️ Preview Random Chaos Storms"),
-            BotCommand("chaos_test",  "🛠️ [Admin] Trigger a Chaos Storm"),
-            BotCommand("whisper",     "🤫 Send a private message"),
-            BotCommand("inbox",       "📬 View your private messages"),
+            BotCommand("chaos_test",  "🧪 [Admin] Test Chaos Storm (admin only)"),
             BotCommand("help",        "🆘 Show help & all commands"),
         ]
         await app.bot.set_my_commands(commands)
 
     app.post_init = set_bot_commands
 
-    # 5) Fallback for unknown commands
+    # 5) Unknown-command fallback
     async def unknown(update, context):
         await update.message.reply_text("❓ Unknown command. Use /help.")
     app.add_handler(MessageHandler(filters.COMMAND, unknown))
 
-    # 6) Schedule weekly Chaos Storm (Mon @ 09:00 UTC)
-    # PTB v20: use run_daily with days parameter instead of run_weekly
+    # 6) Schedule pre-notice checker every minute
+    app.job_queue.run_repeating(
+        chaos_pre_notice_job,
+        interval=60,
+        first=0,
+        name="chaos_pre_notice_checker"
+    )
+
+    # 7) Schedule weekly Chaos Storm (Mon @ 09:00 UTC)
     app.job_queue.run_daily(
         chaos_event_job,
-        time=dtime(hour=9, minute=0),
         days=(0,),  # Monday
+        time=dtime(hour=9, minute=0),
         name="weekly_chaos_storm"
     )
 
-    # 7) Start polling
+    # 8) Start polling
     app.run_polling()
 
 
