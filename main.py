@@ -24,6 +24,7 @@ from handlers.announce import handler as announce_handler
 from handlers.challenges import daily, weekly
 from handlers.whisper import handler as whisper_handler
 from handlers.inbox import handler as inbox_handler
+from handlers.chaos_test import handler as chaos_test_handler
 
 # ⚡ Chaos Storms
 from handlers.chaos import handler as chaos_handler
@@ -57,6 +58,7 @@ def main():
     app.add_handler(whisper_handler)
     app.add_handler(inbox_handler)
     app.add_handler(chaos_handler)  # ➡️ Preview Random Chaos Storms
+    app.add_handler(chaos_test_handler)
 
     # 4) Set visible slash commands in Telegram
     async def set_bot_commands(app):
