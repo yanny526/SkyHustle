@@ -1,6 +1,6 @@
 # handlers/chaos_event.py
 
-from telegram import ParseMode
+from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 from modules.chaos_storms_manager import trigger_storm
 from sheets_service import get_rows
