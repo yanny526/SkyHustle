@@ -1,3 +1,6 @@
+# handlers/chaos_test.py
+
+from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import CommandHandler, ContextTypes
 from sheets_service import get_rows
@@ -30,7 +33,7 @@ async def chaos_test(update: Update, context: ContextTypes.DEFAULT_TYPE):
     players = get_rows("Players")
     for row in players[1:]:
         try:
-            chat_id = int(row[0])             # ← was row[1]
+            chat_id = int(row[0])  # chat_id in column A
             await context.bot.send_message(
                 chat_id=chat_id,
                 text=text,
