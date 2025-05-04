@@ -1,5 +1,4 @@
 import random
-import time
 from sheets_service import get_rows, update_row
 
 # Define five Chaos Storms (3 destructive, 2 beneficial)
@@ -10,7 +9,7 @@ STORMS = [
         'emoji': '🌋',
         'story': (
             'Dark ember rain scorches your mineral caches,\n'
-            'burning away 100 Minerals from every commander.'
+            'burning away 100 Minerals from every commander.'
         ),
         'delta': {'minerals': -100}
     },
@@ -20,7 +19,7 @@ STORMS = [
         'emoji': '🍃',
         'story': (
             'A refreshing silver gale revitalizes everyone’s energy,\n'
-            'granting +150 Energy to all.'
+            'granting +150 Energy to all.'
         ),
         'delta': {'energy': +150}
     },
@@ -30,7 +29,7 @@ STORMS = [
         'emoji': '🏚️',
         'story': (
             'Tremors shake your base foundations,\n'
-            'costing 100 Credits from each commander.'
+            'costing 100 Credits from each commander.'
         ),
         'delta': {'credits': -100}
     },
@@ -40,7 +39,7 @@ STORMS = [
         'emoji': '🌅',
         'story': (
             'A golden sunrise bathes the land,\n'
-            'bestowing +200 Minerals to every commander.'
+            'bestowing +200 Minerals to every commander.'
         ),
         'delta': {'minerals': +200}
     },
@@ -50,7 +49,7 @@ STORMS = [
         'emoji': '🌀',
         'story': (
             'An unnatural voidstorm rips through,\n'
-            'siphoning 50 Energy and 50 Credits from all.'
+            'siphoning 50 Energy and 50 Credits from all.'
         ),
         'delta': {'energy': -50, 'credits': -50}
     },
