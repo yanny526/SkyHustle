@@ -1,5 +1,3 @@
-# handlers/attack.py
-
 import time
 import random
 from datetime import timedelta
@@ -11,60 +9,43 @@ from utils.decorators import game_command
 from modules.unit_manager import UNITS
 from modules.challenge_manager import load_challenges, update_player_progress
 
-
 async def scout_report_job(context: ContextTypes.DEFAULT_TYPE):
-    """After 5 minutes, DM the scouting report and remove the job from pending."""
-    data           = context.job.data
-    uid            = data["uid"]
-    defender_id    = data["defender_id"]
-    defender_name  = data["defender_name"]
-    chat_id        = int(uid)
+    """After 5 minutes, DM the scouting report and remove from pending."""
+    data          = context.job.data
+    uid           = data["uid"]
+    defender_id   = data["defender_id"]
+    defender_name = data["defender_name"]
+    chat_id       = int(uid)
 
-    # Build the report
+    # Build the report from full Army sheet
     army_rows   = get_rows("Army")
     lines       = [f"🔎 *Scouting Report: {defender_name}*"]
     total_power = 0
-
     for row in army_rows[1:]:
-        if row[0] != defender_id:
-            continue
-        unit_key = row[1]
-        count    = int(row[2])
-        if count <= 0:
-            continue
-        display, emoji, tier, unit_power, _ = UNITS[unit_key]
-        power = unit_power * count
-        total_power += power
-
-        lines.append(
-            f"• {emoji} *{display}* (Tier {tier}) — {count} units ({power}⚔️)"
-        )
-
-    if total_power > 0:
-        lines.append("")  # spacer
-        lines.append(f"⚔️ *Total Power:* {total_power}⚔️")
+        if row[0] != defender_id: continue
+        key, count = row[1], int(row[2])
+        if count <= 0: continue
+        disp, emoji, tier, power, _ = UNITS[key]
+        unit_power = power * count
+        total_power += unit_power
+        lines.append(f"• {emoji} *{disp}* (Tier {tier}) — {count} pcs ({unit_power}⚔️)")
+    if total_power:
+        lines.append(f"\n⚔️ *Total Power:* {total_power}⚔️")
         text = "\n".join(lines)
     else:
         text = f"🔎 No troops detected at *{defender_name}*."
 
-    # Send the report
-    await context.bot.send_message(
-        chat_id=chat_id,
-        text=text,
-        parse_mode=ParseMode.MARKDOWN,
-    )
+    await context.bot.send_message(chat_id=chat_id, text=text, parse_mode=ParseMode.MARKDOWN)
 
-    # Remove this job from pending list
-    app = context.application
-    user_chat = app.chat_data.setdefault(chat_id, {})
+    # remove from pending
+    user_chat = context.chat_data.setdefault(chat_id, {})
     pending   = user_chat.get("pending", [])
     if context.job.name in pending:
         pending.remove(context.job.name)
     user_chat["pending"] = pending
 
-
 async def combat_resolution_job(context: ContextTypes.DEFAULT_TYPE):
-    """After 30 minutes, resolve combat, update sheets, DM result, and clear from pending."""
+    """After 30 minutes, resolve combat using the saved composition."""
     data           = context.job.data
     uid            = data["uid"]
     defender_id    = data["defender_id"]
@@ -73,107 +54,129 @@ async def combat_resolution_job(context: ContextTypes.DEFAULT_TYPE):
     atk_i          = data["atk_i"]
     def_i          = data["def_i"]
     timestamp      = data["timestamp"]
+    composition    = data["composition"]  # our chosen detachment
     chat_id        = int(uid)
 
-    # Compute power helper
-    def power(urow):
-        total = 0
-        for r in get_rows("Army")[1:]:
-            if r[0] != urow[0]:
-                continue
-            count     = int(r[2])
-            unit_power = UNITS[r[1]][3]
-            total    += count * unit_power
-        return total
+    # compute power of a given detachment
+    def detachment_power(comp):
+        return sum(count * UNITS[key][3] for key, count in comp.items())
 
-    players  = get_rows("Players")
-    attacker = players[atk_i]
-    defender = players[def_i]
+    atk_power = detachment_power(composition) * random.uniform(0.9, 1.1)
 
-    atk_roll = power(attacker) * random.uniform(0.9, 1.1)
-    def_roll = power(defender) * random.uniform(0.9, 1.1)
+    # defender uses their full current army
+    players = get_rows("Players")
+    defender_row = players[def_i]
+    # build defender composition from sheet
+    def_comp = {
+        row[1]: int(row[2])
+        for row in get_rows("Army")[1:]
+        if row[0] == defender_id
+    }
+    def_power = detachment_power(def_comp) * random.uniform(0.9, 1.1)
 
-    if atk_roll > def_roll:
+    if atk_power > def_power:
         result = "win"
-        spoils = max(1, int(defender[3]) // 10)
+        spoils = max(1, int(defender_row[3]) // 10)
         msg = (
-            f"🏆 *{attacker_name}* has *defeated* *{defender_name}*!\n"
+            f"🏆 *{attacker_name}* defeated *{defender_name}*!\n"
             f"💰 *Loot:* Stole {spoils} Credits."
         )
-        attacker_credits = int(attacker[3]) + spoils
-        defender_credits = int(defender[3]) - spoils
+        attacker_credits = int(players[atk_i][3]) + spoils
+        defender_credits = int(defender_row[3]) - spoils
     else:
         result = "loss"
-        spoils = max(1, int(attacker[3]) // 20)
+        spoils = max(1, int(players[atk_i][3]) // 20)
         msg = (
-            f"💥 *{attacker_name}* was *defeated* by *{defender_name}*!\n"
+            f"💥 *{attacker_name}* was defeated by *{defender_name}*!\n"
             f"💸 *Loss:* Lost {spoils} Credits."
         )
-        attacker_credits = int(attacker[3]) - spoils
-        defender_credits = int(defender[3]) + spoils
+        attacker_credits = int(players[atk_i][3]) - spoils
+        defender_credits = int(defender_row[3]) + spoils
 
-    # Update sheets
-    attacker[3], defender[3] = str(attacker_credits), str(defender_credits)
-    update_row("Players", atk_i, attacker)
-    update_row("Players", def_i, defender)
+    # update resources
+    players[atk_i][3] = str(attacker_credits)
+    update_row("Players", atk_i, players[atk_i])
+    players[def_i][3] = str(defender_credits)
+    update_row("Players", def_i, players[def_i])
+
     append_row("CombatLog", [uid, defender_id, timestamp, result, str(spoils)])
 
-    # DM the result
-    await context.bot.send_message(
-        chat_id=chat_id,
-        text=msg,
-        parse_mode=ParseMode.MARKDOWN
-    )
+    # DM result
+    await context.bot.send_message(chat_id=chat_id, text=msg, parse_mode=ParseMode.MARKDOWN)
 
-    # Remove from pending
-    app = context.application
-    user_chat = app.chat_data.setdefault(chat_id, {})
+    # remove from pending
+    user_chat = context.chat_data.setdefault(chat_id, {})
     pending   = user_chat.get("pending", [])
     if context.job.name in pending:
         pending.remove(context.job.name)
     user_chat["pending"] = pending
 
-
 @game_command
 async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    /attack <CommanderName> [-s <num_scouts>] –
-    Scouts cost 1⚡ each; main attack costs 5⚡.
+    /attack <CommanderName> -u infantry:20 tanks:5 ... [-s scouts]
+    Scouts cost 1⚡ each; main attack 5⚡.
     """
-    user        = update.effective_user
-    uid         = str(user.id)
-    args        = context.args.copy()
-    chat_id     = update.effective_chat.id
+    user = update.effective_user
+    uid  = str(user.id)
+    args = context.args.copy()
+    chat_id = update.effective_chat.id
 
     if not args:
         return await update.message.reply_text(
-            "❗ Usage: `/attack <CommanderName> [-s <number_of_scouts>]`",
+            "❗ Usage: `/attack <CommanderName> -u infantry:10 tanks:5 ... [-s <num>]`",
             parse_mode=ParseMode.MARKDOWN
         )
 
-    target      = args.pop(0)
-    scout_count = 0
+    # target
+    target = args.pop(0)
 
-    # Parse scouts flag
+    # parse scouts
+    scout_count = 0
     if "-s" in args:
-        idx = args.index("-s")
+        i = args.index("-s")
         try:
-            scout_count = int(args[idx + 1])
+            scout_count = int(args[i+1])
         except:
             scout_count = 1
-        args.pop(idx)
-        if idx < len(args):
-            args.pop(idx)
+        args.pop(i)
+        if i < len(args):
+            args.pop(i)
 
-    # Find players
+    # parse units
+    comp = {}
+    if "-u" in args:
+        i = args.index("-u")
+        raw = []
+        # collect all tokens after -u until next flag
+        for tok in args[i+1:]:
+            if tok.startswith("-"):
+                break
+            raw.append(tok)
+        # remove parsed
+        args = args[:i] + [t for t in args[i+1+len(raw):]]
+        # build composition dict
+        for pair in raw:
+            if ":" in pair:
+                key, qty = pair.split(":", 1)
+                if key in UNITS and qty.isdigit():
+                    comp[key] = int(qty)
+    # default: send all if none specified
+    army_rows = get_rows("Army")
+    if not comp:
+        for row in army_rows[1:]:
+            if row[0] == uid:
+                comp[row[1]] = int(row[2])
+
+    # find players & indices
     players = get_rows("Players")
     attacker = defender = None
     atk_i = def_i = None
-    for i, row in enumerate(players[1:], start=1):
+    for idx, row in enumerate(players[1:], start=1):
         if row[0] == uid:
-            attacker, atk_i = row.copy(), i
+            attacker, atk_i = row.copy(), idx
         if row[1].lower() == target.lower():
-            defender, def_i = row.copy(), i
+            defender, def_i = row.copy(), idx
 
     if not attacker:
         return await update.message.reply_text("❗ Run /start first.", parse_mode=ParseMode.MARKDOWN)
@@ -182,33 +185,40 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if defender[0] == uid:
         return await update.message.reply_text("❌ You cannot attack yourself!", parse_mode=ParseMode.MARKDOWN)
 
-    # Energy cost
-    energy     = int(attacker[5])
-    total_cost = 5 + scout_count
-    if energy < total_cost:
-        return await update.message.reply_text(f"❌ Need {total_cost}⚡, but you have {energy}⚡.", parse_mode=ParseMode.MARKDOWN)
-    attacker[5] = str(energy - total_cost)
+    # compute total cost & energy
+    energy = int(attacker[5])
+    cost   = 5 + scout_count
+    if energy < cost:
+        return await update.message.reply_text(f"❌ Need {cost}⚡ but have {energy}⚡.", parse_mode=ParseMode.MARKDOWN)
+    attacker[5] = str(energy - cost)
     update_row("Players", atk_i, attacker)
 
-    # Timestamp for job names
-    timestamp = str(int(time.time()))
+    # deduct units up front
+    for unit_key, qty in comp.items():
+        for i, arow in enumerate(army_rows[1:], start=1):
+            if arow[0] == uid and arow[1] == unit_key:
+                new_count = max(0, int(arow[2]) - qty)
+                arow[2] = str(new_count)
+                update_row("Army", i, arow)
+                break
 
-    # Schedule jobs & record them
+    # timestamp & schedule
+    ts = str(int(time.time()))
     pending = context.chat_data.get("pending", [])
 
     if scout_count > 0:
-        job = context.job_queue.run_once(
+        j = context.job_queue.run_once(
             scout_report_job,
             when=timedelta(minutes=5),
-            name=f"scout_{uid}_{defender[0]}_{timestamp}",
+            name=f"scout_{uid}_{defender[0]}_{ts}",
             data={"uid": uid, "defender_id": defender[0], "defender_name": defender[1]}
         )
-        pending.append(job.name)
+        pending.append(j.name)
 
-    job = context.job_queue.run_once(
+    j = context.job_queue.run_once(
         combat_resolution_job,
         when=timedelta(minutes=30),
-        name=f"attack_{uid}_{defender[0]}_{timestamp}",
+        name=f"attack_{uid}_{defender[0]}_{ts}",
         data={
             "uid": uid,
             "defender_id": defender[0],
@@ -216,31 +226,36 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "defender_name": defender[1],
             "atk_i": atk_i,
             "def_i": def_i,
-            "timestamp": timestamp
+            "timestamp": ts,
+            "composition": comp
         }
     )
-    pending.append(job.name)
+    pending.append(j.name)
 
-    # Persist pending list
     context.chat_data["pending"] = pending
 
-    # Track challenges
+    # track challenges
     for ch in load_challenges("daily"):
         if ch.key == "attacks":
             update_player_progress(uid, ch)
             break
 
-    # Confirmation UI
-    lines = ["⚔️ *Your orders are set!*"]
-    if scout_count > 0:
-        lines.append(f"🔎 Scouts x{scout_count} (cost {scout_count}⚡) arriving in *5 minutes*.")
-    lines.append(f"🏹 Main attack (cost 5⚡) on *{defender[1]}* arriving in *30 minutes*.")
-    lines.append("📜 Tap below to view or refresh pending operations.")
+    # build UI summary
+    parts = []
+    if comp:
+        parts.append("• " + "  ".join(f"{UNITS[k][1]}×{v}" for k, v in comp.items()))
+    if scout_count:
+        parts.append(f"• 🔎 Scouts×{scout_count} (1⚡ each)")
+    ui = (
+        "⚔️ *Your orders are set!* \n\n"
+        f"🏹 Attack on *{defender[1]}* in *30 minutes*\n"
+        + ("\n".join(parts)) +
+        f"\n\n📝 You’ll get the scout & battle reports here."
+    )
 
     kb = InlineKeyboardMarkup.from_button(
         InlineKeyboardButton("📜 View Pending", callback_data="reports")
     )
-    await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
-
+    await update.message.reply_text(ui, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
 
 handler = CommandHandler("attack", attack)
