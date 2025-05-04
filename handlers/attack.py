@@ -1,31 +1,135 @@
+# handlers/attack.py
+
 import time
 import random
-from telegram import Update
+from datetime import timedelta
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.ext import CommandHandler, ContextTypes
 from sheets_service import get_rows, update_row, append_row
 from utils.decorators import game_command
 from modules.unit_manager import UNITS
+from modules.challenge_manager import load_challenges, update_player_progress
+
+async def scout_report_job(context: ContextTypes.DEFAULT_TYPE):
+    """Job: send scouting report after 5 minutes."""
+    data = context.job.data
+    uid           = data["uid"]
+    defender_id   = data["defender_id"]
+    defender_name = data["defender_name"]
+
+    # Build report
+    army_rows = get_rows("Army")
+    lines = [f"🔎 *Scouting Report on {defender_name}*"]
+    for row in army_rows[1:]:
+        if row[0] != defender_id:
+            continue
+        unit_key, count = row[1], int(row[2])
+        if count > 0:
+            emoji = UNITS[unit_key][1]
+            lines.append(f"• {emoji} {unit_key}: {count}")
+
+    text = "\n".join(lines) if len(lines) > 1 else f"🔎 No troops detected at *{defender_name}*."
+    await context.bot.send_message(
+        chat_id=int(uid),
+        text=text,
+        parse_mode=ParseMode.MARKDOWN,
+    )
+
+async def combat_resolution_job(context: ContextTypes.DEFAULT_TYPE):
+    """Job: resolve the main attack after 30 minutes."""
+    data           = context.job.data
+    uid            = data["uid"]
+    defender_id    = data["defender_id"]
+    attacker_name  = data["attacker_name"]
+    defender_name  = data["defender_name"]
+    atk_i          = data["atk_i"]
+    def_i          = data["def_i"]
+    timestamp      = data["timestamp"]
+
+    # Helper: compute army power
+    def power(urow):
+        total = 0
+        for r in get_rows("Army")[1:]:
+            if r[0] != urow[0]:
+                continue
+            _, unit_key, count = r
+            count = int(count)
+            unit_power = UNITS[unit_key][3]
+            total += count * unit_power
+        return total
+
+    players  = get_rows("Players")
+    attacker = players[atk_i]
+    defender = players[def_i]
+
+    atk_roll = power(attacker) * random.uniform(0.9, 1.1)
+    def_roll = power(defender) * random.uniform(0.9, 1.1)
+
+    if atk_roll > def_roll:
+        result = "win"
+        spoils = max(1, int(defender[3]) // 10)
+        msg = (
+            f"🏆 *{attacker_name}* has *defeated* *{defender_name}*!\n"
+            f"💰 *Loot:* Stole {spoils} Credits."
+        )
+        attacker_credits = int(attacker[3]) + spoils
+        defender_credits = int(defender[3]) - spoils
+    else:
+        result = "loss"
+        spoils = max(1, int(attacker[3]) // 20)
+        msg = (
+            f"💥 *{attacker_name}* was *defeated* by *{defender_name}*!\n"
+            f"💸 *Loss:* Lost {spoils} Credits."
+        )
+        attacker_credits = int(attacker[3]) - spoils
+        defender_credits = int(defender[3]) + spoils
+
+    # Update sheet
+    attacker[3], defender[3] = str(attacker_credits), str(defender_credits)
+    update_row("Players", atk_i, attacker)
+    update_row("Players", def_i, defender)
+    append_row("CombatLog", [uid, defender_id, timestamp, result, str(spoils)])
+
+    # Notify attacker
+    await context.bot.send_message(
+        chat_id=int(uid),
+        text=msg,
+        parse_mode=ParseMode.MARKDOWN
+    )
 
 @game_command
 async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    /attack <CommanderName> – attack another commander by name (tick & upgrades via decorator).
-    Costs 5⚡ energy.
+    /attack <CommanderName> [-s <count>] – 
+    Dispatch scouts (-s) and launch a main assault (30 min march).
     """
     user = update.effective_user
-    uid = str(user.id)
+    uid  = str(user.id)
     args = context.args
 
     if not args:
         return await update.message.reply_text(
-            "❗ Usage: `/attack <CommanderName>`",
+            "❗ Usage: `/attack <CommanderName> [-s <number_of_scouts>]`",
             parse_mode=ParseMode.MARKDOWN
         )
-    target = args[0]
 
-    # Load players
-    players = get_rows('Players')
+    target = args[0]
+    scout_count = 0
+
+    # Parse optional -s flag for scouts
+    if "-s" in args:
+        try:
+            idx = args.index("-s")
+            scout_count = int(args[idx + 1])
+            # remove the flag from args
+            args.pop(idx + 1)
+            args.pop(idx)
+        except (ValueError, IndexError):
+            scout_count = 1
+
+    # Find attacker & defender
+    players = get_rows("Players")
     attacker = defender = None
     atk_i = def_i = None
     for i, row in enumerate(players[1:], start=1):
@@ -35,104 +139,69 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
             defender, def_i = row.copy(), i
 
     if not attacker:
-        return await update.message.reply_text(
-            "❗ Run /start first.", parse_mode=ParseMode.MARKDOWN
-        )
+        return await update.message.reply_text("❗ Please run /start first.", parse_mode=ParseMode.MARKDOWN)
     if not defender:
         return await update.message.reply_text(
             f"❌ Commander *{target}* not found.", parse_mode=ParseMode.MARKDOWN
         )
     if defender[0] == uid:
-        return await update.message.reply_text(
-            "❌ You cannot attack yourself!", parse_mode=ParseMode.MARKDOWN
-        )
+        return await update.message.reply_text("❌ You cannot attack yourself!", parse_mode=ParseMode.MARKDOWN)
 
-    # Deduct energy
+    # Deduct energy cost
     energy = int(attacker[5])
     if energy < 5:
-        return await update.message.reply_text("❌ Not enough energy. Need 5⚡.")
+        return await update.message.reply_text("❌ Not enough energy. Need 5⚡.", parse_mode=ParseMode.MARKDOWN)
     attacker[5] = str(energy - 5)
-    update_row('Players', atk_i, attacker)
+    update_row("Players", atk_i, attacker)
 
-    # Compute army power
-    def power(urow):
-        total = 0
-        for r in get_rows('Army')[1:]:
-            if r[0] != urow[0]:
-                continue
-            unit_key = r[1]
-            count = int(r[2])
-            _, _, _, unit_power, _ = UNITS.get(unit_key, (None, None, None, 0, None))
-            total += count * unit_power
-        return total
-
-    atk_roll = power(attacker) * random.uniform(0.9, 1.1)
-    def_roll = power(defender) * random.uniform(0.9, 1.1)
-
+    # Timestamp for logs & job names
     timestamp = str(int(time.time()))
-    if atk_roll > def_roll:
-        result = 'win'
-        spoils = max(1, int(defender[3]) // 10)
-        attacker_credits = int(attacker[3]) + spoils
-        defender_credits = int(defender[3]) - spoils
-        msg = f"🏆 *{attacker[1]}* defeated *{defender[1]}*! Stole {spoils}💳."
-    else:
-        result = 'loss'
-        spoils = max(1, int(attacker[3]) // 20)
-        attacker_credits = int(attacker[3]) - spoils
-        defender_credits = int(defender[3]) + spoils
-        msg = f"💥 *{attacker[1]}* was defeated by *{defender[1]}*! Lost {spoils}💳."
 
-    # Update credits
-    attacker[3], defender[3] = str(attacker_credits), str(defender_credits)
-    update_row('Players', atk_i, attacker)
-    update_row('Players', def_i, defender)
-    append_row('CombatLog', [uid, defender[0], timestamp, result, str(spoils)])
+    # Schedule scout job (5 min)
+    if scout_count > 0:
+        context.job_queue.run_once(
+            scout_report_job,
+            when=timedelta(minutes=5),
+            name=f"scout_{uid}_{defender[0]}_{timestamp}",
+            data={"uid": uid, "defender_id": defender[0], "defender_name": defender[1]}
+        )
 
-    # Send the battle result
-    await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN)
+    # Schedule combat resolution (30 min)
+    context.job_queue.run_once(
+        combat_resolution_job,
+        when=timedelta(minutes=30),
+        name=f"attack_{uid}_{defender[0]}_{timestamp}",
+        data={
+            "uid": uid,
+            "defender_id": defender[0],
+            "attacker_name": attacker[1],
+            "defender_name": defender[1],
+            "atk_i": atk_i,
+            "def_i": def_i,
+            "timestamp": timestamp
+        }
+    )
 
-    # ← NEW: track daily Attacks challenge
-    from modules.challenge_manager import load_challenges, update_player_progress
-    for ch in load_challenges('daily'):
-        if ch.key == 'attacks':
+    # Track daily attacks challenge
+    for ch in load_challenges("daily"):
+        if ch.key == "attacks":
             update_player_progress(uid, ch)
             break
 
-    # QUEST PROGRESSION STEP 5: First Attack Reward
-    players = get_rows('Players')
-    header = players[0]
-    for pi, prow in enumerate(players[1:], start=1):
-        if prow[0] == uid:
-            while len(prow) < len(header): prow.append("")
-            progress = prow[7]
-            break
-    else:
-        return
+    # Confirmation UI
+    lines = ["⚔️ *Your orders are set!*"]
+    if scout_count > 0:
+        lines.append(f"🔎 Scouts x{scout_count} arriving in *5 minutes*.")
+    lines.append(f"🏹 Main attack on *{defender[1]}* arriving in *30 minutes*.")
+    lines.append("📝 You’ll receive reports here when they arrive.")
 
-    if progress == 'step4':
-        # grant 5 infantry +1 tank
-        army_rows = get_rows('Army')
-        def add_unit(unit_key, quantity):
-            for ai, arow in enumerate(army_rows[1:], start=1):
-                if arow[0] == uid and arow[1] == unit_key:
-                    arow[2] = str(int(arow[2]) + quantity)
-                    update_row('Army', ai, arow)
-                    return
-            append_row('Army', [uid, unit_key, str(quantity)])
+    kb = InlineKeyboardMarkup.from_button(
+        InlineKeyboardButton("📜 View Pending", callback_data="reports")
+    )
+    await update.message.reply_text(
+        "\n".join(lines),
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=kb
+    )
 
-        add_unit('infantry', 5)
-        add_unit('tanks', 1)
-
-        prow[7] = 'step5'
-        update_row('Players', pi, prow)
-
-        reward_msg = (
-            "🎉 Mission Complete!\n"
-            "✅ Your first conquest is won!\n"
-            "💂 +5 Infantry and 🏎️ +1 Tank have joined your army.\n\n"
-            "Next mission: `/leaderboard` – see where you stand among commanders."
-        )
-        await update.message.reply_text(reward_msg, parse_mode=ParseMode.MARKDOWN)
-
-handler = CommandHandler('attack', attack)
+handler = CommandHandler("attack", attack)
