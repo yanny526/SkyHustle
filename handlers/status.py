@@ -7,16 +7,22 @@ from telegram.error import BadRequest
 from telegram.ext import CommandHandler, CallbackQueryHandler, ContextTypes
 
 from config import BUILDING_MAX_LEVEL
-from modules.building_manager import PRODUCTION_PER_LEVEL, get_building_info, get_production_rates, get_building_health
+from modules.building_manager import (
+    PRODUCTION_PER_LEVEL,
+    get_building_info,
+    get_production_rates,
+    get_building_health,
+)
 from modules.unit_manager import UNITS
-from modules.upgrade_manager import get_pending_upgrades
 from sheets_service import get_rows
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_user.id)
     now = datetime.utcnow()
 
-    # 1) Load player record
+    # ──────────────────────────────────────────────────────────────────────────
+    # 1) Load core player data
+    # ──────────────────────────────────────────────────────────────────────────
     players = get_rows("Players")
     for row in players[1:]:
         if row[0] == uid:
@@ -29,86 +35,119 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         return await update.message.reply_text("❗ Please run /start first.")
 
-    # 2) Production & buildings data
-    binfo  = get_building_info(uid)
-    rates  = get_production_rates(binfo)
-    health = get_building_health(uid)
+    # ──────────────────────────────────────────────────────────────────────────
+    # 2) Buildings & Production
+    # ──────────────────────────────────────────────────────────────────────────
+    binfo   = get_building_info(uid)
+    rates   = get_production_rates(binfo)
+    health  = get_building_health(uid)
+    all_bld = ["Bank"] + list(BUILDING_MAX_LEVEL.keys())
 
-    # 3) Army composition
+    # ──────────────────────────────────────────────────────────────────────────
+    # 3) Garrison vs Deployed Army & Power
+    # ──────────────────────────────────────────────────────────────────────────
+    # Garrison
     army_rows = get_rows("Army")
-    counts    = {r[1]: int(r[2]) for r in army_rows[1:] if r[0] == uid}
+    garrison = {r[1]: int(r[2]) for r in army_rows[1:] if r[0] == uid}
+    garrison_power = sum(cnt * UNITS[key][3] for key, cnt in garrison.items())
 
-    # 4) Determine all buildings
-    all_buildings = ["Bank"] + list(BUILDING_MAX_LEVEL.keys())
+    # Deployed
+    dep_rows = get_rows("DeployedArmy")
+    deployed = {}
+    for r in dep_rows[1:]:
+        if r[0] != uid: continue
+        key, cnt = r[1], int(r[2])
+        if cnt > 0:
+            deployed[key] = deployed.get(key, 0) + cnt
+    deployed_power = sum(cnt * UNITS[key][3] for key, cnt in deployed.items())
 
-    # 5) Build the status message
-    lines = [
-        f"🏰 *Commander:* {name}",
-        "━━━━━━━━━━━━━━━━━━━━",
-        f"💰 *Credits:*  {credits}",
-        f"⛏️ *Minerals:* {minerals}",
-        f"⚡ *Energy:*   {energy}",
-        ""
-    ]
+    # ──────────────────────────────────────────────────────────────────────────
+    # 4) Assemble message
+    # ──────────────────────────────────────────────────────────────────────────
+    lines = []
 
-    # 6) Time to next resource "tick"
+    # Header
+    lines.append(f"🔥⚔️ *Commander Report: {name}* ⚔️🔥")
+    lines.append("")
+
+    # Resources
+    lines.append("💰 *Resources*")
+    lines.append(f" • 🪙 Credits : {credits}")
+    lines.append(f" • ⛏️ Minerals: {minerals}")
+    lines.append(f" • ⚡ Energy  : {energy}")
+    lines.append("")
+
+    # Next tick
     if last_seen is not None:
         secs_to_next = max(0, (last_seen + 3600) - now.timestamp())
-        mins, secs   = divmod(int(secs_to_next), 60)
-        lines.append(f"⏱️ Next resource update in {mins}m {secs}s")
+        m, s = divmod(int(secs_to_next), 60)
+        lines.append(f"⏱️ Next Tick in {m}m {s}s")
         lines.append("")
 
-    lines += [
-        f"💹 *Current Production/min:* 🪙{rates['credits']}   ⛏️{rates['minerals']}   ⚡{rates['energy']}",
-        "",
-        "🔧 *Next Upgrade Suggestions:*"
-    ]
+    # Production rates
+    lines.append("🏭 *Production/minute*")
+    lines.append(f" • 🪙 {rates['credits']}   ⛏️ {rates['minerals']}   ⚡ {rates['energy']}")
+    lines.append("")
 
-    # 7) Next-upgrade info
-    for btype in all_buildings:
-        lvl = binfo.get(btype, 0)
-        next_lvl = lvl + 1
-        cost_credits  = next_lvl * 100
-        cost_minerals = next_lvl * 50
-        prod_info = PRODUCTION_PER_LEVEL.get(btype)
+    # Buildings & health
+    lines.append("🏰 *Buildings & Health*")
+    for b in all_bld:
+        lvl = binfo.get(b, 0)
+        hp  = health.get(b, {"current":0, "max":0})
+        lines.append(f" • {b}: Lvl {lvl} (HP {hp['current']}/{hp['max']})")
+    lines.append("")
+
+    # Power summary
+    lines.append("⚔️ *Army Strength*")
+    lines.append(f" • 🛡️ Garrison : {garrison_power}⚔️")
+    lines.append(f" • 🚚 Deployed : {deployed_power}⚔️")
+    lines.append("")
+
+    # Garrison details
+    lines.append("🛡️ *Garrison Composition*")
+    if garrison:
+        for key, cnt in garrison.items():
+            disp, emoji, *_ = UNITS[key]
+            lines.append(f"  • {emoji} {disp}: {cnt}")
+    else:
+        lines.append("  • None")
+    lines.append("")
+
+    # Deployed details
+    lines.append("🚚 *Deployed Forces*")
+    if deployed:
+        for key, cnt in deployed.items():
+            disp, emoji, *_ = UNITS[key]
+            lines.append(f"  • {emoji} {disp}: {cnt}")
+    else:
+        lines.append("  • None")
+    lines.append("")
+
+    # Next upgrade suggestions
+    lines.append("🔧 *Next Upgrade Suggestions*")
+    for b in all_bld:
+        lvl = binfo.get(b, 0)
+        nlv = lvl + 1
+        c₳ = nlv * 100
+        c⛏ = nlv * 50
+        prod_info = PRODUCTION_PER_LEVEL.get(b)
         if prod_info:
-            key, per_level = prod_info
-            benefit = per_level * next_lvl - per_level * lvl
-            benefit_str = f"+{benefit} {key}/min"
+            key, per = prod_info
+            gain = per * nlv - per * lvl
+            gain_s = f"+{gain} {key}/min"
         else:
-            benefit_str = "–"
-        lines.append(
-            f"   • {btype}: {lvl}→{next_lvl} | cost 🪙{cost_credits}, ⛏️{cost_minerals} | {benefit_str}"
-        )
-
-    lines += [
-        "",
-        "🏗️ *Buildings & Health:*"
-    ]
-    for btype in all_buildings:
-        lvl = binfo.get(btype, 0)
-        hp  = health.get(btype, {})
-        cur = hp.get("current", 0)
-        mx  = hp.get("max", 0)
-        lines.append(f"   • {btype}: Lvl {lvl} (HP {cur}/{mx})")
-
-    lines += [
-        "",
-        "⚔️ *Army Composition:*"
-    ]
-    for key, (disp, emoji, *_ ) in UNITS.items():
-        cnt = counts.get(key, 0)
-        if cnt > 0:
-            lines.append(f"   • {emoji} {disp}: {cnt}")
+            gain_s = "–"
+        lines.append(f"  • {b}: {lvl}→{nlv} | cost 🪙{c₳}, ⛏️{c⛏} | {gain_s}")
 
     text = "\n".join(lines)
 
-    # 8) Only a Refresh button
+    # ──────────────────────────────────────────────────────────────────────────
+    # 5) Inline refresh
+    # ──────────────────────────────────────────────────────────────────────────
     kb = InlineKeyboardMarkup.from_button(
-        InlineKeyboardButton("🔄 Refresh", callback_data="status")
+        InlineKeyboardButton("🔄 Refresh Report", callback_data="status")
     )
 
-    # 9) Send or update
     if update.message:
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
     else:
@@ -120,10 +159,8 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 raise
 
 async def status_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle the 🔄 Refresh button."""
     if update.callback_query.data == "status":
         return await status(update, context)
 
-# Export handlers
-handler = CommandHandler("status", status)
+handler          = CommandHandler("status", status)
 callback_handler = CallbackQueryHandler(status_button, pattern="^status$")
