@@ -25,6 +25,7 @@ from handlers.help import handler as help_handler
 from handlers.army import handler as army_handler
 from handlers.callbacks import handler as menu_callback_handler  # Inline button handler
 from handlers.achievements import handler as achievements_handler
+from handlers.callbacks import handler as menu_callback_handler  # inline menu
 from handlers.announce import handler as announce_handler
 
 # …
@@ -56,6 +57,7 @@ def main():
     app.add_handler(army_handler)
     app.add_handler(menu_callback_handler)
     app.add_handler(achievements_handler)
+    app.add_handler(menu_callback_handler)  # inline buttons
     app.add_handler(announce_handler)
     
     # Register Daily & Weekly challenge commands
@@ -74,6 +76,7 @@ def main():
             BotCommand("weekly", "📆 View weekly challenges"),
             BotCommand("help", "🆘 Help & all commands"),
             BotCommand("achievements", "🏅 View your achievements"),
+            BotCommand("announce", "📣 Broadcast an announcement"),
         ]
         await app.bot.set_my_commands(commands)
 
