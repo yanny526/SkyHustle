@@ -113,11 +113,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             commander_name = row[1].strip() or user.first_name
             break
 
-    # Welcome back message
+    # Welcome back message with streak info
     msg = (
-        f"🎖️ Welcome back, Commander *{commander_name}*!\n"
+        f"🎖️ Welcome back, Commander *{commander_name}*!
+"
+        f"🔄 Login Streak: {streak} day{'s' if streak != 1 else ''}.
+"
         "Use /menu or /status to continue."
     )
-    await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN)
+    await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN)(msg, parse_mode=ParseMode.MARKDOWN)
 
 handler = CommandHandler('start', start)
