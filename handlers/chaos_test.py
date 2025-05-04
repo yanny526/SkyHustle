@@ -1,4 +1,3 @@
-from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import CommandHandler, ContextTypes
 from sheets_service import get_rows
@@ -6,23 +5,21 @@ from modules.chaos_storms_manager import get_random_storm, apply_storm, record_s
 
 async def chaos_test(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    /chaos_test – admin-only command to trigger a Chaos Storm immediately, bypassing cooldown.
+    /chaos_test – admin-only command to trigger a Chaos Storm immediately.
     """
     user_id = update.effective_user.id
-    # Load administrator IDs from the 'administrators' sheet
     admins_rows = get_rows("administrators")
-    admin_ids = [int(row[0]) for row in admins_rows[1:] if row and row[0].isdigit()]
+    admin_ids = [int(r[0]) for r in admins_rows[1:] if r and r[0].isdigit()]
 
     if user_id not in admin_ids:
         await update.message.reply_text("🚫 You are not authorized to use this command.")
         return
 
-    # Bypass cooldown and trigger a storm
+    # Force a random storm
     storm = get_random_storm()
     apply_storm(storm)
     record_storm(storm["id"])
 
-    # Build and broadcast the message
     title = f"{storm['emoji']} *{storm['name']}*"
     text = (
         f"{title}\n\n"
@@ -33,7 +30,7 @@ async def chaos_test(update: Update, context: ContextTypes.DEFAULT_TYPE):
     players = get_rows("Players")
     for row in players[1:]:
         try:
-            chat_id = int(row[1])
+            chat_id = int(row[0])             # ← was row[1]
             await context.bot.send_message(
                 chat_id=chat_id,
                 text=text,
@@ -42,6 +39,4 @@ async def chaos_test(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             continue
 
-# Register the handler
 handler = CommandHandler("chaos_test", chaos_test)
-
