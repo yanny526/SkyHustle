@@ -1,118 +1,189 @@
-# main.py
+# handlers/attack.py
 
-from config import BOT_TOKEN
-from sheets_service import init as sheets_init
+import time
+import random
+from datetime import timedelta
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.constants import ParseMode
+from telegram.ext import CommandHandler, ContextTypes
+from sheets_service import get_rows, update_row, append_row
+from utils.decorators import game_command
+from modules.unit_manager import UNITS
+from modules.challenge_manager import load_challenges, update_player_progress
 
-from telegram import BotCommand
-from telegram.ext import Application, CommandHandler, MessageHandler, filters
-from datetime import time as dtime
+async def scout_report_job(context: ContextTypes.DEFAULT_TYPE):
+    """Job: send scouting report after 5 minutes."""
+    data = context.job.data
+    uid, defender_id, defender_name = data["uid"], data["defender_id"], data["defender_name"]
 
-# Handlers
-from handlers.start import handler as start_handler
-from handlers.setname import handler as setname_handler
-from handlers.menu import handler as menu_handler
-from handlers.status import handler as status_handler, callback_handler as status_callback
-from handlers.build import handler as build_handler
-from handlers.queue import handler as queue_handler
-from handlers.train import handler as train_handler
-from handlers.attack import handler as attack_handler
-from handlers.reports import handler as reports_handler, callback_handler as reports_callback
-from handlers.leaderboard import handler as leaderboard_handler
-from handlers.help import handler as help_handler
-from handlers.army import handler as army_handler
-from handlers.achievements import handler as achievements_handler
-from handlers.announce import handler as announce_handler
-from handlers.challenges import daily, weekly
-from handlers.whisper import handler as whisper_handler
-from handlers.inbox import handler as inbox_handler
+    army_rows = get_rows("Army")
+    lines = [f"🔎 *Scouting Report on {defender_name}*"]
+    for row in army_rows[1:]:
+        if row[0] != defender_id:
+            continue
+        unit_key, count = row[1], int(row[2])
+        if count > 0:
+            emoji = UNITS[unit_key][1]
+            lines.append(f"• {emoji} {unit_key}: {count}")
 
-# Chaos system
-from handlers.chaos import handler as chaos_handler
-from handlers.chaos_test import handler as chaos_test_handler
-from handlers.chaos_event import chaos_event_job
-from handlers.chaos_pre_notice import chaos_pre_notice_job
+    text = "\n".join(lines) if len(lines) > 1 else f"🔎 No troops detected at *{defender_name}*."
+    await context.bot.send_message(chat_id=int(uid), text=text, parse_mode=ParseMode.MARKDOWN)
+
+async def combat_resolution_job(context: ContextTypes.DEFAULT_TYPE):
+    """Job: resolve the main attack after 30 minutes."""
+    data = context.job.data
+    uid = data["uid"]
+    defender_id = data["defender_id"]
+    attacker_name = data["attacker_name"]
+    defender_name = data["defender_name"]
+    atk_i = data["atk_i"]
+    def_i = data["def_i"]
+    timestamp = data["timestamp"]
+
+    def power(urow):
+        total = 0
+        for r in get_rows("Army")[1:]:
+            if r[0] != urow[0]:
+                continue
+            _, unit_key, cnt = r
+            total += int(cnt) * UNITS[unit_key][3]
+        return total
+
+    players = get_rows("Players")
+    attacker = players[atk_i]
+    defender = players[def_i]
+
+    atk_roll = power(attacker) * random.uniform(0.9, 1.1)
+    def_roll = power(defender) * random.uniform(0.9, 1.1)
+
+    if atk_roll > def_roll:
+        result = "win"
+        spoils = max(1, int(defender[3]) // 10)
+        msg = (
+            f"🏆 *{attacker_name}* has *defeated* *{defender_name}*!\n"
+            f"💰 *Loot:* Stole {spoils} Credits."
+        )
+        attacker_credits = int(attacker[3]) + spoils
+        defender_credits = int(defender[3]) - spoils
+    else:
+        result = "loss"
+        spoils = max(1, int(attacker[3]) // 20)
+        msg = (
+            f"💥 *{attacker_name}* was *defeated* by *{defender_name}*!\n"
+            f"💸 *Loss:* Lost {spoils} Credits."
+        )
+        attacker_credits = int(attacker[3]) - spoils
+        defender_credits = int(defender[3]) + spoils
+
+    # Update sheets
+    attacker[3], defender[3] = str(attacker_credits), str(defender_credits)
+    update_row("Players", atk_i, attacker)
+    update_row("Players", def_i, defender)
+    append_row("CombatLog", [uid, defender_id, timestamp, result, str(spoils)])
+
+    # Notify attacker
+    await context.bot.send_message(chat_id=int(uid), text=msg, parse_mode=ParseMode.MARKDOWN)
 
 
-def main():
-    # 1) Initialize Sheets & headers
-    sheets_init()
+@game_command
+async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /attack <CommanderName> [-s <num_scouts>] –
+    Send scouts and/or launch main attack.
+    Scouts cost 1⚡ each; main attack costs 5⚡.
+    """
+    user = update.effective_user
+    uid = str(user.id)
+    args = context.args.copy()
 
-    # 2) Build bot
-    app = Application.builder().token(BOT_TOKEN).build()
+    if not args:
+        return await update.message.reply_text(
+            "❗ Usage: `/attack <CommanderName> [-s <number_of_scouts>]`",
+            parse_mode=ParseMode.MARKDOWN
+        )
 
-    # 3) Register handlers
-    app.add_handler(start_handler)
-    app.add_handler(setname_handler)
-    app.add_handler(menu_handler)
-    app.add_handler(status_handler)
-    app.add_handler(status_callback)
-    app.add_handler(build_handler)
-    app.add_handler(queue_handler)
-    app.add_handler(train_handler)
-    app.add_handler(attack_handler)
-    app.add_handler(reports_handler)     # /reports for pending
-    app.add_handler(reports_callback)    # 📜 View Pending button
-    app.add_handler(leaderboard_handler)
-    app.add_handler(help_handler)
-    app.add_handler(army_handler)
-    app.add_handler(achievements_handler)
-    app.add_handler(announce_handler)
-    app.add_handler(CommandHandler("daily", daily))
-    app.add_handler(CommandHandler("weekly", weekly))
-    app.add_handler(whisper_handler)
-    app.add_handler(inbox_handler)
+    target = args.pop(0)
+    scout_count = 0
 
-    # Chaos commands
-    app.add_handler(chaos_handler)
-    app.add_handler(chaos_test_handler)
+    # Parse optional -s flag for scouts
+    if "-s" in args:
+        idx = args.index("-s")
+        try:
+            scout_count = int(args[idx + 1])
+        except:
+            scout_count = 1
+        # clean up args
+        args.pop(idx) 
+        if idx < len(args):
+            args.pop(idx)
 
-    # 4) Slash commands
-    async def set_bot_commands(app):
-        commands = [
-            BotCommand("menu",         "📋 Show command menu"),
-            BotCommand("status",       "📊 View your base status"),
-            BotCommand("army",         "⚔️ View your army units"),
-            BotCommand("queue",        "⏳ View pending upgrades"),
-            BotCommand("leaderboard",  "🏆 See top commanders"),
-            BotCommand("daily",        "📅 View daily challenges"),
-            BotCommand("weekly",       "📆 View weekly challenges"),
-            BotCommand("achievements", "🏅 View your achievements"),
-            BotCommand("announce",     "📣 [Admin] Broadcast an announcement"),
-            BotCommand("chaos",        "🌪️ Preview Random Chaos Storms"),
-            BotCommand("chaos_test",   "🧪 [Admin] Test Chaos Storm"),
-            BotCommand("reports",      "🗒️ View pending operations"),
-            BotCommand("whisper",      "🤫 Send a private message"),
-            BotCommand("inbox",        "📬 View your private messages"),
-            BotCommand("help",         "🆘 Show help & all commands"),
-        ]
-        await app.bot.set_my_commands(commands)
+    # Lookup players
+    players = get_rows("Players")
+    attacker = defender = None
+    atk_i = def_i = None
+    for i, row in enumerate(players[1:], start=1):
+        if row[0] == uid:
+            attacker, atk_i = row.copy(), i
+        if row[1].lower() == target.lower():
+            defender, def_i = row.copy(), i
 
-    app.post_init = set_bot_commands
+    if not attacker:
+        return await update.message.reply_text("❗ Please run /start first.", parse_mode=ParseMode.MARKDOWN)
+    if not defender:
+        return await update.message.reply_text(f"❌ Commander *{target}* not found.", parse_mode=ParseMode.MARKDOWN)
+    if defender[0] == uid:
+        return await update.message.reply_text("❌ You cannot attack yourself!", parse_mode=ParseMode.MARKDOWN)
 
-    # 5) Unknown-command fallback
-    async def unknown(update, context):
-        await update.message.reply_text("❓ Unknown command. Use /help.")
-    app.add_handler(MessageHandler(filters.COMMAND, unknown))
+    # Total energy cost
+    energy = int(attacker[5])
+    total_cost = 5 + scout_count
+    if energy < total_cost:
+        return await update.message.reply_text(f"❌ Not enough energy. Need {total_cost}⚡.", parse_mode=ParseMode.MARKDOWN)
+    attacker[5] = str(energy - total_cost)
+    update_row("Players", atk_i, attacker)
 
-    # 6) Schedule chaos pre-notice checker
-    app.job_queue.run_repeating(
-        chaos_pre_notice_job,
-        interval=60,
-        first=0,
-        name="chaos_pre_notice_checker"
+    # Timestamp & schedule jobs
+    timestamp = str(int(time.time()))
+
+    if scout_count > 0:
+        context.job_queue.run_once(
+            scout_report_job,
+            when=timedelta(minutes=5),
+            name=f"scout_{uid}_{defender[0]}_{timestamp}",
+            data={"uid": uid, "defender_id": defender[0], "defender_name": defender[1]}
+        )
+
+    context.job_queue.run_once(
+        combat_resolution_job,
+        when=timedelta(minutes=30),
+        name=f"attack_{uid}_{defender[0]}_{timestamp}",
+        data={
+            "uid": uid,
+            "defender_id": defender[0],
+            "attacker_name": attacker[1],
+            "defender_name": defender[1],
+            "atk_i": atk_i,
+            "def_i": def_i,
+            "timestamp": timestamp
+        }
     )
 
-    # 7) Schedule weekly Chaos Storm
-    app.job_queue.run_daily(
-        chaos_event_job,
-        days=(0,),
-        time=dtime(hour=9, minute=0),
-        name="weekly_chaos_storm"
+    # Track challenges
+    for ch in load_challenges("daily"):
+        if ch.key == "attacks":
+            update_player_progress(uid, ch)
+            break
+
+    # Confirmation UI
+    lines = ["⚔️ *Your orders are set!*"]
+    if scout_count > 0:
+        lines.append(f"🔎 Scouts x{scout_count} (cost {scout_count}⚡) arriving in *5 minutes*.")
+    lines.append(f"🏹 Main attack (cost 5⚡) on *{defender[1]}* arriving in *30 minutes*.")
+    lines.append("📝 You’ll receive updates here when they arrive.")
+
+    kb = InlineKeyboardMarkup.from_button(
+        InlineKeyboardButton("📜 View Pending", callback_data="reports")
     )
+    await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
 
-    # 8) Start polling
-    app.run_polling()
-
-
-if __name__ == "__main__":
-    main()
+handler = CommandHandler("attack", attack)
