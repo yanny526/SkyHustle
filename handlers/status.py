@@ -128,7 +128,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 10) Respond to triggers
     if update.message:
         sent = await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard)
-    elif update.callback_query:
+    else:  # CallbackQuery
         sent = await update.callback_query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard)
 
     # 11) QUEST PROGRESSION STEP 4: first status check reward
@@ -136,15 +136,14 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     header = players[0]
     for pi, prow in enumerate(players[1:], start=1):
         if prow[0] == uid:
-            # ensure enough columns
-            while len(prow) < len(header): prow.append("")
+            while len(prow) < len(header):
+                prow.append("")
             progress = prow[7]
             break
     else:
         return
 
     if progress == 'step3':
-        # grant +300 credits
         prow[3] = str(int(prow[3]) + 300)
         prow[7] = 'step4'
         update_row("Players", pi, prow)
@@ -155,19 +154,23 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "💳 +300 Credits awarded!\n\n"
             "Next mission: `/attack <CommanderName>` – begin your conquests."
         )
-        # send as a new message
         await context.bot.send_message(
             chat_id=sent.chat.id,
             text=reward_msg,
             parse_mode=ParseMode.MARKDOWN
         )
 
+
 async def status_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    msg = query.message
+    # Handle the Check Status button
+    if query.data == "status":
+        return await status(update, context)
 
+    # Existing button handlers
+    msg = query.message
     if query.data == "view_army":
         update.message = msg
         return await army_command(update, context)
@@ -182,9 +185,10 @@ async def status_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         update.message.text = "/train"
         return await train_command(update, context)
 
+
 # Export handlers
 handler = CommandHandler("status", status)
 callback_handler = CallbackQueryHandler(
     status_button,
-    pattern="^(upgrade_HQ|train_units|view_army)$"
+    pattern="^(status|upgrade_HQ|train_units|view_army)$"
 )
