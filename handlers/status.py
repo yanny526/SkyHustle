@@ -1,7 +1,8 @@
 # handlers/status.py
 
 from datetime import datetime
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ParseMode
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.constants import ParseMode
 from telegram.ext import CommandHandler, CallbackQueryHandler, ContextTypes
 
 from modules.building_manager import (
@@ -10,6 +11,7 @@ from modules.building_manager import (
     get_building_health,
 )
 from modules.unit_manager import UNITS
+from modules.upgrade_manager import get_pending_upgrades
 from sheets_service import get_rows
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -29,40 +31,39 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await update.message.reply_text("❗ Please run /start first.")
 
     # 2) Production & buildings
-    binfo   = get_building_info(uid)           # {building: level}
-    rates   = get_production_rates(binfo)      # {'credits': x, 'minerals': y, 'energy': z}
-    health  = get_building_health(uid)         # {building: {'current': c, 'max': m}}
+    binfo   = get_building_info(uid)
+    rates   = get_production_rates(binfo)
+    health  = get_building_health(uid)
 
     # 3) Army composition
     army_rows = get_rows("Army")
     counts    = {r[1]: int(r[2]) for r in army_rows[1:] if r[0] == uid}
 
-    # 4) Build message
+    # 4) Build message lines
     lines = [
         f"🏰 *Commander:* {name}",
         "━━━━━━━━━━━━━━━━━━━━",
-        f"💰 *Credits:* {credits}",
+        f"💰 *Credits:*  {credits}",
         f"⛏️ *Minerals:* {minerals}",
-        f"⚡ *Energy:* {energy}",
+        f"⚡ *Energy:*   {energy}",
         "",
         f"💹 *Production/min:* 🪙{rates['credits']}   ⛏️{rates['minerals']}   ⚡{rates['energy']}",
         "",
         "🔧 *Next Upgrade Suggestions:*"
     ]
 
-    # For each building, show next level and (example) cost + benefit
+    # Next-upgrade info
+    pending = get_pending_upgrades(uid)
     for btype, lvl in binfo.items():
         next_lvl      = lvl + 1
-        # Example cost formula (adjust to your actual logic)
-        cost_credits  = next_lvl * 100
-        cost_minerals = next_lvl * 50
-        # Example benefit: +10% production
+        cost_credits  = next_lvl * 100      # adjust to real formula
+        cost_minerals = next_lvl * 50       # adjust as needed
         inc_credit    = int(rates['credits'] * 0.1)
         inc_mineral   = int(rates['minerals'] * 0.1)
         inc_energy    = int(rates['energy'] * 0.1)
         lines.append(
-            f"   • {btype}: Lvl {lvl} → {next_lvl} | cost 🪙{cost_credits}, ⛏️{cost_minerals} | "
-            f"+🪙{inc_credit}/min, +⛏️{inc_mineral}/min, +⚡{inc_energy}/min"
+            f"   • {btype}: {lvl}→{next_lvl} | cost 🪙{cost_credits}, ⛏️{cost_minerals} | "
+            f"+🪙{inc_credit}/m, +⛏️{inc_mineral}/m, +⚡{inc_energy}/m"
         )
 
     lines += [
