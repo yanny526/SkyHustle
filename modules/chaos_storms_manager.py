@@ -1,6 +1,3 @@
-```python
-# modules/chaos_storms_manager.py
-
 import random
 from datetime import datetime, timedelta
 from sheets_service import get_rows, append_row, update_row
@@ -63,7 +60,6 @@ STORMS = [
     },
 ]
 
-
 def _ensure_log_sheet():
     """
     Ensure the ChaosLog sheet exists with the correct header.
@@ -74,7 +70,6 @@ def _ensure_log_sheet():
         rows = []
     if not rows or rows[0] != LOG_HEADER:
         append_row(LOG_SHEET, LOG_HEADER)
-
 
 def _last_storm_time():
     """
@@ -92,7 +87,6 @@ def _last_storm_time():
     except ValueError:
         return None
 
-
 def can_trigger():
     """
     Return True if at least 7 days have passed since the last storm.
@@ -103,7 +97,6 @@ def can_trigger():
         return True
     return datetime.utcnow() - last >= timedelta(days=7)
 
-
 def record_storm(storm_id: str):
     """
     Record a new storm occurrence in the log sheet.
@@ -111,11 +104,9 @@ def record_storm(storm_id: str):
     now = datetime.utcnow().isoformat()
     append_row(LOG_SHEET, [storm_id, now])
 
-
 def get_random_storm():
     """Pick one of the five storms at random."""
     return random.choice(STORMS)
-
 
 def apply_storm(storm):
     """
@@ -133,7 +124,6 @@ def apply_storm(storm):
         row[3], row[4], row[5] = str(c), str(m), str(e)
         update_row("Players", idx, row)
 
-
 def trigger_storm():
     """
     If enough time has passed, pick & apply a new storm,
@@ -145,4 +135,3 @@ def trigger_storm():
     apply_storm(storm)
     record_storm(storm["id"])
     return storm
-```
