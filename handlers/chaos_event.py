@@ -13,19 +13,27 @@ async def chaos_event_job(context: ContextTypes.DEFAULT_TYPE):
     if not storm:
         return
 
-    title = f"🗓️ *Weekly Chaos Storm:* {storm['emoji']} {storm['name']}"
+    header = "🌪️🌩️ *CHAOS STORM INCOMING!* 🌩️🌪️"
+    name_line = f"{storm['emoji']} *{storm['name'].upper()}* {storm['emoji']}"
     body = storm['story']
-    footer = "⚠️ Brace yourselves — the elements are unleashed!"
-    text = f"{title}\n\n{body}\n\n{footer}"
+    footer = "⚠️ *Brace yourselves!* The elements have been unleashed."
+
+    text = (
+        f"{header}\n\n"
+        f"{name_line}\n\n"
+        f"{body}\n\n"
+        f"{footer}"
+    )
 
     players = get_rows("Players")
     for row in players[1:]:
         try:
-            chat_id = int(row[0])  # chat_id in column A
+            chat_id = int(row[0])
             await context.bot.send_message(
                 chat_id=chat_id,
                 text=text,
                 parse_mode=ParseMode.MARKDOWN,
             )
         except Exception:
+            # consider logging invalid chat_ids here
             continue
