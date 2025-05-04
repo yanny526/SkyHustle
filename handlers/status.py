@@ -3,6 +3,7 @@
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
+from telegram.error import BadRequest
 from telegram.ext import CommandHandler, CallbackQueryHandler, ContextTypes
 
 from config import BUILDING_MAX_LEVEL
@@ -23,18 +24,15 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
             credits   = int(row[3])
             minerals  = int(row[4])
             energy    = int(row[5])
-            # last_seen timestamp for next-tick calc, if present
-            last_seen = None
-            if len(row) > 6 and row[6].isdigit():
-                last_seen = int(row[6])
+            last_seen = int(row[6]) if len(row) > 6 and row[6].isdigit() else None
             break
     else:
         return await update.message.reply_text("❗ Please run /start first.")
 
     # 2) Production & buildings data
-    binfo  = get_building_info(uid)      # {building: level}
-    rates  = get_production_rates(binfo) # {'credits': x, 'minerals': y, 'energy': z}
-    health = get_building_health(uid)    # {building: {'current': c, 'max': m}}
+    binfo  = get_building_info(uid)
+    rates  = get_production_rates(binfo)
+    health = get_building_health(uid)
 
     # 3) Army composition
     army_rows = get_rows("Army")
@@ -53,7 +51,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ""
     ]
 
-    # 6) Time to next resource "tick" (hourly)
+    # 6) Time to next resource "tick"
     if last_seen is not None:
         secs_to_next = max(0, (last_seen + 3600) - now.timestamp())
         mins, secs   = divmod(int(secs_to_next), 60)
@@ -66,20 +64,16 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "🔧 *Next Upgrade Suggestions:*"
     ]
 
-    # 7) For each building: next level, cost, and benefit
+    # 7) Next-upgrade info
     for btype in all_buildings:
         lvl = binfo.get(btype, 0)
         next_lvl = lvl + 1
-        # cost formula (replace with your real formula if different)
         cost_credits  = next_lvl * 100
         cost_minerals = next_lvl * 50
-        # benefit: for production buildings use PRODUCTION_PER_LEVEL
         prod_info = PRODUCTION_PER_LEVEL.get(btype)
         if prod_info:
             key, per_level = prod_info
-            current_rate = per_level * lvl
-            next_rate    = per_level * next_lvl
-            benefit = next_rate - current_rate
+            benefit = per_level * next_lvl - per_level * lvl
             benefit_str = f"+{benefit} {key}/min"
         else:
             benefit_str = "–"
@@ -91,7 +85,6 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "",
         "🏗️ *Buildings & Health:*"
     ]
-    # 8) List every building's current level and HP
     for btype in all_buildings:
         lvl = binfo.get(btype, 0)
         hp  = health.get(btype, {})
@@ -103,25 +96,28 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "",
         "⚔️ *Army Composition:*"
     ]
-    # 9) Army counts
-    for key, (disp, emoji, *_) in UNITS.items():
+    for key, (disp, emoji, *_ ) in UNITS.items():
         cnt = counts.get(key, 0)
         if cnt > 0:
             lines.append(f"   • {emoji} {disp}: {cnt}")
 
     text = "\n".join(lines)
 
-    # 10) Only a Refresh button
+    # 8) Only a Refresh button
     kb = InlineKeyboardMarkup.from_button(
         InlineKeyboardButton("🔄 Refresh", callback_data="status")
     )
 
-    # 11) Send or update the message
+    # 9) Send or update
     if update.message:
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
     else:
         await update.callback_query.answer()
-        await update.callback_query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
+        try:
+            await update.callback_query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
+        except BadRequest as e:
+            if "Message is not modified" not in str(e):
+                raise
 
 async def status_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle the 🔄 Refresh button."""
