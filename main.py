@@ -1,3 +1,4 @@
+```python
 # main.py
 
 from config import BOT_TOKEN
@@ -24,11 +25,11 @@ from handlers.announce import handler as announce_handler
 from handlers.challenges import daily, weekly
 from handlers.whisper import handler as whisper_handler
 from handlers.inbox import handler as inbox_handler
-from handlers.chaos_test import handler as chaos_test_handler
 
 # ⚡ Chaos Storms
 from handlers.chaos import handler as chaos_handler
 from handlers.chaos_event import chaos_event_job
+from handlers.chaos_test import handler as chaos_test_handler
 
 
 def main():
@@ -58,7 +59,7 @@ def main():
     app.add_handler(whisper_handler)
     app.add_handler(inbox_handler)
     app.add_handler(chaos_handler)  # ➡️ Preview Random Chaos Storms
-    app.add_handler(chaos_test_handler)
+    app.add_handler(chaos_test_handler)  # Admin test command for Chaos Storms
 
     # 4) Set visible slash commands in Telegram
     async def set_bot_commands(app):
@@ -71,8 +72,9 @@ def main():
             BotCommand("daily",       "📅 View daily challenges"),
             BotCommand("weekly",      "📆 View weekly challenges"),
             BotCommand("achievements","🏅 View your achievements"),
-            BotCommand("announce",    "📣 Broadcast an announcement"),
+            BotCommand("announce",    "📣 [Admin] Broadcast an announcement"),
             BotCommand("chaos",       "🌪️ Preview Random Chaos Storms"),
+            BotCommand("chaos_test",  "🛠️ [Admin] Trigger a Chaos Storm"),
             BotCommand("whisper",     "🤫 Send a private message"),
             BotCommand("inbox",       "📬 View your private messages"),
             BotCommand("help",        "🆘 Show help & all commands"),
@@ -87,10 +89,11 @@ def main():
     app.add_handler(MessageHandler(filters.COMMAND, unknown))
 
     # 6) Schedule weekly Chaos Storm (Mon @ 09:00 UTC)
-    app.job_queue.run_weekly(
+    # PTB v20: use run_daily with days parameter instead of run_weekly
+    app.job_queue.run_daily(
         chaos_event_job,
-        day_of_week="mon",
         time=dtime(hour=9, minute=0),
+        days=(0,),  # Monday
         name="weekly_chaos_storm"
     )
 
@@ -100,3 +103,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+```
