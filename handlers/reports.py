@@ -1,40 +1,35 @@
 from datetime import datetime, timezone
+import json
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.error import BadRequest
 from telegram.ext import CommandHandler, CallbackQueryHandler, ContextTypes
 from modules.unit_manager import UNITS
 
+PEND_SHEET = "PendingActions"
+
 async def reports(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    /reports – list your pending scouts & attacks (or show a friendly no-pending message).
-    """
-    chat_id = update.effective_chat.id
-    pending = context.chat_data.get("pending", [])
+    chat_id = str(update.effective_chat.id)
     now     = datetime.now(timezone.utc)
 
     lines = []
-    for job_name in pending:
-        jobs = context.job_queue.get_jobs_by_name(job_name)
-        if not jobs:
+    for row in get_rows(PEND_SHEET)[1:]:
+        job, uid, did, dname, comp_json, scouts, run_at, typ, status = row
+        if status!="pending" or uid!=chat_id:
             continue
-        job = jobs[0]
-        delta = job.next_run_time - now
-        mins, secs = divmod(int(delta.total_seconds()), 60)
-        target = job_name.split("_")[2]
 
-        data = job.data or {}
-        if job_name.startswith("scout_"):
-            lines.append(f"🔎 Scouts → *{target}* in {mins}m {secs}s")
-        elif job_name.startswith("attack_"):
-            comp = data.get("composition", {})
-            comp_str = " ".join(f"{UNITS[k][1]}×{v}" for k, v in comp.items())
-            lines.append(
-                f"🏹 Attack → *{target}* [{comp_str}] in {mins}m {secs}s"
-            )
+        run_dt = datetime.fromisoformat(run_at)
+        delta  = run_dt - now
+        mins, secs = divmod(int(delta.total_seconds()), 60)
+
+        if typ=="scout":
+            lines.append(f"🔎 Scouts on *{dname}* in {mins}m {secs}s (×{scouts})")
+        else:  # attack
+            comp = json.loads(comp_json)
+            comp_str = " ".join(f"{UNITS[k][1]}×{v}" for k,v in comp.items())
+            lines.append(f"🏹 Attack on *{dname}* [{comp_str}] in {mins}m {secs}s")
 
     text = "🗒️ *No pending operations.*" if not lines else "🗒️ *Pending Operations:*\n" + "\n".join(lines)
-
     kb = InlineKeyboardMarkup.from_button(
         InlineKeyboardButton("🔄 Refresh", callback_data="reports")
     )
