@@ -1,62 +1,52 @@
 from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import CommandHandler, ContextTypes
-from utils.decorators import game_command
 from sheets_service import get_rows
+from modules.whisper_manager import record_whisper
 
-@game_command
+@game_command  # if you want resource ticks/upgrades before whisper
 async def whisper(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    /whisper <CommanderName> <message> – send a private message to another commander.
+    /whisper <CommanderName> <message> – send a private message.
     """
+    user = update.effective_user
+    uid = str(user.id)
     args = context.args
+
     if len(args) < 2:
         return await update.message.reply_text(
             "❗ Usage: `/whisper <CommanderName> <message>`",
             parse_mode=ParseMode.MARKDOWN
         )
+
     target_name = args[0]
-    message_text = " ".join(args[1:]).strip()
-    uid = str(update.effective_user.id)
+    message_text = " ".join(args[1:])
 
-    # Fetch all players
-    players = get_rows("Players")
-
-    # 1) Determine sender's display name
-    sender_name = None
-    for row in players[1:]:
-        if row[0] == uid:
-            sender_name = row[1] or update.effective_user.first_name
-            break
-    if not sender_name:
-        sender_name = update.effective_user.first_name
-
-    # 2) Find target user_id by commander name
-    target_id = None
-    for row in players[1:]:
-        if row[1].lower() == target_name.lower():
-            target_id = row[0]
-            break
-    if not target_id:
+    # look up target ID
+    players = get_rows("Players")[1:]
+    target_row = next((r for r in players if r[1].lower() == target_name.lower()), None)
+    if not target_row:
         return await update.message.reply_text(
             f"❌ Commander *{target_name}* not found.",
             parse_mode=ParseMode.MARKDOWN
         )
 
-    # 3) Send the whisper
-    try:
-        await context.bot.send_message(
-            chat_id=int(target_id),
-            text=f"💬 *Whisper from {sender_name}:* {message_text}",
-            parse_mode=ParseMode.MARKDOWN
-        )
-        await update.message.reply_text(
-            f"✅ Whisper sent to *{target_name}*!",
-            parse_mode=ParseMode.MARKDOWN
-        )
-    except Exception:
-        await update.message.reply_text(
-            "❌ Could not deliver the whisper. They may have blocked the bot."
-        )
+    recipient_id = target_row[0]
+
+    # 1) send confirmation to sender
+    await update.message.reply_text(
+        f"🤫 Sent to *{target_name}*: {message_text}",
+        parse_mode=ParseMode.MARKDOWN
+    )
+
+    # 2) notify recipient
+    await context.bot.send_message(
+        chat_id=int(recipient_id),
+        text=f"💌 Whisper from *{user.first_name}*: {message_text}",
+        parse_mode=ParseMode.MARKDOWN
+    )
+
+    # 3) record & prune
+    record_whisper(uid, recipient_id, message_text)
 
 handler = CommandHandler("whisper", whisper)
