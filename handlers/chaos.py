@@ -1,18 +1,24 @@
-# handlers/chaos.py
-
-from telegram import Update, ParseMode
+from telegram import Update
+from telegram.constants import ParseMode
 from telegram.ext import CommandHandler, ContextTypes
-from modules.chaos_storms_manager import EVENTS
+
+from modules.chaos_storms_manager import get_random_storm, apply_storm
 
 async def chaos(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    /chaos – preview all Random Chaos Storms.
+    /chaos – trigger a random Chaos Storm for all commanders.
+    Selects one event, applies its effects to every player,
+    and broadcasts the vivid storm story.
     """
-    lines = ["🌪️ *Random Chaos Storms* 🌪️\n"]
-    for ev in EVENTS:
-        lines.append(f"{ev['emoji']} *{ev['title']}*")
-        lines.append(f"_{ev['story']}_\n")
-    lines.append("_One of these storms will strike randomly once a week!_")
-    await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
+    storm = get_random_storm()
+    apply_storm(storm)
 
-handler = CommandHandler("chaos", chaos)
+    title = f"{storm['emoji']} *{storm['name']}*"
+    text = (
+        f"{title}\n\n"
+        f"{storm['story']}\n\n"
+        "⚠️ These storms strike randomly once a week, so brace yourself for the next one!"
+    )
+    await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+
+handler = CommandHandler('chaos', chaos)
