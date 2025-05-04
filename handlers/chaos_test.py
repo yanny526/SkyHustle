@@ -1,6 +1,6 @@
 # handlers/chaos_test.py
 
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.ext import CommandHandler, ContextTypes
 from sheets_service import get_rows
@@ -32,6 +32,10 @@ async def chaos_test(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"{footer}"
     )
 
+    kb = InlineKeyboardMarkup.from_button(
+        InlineKeyboardButton("🔍 Check Status", callback_data="status")
+    )
+
     players = get_rows("Players")
     for row in players[1:]:
         try:
@@ -40,6 +44,7 @@ async def chaos_test(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 chat_id=chat_id,
                 text=text,
                 parse_mode=ParseMode.MARKDOWN,
+                reply_markup=kb,
             )
         except Exception:
             continue
