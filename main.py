@@ -23,6 +23,7 @@ from handlers.achievements import handler as achievements_handler
 from handlers.announce import handler as announce_handler
 from handlers.challenges import daily, weekly
 from handlers.whisper import handler as whisper_handler
+from handlers.inbox import handler as inbox_handler
 
 def main():
     # 1) Auto-create Sheets & headers
@@ -50,6 +51,7 @@ def main():
     app.add_handler(CommandHandler('daily', daily))
     app.add_handler(CommandHandler('weekly', weekly))
     app.add_handler(whisper_handler)
+    app.add_handler(inbox_handler)
     
     # 4) Set visible slash commands in Telegram
     async def set_bot_commands(app):
@@ -64,7 +66,8 @@ def main():
             BotCommand("achievements", "🏅 View your achievements"),
             BotCommand("announce", "📣 Broadcast an announcement"),
             BotCommand("help", "🆘 Show help and all commands"),
-            BotCommand("whisper", "💬 Send a private message to a commander"),
+            BotCommand("whisper", "🤫 Send a private message to a commander"),
+            BotCommand("inbox",   "📬 View your private messages"),
         ]
         await app.bot.set_my_commands(commands)
 
