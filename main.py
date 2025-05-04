@@ -77,6 +77,8 @@ def main():
             BotCommand("announce",    "📣[Admin] Broadcast an announcement"),
             BotCommand("chaos",       "🌪️ Preview Random Chaos Storms"),
             BotCommand("chaos_test",  "🧪 [Admin] Test Chaos Storm (admin only)"),
+            BotCommand("whisper",     "🤫 Send a private message"),
+            BotCommand("inbox",       "📬 View your private messages"),
             BotCommand("help",        "🆘 Show help & all commands"),
         ]
         await app.bot.set_my_commands(commands)
