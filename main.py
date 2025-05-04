@@ -50,8 +50,8 @@ def main():
     app.add_handler(queue_handler)
     app.add_handler(train_handler)
     app.add_handler(attack_handler)
-    app.add_handler(reports_handler)     # /reports command
-    app.add_handler(reports_callback)    # “📜 View Pending” button
+    app.add_handler(reports_handler)     # /reports for pending
+    app.add_handler(reports_callback)    # 📜 View Pending button
     app.add_handler(leaderboard_handler)
     app.add_handler(help_handler)
     app.add_handler(army_handler)
@@ -63,8 +63,8 @@ def main():
     app.add_handler(inbox_handler)
 
     # Chaos commands
-    app.add_handler(chaos_handler)       # /chaos preview
-    app.add_handler(chaos_test_handler)  # /chaos_test (admin)
+    app.add_handler(chaos_handler)
+    app.add_handler(chaos_test_handler)
 
     # 4) Slash commands
     async def set_bot_commands(app):
@@ -79,7 +79,7 @@ def main():
             BotCommand("achievements", "🏅 View your achievements"),
             BotCommand("announce",     "📣 [Admin] Broadcast an announcement"),
             BotCommand("chaos",        "🌪️ Preview Random Chaos Storms"),
-            BotCommand("chaos_test",   "🧪 [Admin] Test Chaos Storm (admin only)"),
+            BotCommand("chaos_test",   "🧪 [Admin] Test Chaos Storm"),
             BotCommand("reports",      "🗒️ View pending operations"),
             BotCommand("whisper",      "🤫 Send a private message"),
             BotCommand("inbox",        "📬 View your private messages"),
@@ -94,7 +94,7 @@ def main():
         await update.message.reply_text("❓ Unknown command. Use /help.")
     app.add_handler(MessageHandler(filters.COMMAND, unknown))
 
-    # 6) Schedule pre-notice checker every minute
+    # 6) Schedule chaos pre-notice checker
     app.job_queue.run_repeating(
         chaos_pre_notice_job,
         interval=60,
@@ -102,10 +102,10 @@ def main():
         name="chaos_pre_notice_checker"
     )
 
-    # 7) Schedule weekly Chaos Storm (Mon @ 09:00 UTC)
+    # 7) Schedule weekly Chaos Storm
     app.job_queue.run_daily(
         chaos_event_job,
-        days=(0,),  # Monday
+        days=(0,),
         time=dtime(hour=9, minute=0),
         name="weekly_chaos_storm"
     )
