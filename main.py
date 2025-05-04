@@ -1,6 +1,3 @@
-```python
-# main.py
-
 from config import BOT_TOKEN
 from sheets_service import init as sheets_init
 
@@ -30,7 +27,6 @@ from handlers.inbox import handler as inbox_handler
 from handlers.chaos import handler as chaos_handler
 from handlers.chaos_event import chaos_event_job
 from handlers.chaos_test import handler as chaos_test_handler
-
 
 def main():
     # 1) Auto-create Sheets & headers
@@ -103,4 +99,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-```
