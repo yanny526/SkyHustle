@@ -14,42 +14,65 @@ from modules.challenge_manager import load_challenges, update_player_progress
 async def scout_report_job(context: ContextTypes.DEFAULT_TYPE):
     """Job: send scouting report after 5 minutes."""
     data = context.job.data
-    uid, defender_id, defender_name = data["uid"], data["defender_id"], data["defender_name"]
+    uid           = data["uid"]
+    defender_id   = data["defender_id"]
+    defender_name = data["defender_name"]
 
-    army_rows = get_rows("Army")
-    lines = [f"🔎 *Scouting Report on {defender_name}*"]
+    army_rows   = get_rows("Army")
+    lines       = [f"🔎 *Scouting Report: {defender_name}*"]
+    total_power = 0
+
     for row in army_rows[1:]:
         if row[0] != defender_id:
             continue
-        unit_key, count = row[1], int(row[2])
-        if count > 0:
-            emoji = UNITS[unit_key][1]
-            lines.append(f"• {emoji} {unit_key}: {count}")
+        unit_key = row[1]
+        count    = int(row[2])
+        if count <= 0:
+            continue
 
-    text = "\n".join(lines) if len(lines) > 1 else f"🔎 No troops detected at *{defender_name}*."
-    await context.bot.send_message(chat_id=int(uid), text=text, parse_mode=ParseMode.MARKDOWN)
+        display, emoji, tier, unit_power, _ = UNITS[unit_key]
+        power = unit_power * count
+        total_power += power
+
+        lines.append(
+            f"• {emoji} *{display}* (Tier {tier}) — {count} units ({power}⚔️)"
+        )
+
+    if total_power > 0:
+        lines.append("")  # spacer
+        lines.append(f"⚔️ *Total Power:* {total_power}⚔️")
+        text = "\n".join(lines)
+    else:
+        text = f"🔎 No troops detected at *{defender_name}*."
+
+    await context.bot.send_message(
+        chat_id=int(uid),
+        text=text,
+        parse_mode=ParseMode.MARKDOWN,
+    )
 
 async def combat_resolution_job(context: ContextTypes.DEFAULT_TYPE):
     """Job: resolve the main attack after 30 minutes."""
     data = context.job.data
-    uid = data["uid"]
-    defender_id = data["defender_id"]
-    attacker_name = data["attacker_name"]
-    defender_name = data["defender_name"]
-    atk_i = data["atk_i"]
-    def_i = data["def_i"]
-    timestamp = data["timestamp"]
+    uid            = data["uid"]
+    defender_id    = data["defender_id"]
+    attacker_name  = data["attacker_name"]
+    defender_name  = data["defender_name"]
+    atk_i          = data["atk_i"]
+    def_i          = data["def_i"]
+    timestamp      = data["timestamp"]
 
     def power(urow):
         total = 0
         for r in get_rows("Army")[1:]:
             if r[0] != urow[0]:
                 continue
-            _, unit_key, cnt = r
-            total += int(cnt) * UNITS[unit_key][3]
+            count     = int(r[2])
+            unit_power = UNITS[r[1]][3]
+            total    += count * unit_power
         return total
 
-    players = get_rows("Players")
+    players  = get_rows("Players")
     attacker = players[atk_i]
     defender = players[def_i]
 
@@ -82,8 +105,11 @@ async def combat_resolution_job(context: ContextTypes.DEFAULT_TYPE):
     append_row("CombatLog", [uid, defender_id, timestamp, result, str(spoils)])
 
     # Notify attacker
-    await context.bot.send_message(chat_id=int(uid), text=msg, parse_mode=ParseMode.MARKDOWN)
-
+    await context.bot.send_message(
+        chat_id=int(uid),
+        text=msg,
+        parse_mode=ParseMode.MARKDOWN
+    )
 
 @game_command
 async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -92,9 +118,9 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
     Send scouts and/or launch main attack.
     Scouts cost 1⚡ each; main attack costs 5⚡.
     """
-    user = update.effective_user
-    uid = str(user.id)
-    args = context.args.copy()
+    user  = update.effective_user
+    uid   = str(user.id)
+    args  = context.args.copy()
 
     if not args:
         return await update.message.reply_text(
@@ -112,8 +138,8 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
             scout_count = int(args[idx + 1])
         except:
             scout_count = 1
-        # clean up args
-        args.pop(idx) 
+        # remove flag and its value
+        args.pop(idx)
         if idx < len(args):
             args.pop(idx)
 
@@ -128,23 +154,32 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
             defender, def_i = row.copy(), i
 
     if not attacker:
-        return await update.message.reply_text("❗ Please run /start first.", parse_mode=ParseMode.MARKDOWN)
+        return await update.message.reply_text(
+            "❗ Please run /start first.", parse_mode=ParseMode.MARKDOWN
+        )
     if not defender:
-        return await update.message.reply_text(f"❌ Commander *{target}* not found.", parse_mode=ParseMode.MARKDOWN)
+        return await update.message.reply_text(
+            f"❌ Commander *{target}* not found.", parse_mode=ParseMode.MARKDOWN
+        )
     if defender[0] == uid:
-        return await update.message.reply_text("❌ You cannot attack yourself!", parse_mode=ParseMode.MARKDOWN)
+        return await update.message.reply_text(
+            "❌ You cannot attack yourself!", parse_mode=ParseMode.MARKDOWN
+        )
 
-    # Total energy cost
-    energy = int(attacker[5])
+    # Energy deduction
+    energy     = int(attacker[5])
     total_cost = 5 + scout_count
     if energy < total_cost:
-        return await update.message.reply_text(f"❌ Not enough energy. Need {total_cost}⚡.", parse_mode=ParseMode.MARKDOWN)
+        return await update.message.reply_text(
+            f"❌ Not enough energy. Need {total_cost}⚡.", parse_mode=ParseMode.MARKDOWN
+        )
     attacker[5] = str(energy - total_cost)
     update_row("Players", atk_i, attacker)
 
-    # Timestamp & schedule jobs
+    # Timestamp for job names
     timestamp = str(int(time.time()))
 
+    # Schedule scout job
     if scout_count > 0:
         context.job_queue.run_once(
             scout_report_job,
@@ -153,6 +188,7 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
             data={"uid": uid, "defender_id": defender[0], "defender_name": defender[1]}
         )
 
+    # Schedule combat resolution
     context.job_queue.run_once(
         combat_resolution_job,
         when=timedelta(minutes=30),
@@ -184,6 +220,10 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
     kb = InlineKeyboardMarkup.from_button(
         InlineKeyboardButton("📜 View Pending", callback_data="reports")
     )
-    await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
+    await update.message.reply_text(
+        "\n".join(lines),
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=kb
+    )
 
 handler = CommandHandler("attack", attack)
