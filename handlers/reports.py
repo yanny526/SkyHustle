@@ -7,37 +7,32 @@ from telegram.ext import CommandHandler, CallbackQueryHandler, ContextTypes
 
 async def reports(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    /reports – list your pending scouts & attacks
-    Also handles the “📜 View Pending” button.
+    /reports – list your pending scouts & attacks (or show a friendly no-pending message).
     """
-    user_id = str(update.effective_user.id)
-    now = datetime.utcnow()
+    chat_id = update.effective_chat.id
+    pending = context.chat_data.get("pending", [])
+    now     = datetime.utcnow()
 
-    jobs = context.application.job_queue.get_jobs()
     lines = []
-    for job in jobs:
-        data = job.data or {}
-        if data.get("uid") != user_id:
+    for job_name in pending:
+        jobs = context.job_queue.get_jobs_by_name(job_name)
+        if not jobs:
             continue
-
-        # Compute time until execution
-        run_at = job.next_run_time  # datetime in UTC
-        delta = run_at - now
+        job = jobs[0]
+        delta = job.next_run_time - now
         mins, secs = divmod(int(delta.total_seconds()), 60)
-        when = f"in {mins}m {secs}s"
 
-        name = job.name
-        if name.startswith("scout_"):
-            lines.append(f"🔎 Scouts → *{data['defender_name']}* {when}")
-        elif name.startswith("attack_"):
-            lines.append(f"🏹 Attack → *{data['defender_name']}* {when}")
+        target = job_name.split("_")[2]  # format: scout_uid_target_ts
+        if job_name.startswith("scout_"):
+            lines.append(f"🔎 Scouts → *{target}* in {mins}m {secs}s")
+        elif job_name.startswith("attack_"):
+            lines.append(f"🏹 Attack → *{target}* in {mins}m {secs}s")
 
     if not lines:
         text = "🗒️ *No pending operations.*"
     else:
         text = "🗒️ *Your Pending Operations:*\n" + "\n".join(lines)
 
-    # Offer a refresh button
     kb = InlineKeyboardMarkup.from_button(
         InlineKeyboardButton("🔄 Refresh", callback_data="reports")
     )
@@ -48,9 +43,10 @@ async def reports(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.callback_query.answer()
         await update.callback_query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
 
+
 async def reports_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return await reports(update, context)
 
-# Export handlers
-handler        = CommandHandler("reports", reports)
+
+handler          = CommandHandler("reports", reports)
 callback_handler = CallbackQueryHandler(reports_button, pattern="^reports$")
