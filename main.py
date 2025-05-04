@@ -4,12 +4,7 @@ from config import BOT_TOKEN
 from sheets_service import init as sheets_init
 
 from telegram import BotCommand
-from telegram.ext import (
-    Application,
-    CommandHandler,
-    MessageHandler,
-    filters,
-)
+from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
 # Import all handler modules
 from handlers.start import handler as start_handler
@@ -23,16 +18,10 @@ from handlers.attack import handler as attack_handler
 from handlers.leaderboard import handler as leaderboard_handler
 from handlers.help import handler as help_handler
 from handlers.army import handler as army_handler
-from handlers.callbacks import handler as menu_callback_handler  # Inline button handler
+from handlers.callbacks import handler as menu_callback_handler
 from handlers.achievements import handler as achievements_handler
-from handlers.callbacks import handler as menu_callback_handler  # inline menu
 from handlers.announce import handler as announce_handler
-
-# …
-app.add_handler(announce_handler)
-
-# Import challenge handlers
-from handlers.challenges import daily, weekly  # Daily & Weekly Challenges
+from handlers.challenges import daily, weekly
 
 
 def main():
@@ -55,39 +44,36 @@ def main():
     app.add_handler(leaderboard_handler)
     app.add_handler(help_handler)
     app.add_handler(army_handler)
-    app.add_handler(menu_callback_handler)
     app.add_handler(achievements_handler)
-    app.add_handler(menu_callback_handler)  # inline buttons
+    app.add_handler(menu_callback_handler)
     app.add_handler(announce_handler)
-    
-    # Register Daily & Weekly challenge commands
     app.add_handler(CommandHandler('daily', daily))
     app.add_handler(CommandHandler('weekly', weekly))
 
     # 4) Set visible slash commands in Telegram
     async def set_bot_commands(app):
         commands = [
-            BotCommand("menu", "📋 Game command menu"),
+            BotCommand("menu", "📋 Show command menu"),
             BotCommand("status", "📊 View your base status"),
             BotCommand("army", "⚔️ View your army units"),
             BotCommand("queue", "⏳ Pending upgrades"),
             BotCommand("leaderboard", "🏆 Top commanders"),
             BotCommand("daily", "📅 View daily challenges"),
             BotCommand("weekly", "📆 View weekly challenges"),
-            BotCommand("help", "🆘 Help & all commands"),
             BotCommand("achievements", "🏅 View your achievements"),
             BotCommand("announce", "📣 Broadcast an announcement"),
+            BotCommand("help", "🆘 Show help and all commands"),
         ]
         await app.bot.set_my_commands(commands)
 
-    app.post_init = set_bot_commands  # ensures commands appear under message bar
+    app.post_init = set_bot_commands
 
     # 5) Fallback for unknown commands
     async def unknown(update, context):
         await update.message.reply_text("❓ Unknown command. Use /help.")
     app.add_handler(MessageHandler(filters.COMMAND, unknown))
 
-    # 6) Start the bot safely (Render-compatible)
+    # 6) Start polling
     app.run_polling()
 
 
