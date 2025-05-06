@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 import json
+
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.error import BadRequest
@@ -9,58 +10,65 @@ from telegram.ext import CommandHandler, CallbackQueryHandler, ContextTypes
 
 from sheets_service import get_rows
 from modules.unit_manager import UNITS
+from utils.format_utils import section_header, code as md_code
 
 PEND_SHEET = "PendingActions"
 
 async def reports(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    /reports – list your pending scouts & attacks (or show a friendly no‑pending message).
+    /reports – list your pending scouts & attacks.
     """
     chat_id = str(update.effective_chat.id)
     now     = datetime.now(timezone.utc)
 
-    lines = []
+    # Collect pending operations
+    ops = []
     for row in get_rows(PEND_SHEET)[1:]:
-        # Unpack all 10 columns
-        job_name, uid, did, dname, comp_json, scouts, run_at, typ, status, code = (
-            row + [""] * 10  # pad in case columns missing
+        # Ensure we have 10 columns
+        job_name, uid, defender_id, defender_name, comp_json, scouts, run_at, typ, status, code_str = (
+            row + [""] * 10
         )[:10]
-
-        if status != "pending" or uid != chat_id:
+        if uid != chat_id or status != "pending":
             continue
 
-        # parse ETA
+        # Parse ETA
         try:
             run_dt = datetime.fromisoformat(run_at)
-        except Exception:
+        except:
             continue
-        delta  = run_dt - now
-        secs   = int(delta.total_seconds())
-        if secs < 0:
+        delta = run_dt - now
+        secs  = int(delta.total_seconds())
+        if secs <= 0:
             continue
-        mins, secs = divmod(secs, 60)
+        m, s = divmod(secs, 60)
 
-        # build line with code
         if typ == "scout":
-            lines.append(
-                f"🔎 [{code}] Scout on *{dname}* arriving in {mins}m{secs:02d}s (×{scouts})"
-            )
+            ops.append(f"🔎 Scout on *{defender_name}* arriving in {m}m{s:02d}s  {md_code(code_str)}  (×{scouts})")
         else:
             comp = json.loads(comp_json) if comp_json else {}
-            comp_str = " ".join(f"{UNITS[k][1]}×{v}" for k,v in comp.items()) or "All troops"
-            lines.append(
-                f"🏹 [{code}] Attack on *{dname}* [{comp_str}] arriving in {mins}m{secs:02d}s"
-            )
+            comp_str = " ".join(f"{UNITS[k][1]}×{v}" for k, v in comp.items()) or "All troops"
+            ops.append(f"🏹 Attack on *{defender_name}* ({comp_str}) arriving in {m}m{s:02d}s  {md_code(code_str)}")
 
-    if not lines:
-        text = "🗒️ *No pending operations.*"
+    # Build response
+    if not ops:
+        text = "\n".join([
+            section_header("🗒️ Pending Operations"),
+            "",
+            "✅ You have no pending operations.",
+            "",
+            "Send an attack with `/attack <Commander> ...`"
+        ])
     else:
-        text = (
-            "🗒️ *Pending Operations:*\n"
-            + "\n".join(lines)
-            + "\n\n❗ To cancel: `/attack -c <CODE>`"
-        )
+        lines = [section_header("🗒️ Pending Operations"), ""]
+        for line in ops:
+            lines.append(f"• {line}")
+        lines.extend([
+            "",
+            f"❗ Cancel with `/attack -c <code>`"
+        ])
+        text = "\n".join(lines)
 
+    # Inline refresh button
     kb = InlineKeyboardMarkup.from_button(
         InlineKeyboardButton("🔄 Refresh", callback_data="reports")
     )
@@ -74,7 +82,6 @@ async def reports(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 text, parse_mode=ParseMode.MARKDOWN, reply_markup=kb
             )
         except BadRequest as e:
-            # ignore if nothing changed
             if "Message is not modified" not in str(e):
                 raise
 
