@@ -2,7 +2,7 @@
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
-from telegram.ext import CommandHandler, ContextTypes
+from telegram.ext import CommandHandler, CallbackQueryHandler, ContextTypes
 
 from utils.decorators import game_command
 from utils.format_utils import section_header, code
@@ -92,12 +92,9 @@ async def whisper_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # handle inline buttons: "inbox" or "whisper_help"
     data = update.callback_query.data
     if data == "inbox":
-        return await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text="",  # trigger /inbox
-            reply_markup=None,
-            parse_mode=ParseMode.MARKDOWN
-        ).then(lambda _: context.bot.invoke_command('/inbox'))
+        # call the /inbox handler directly
+        from handlers.inbox import inbox
+        return await inbox(update, context)
     if data == "whisper_help":
         return await whisper(update, context)
 
