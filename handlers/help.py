@@ -42,12 +42,22 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Use `/help` anytime to revisit this menu!"
     ])
 
+    # Inline button now links to /status
     kb = InlineKeyboardMarkup.from_button(
-        InlineKeyboardButton("🏠 Main Menu", callback_data="help")
+        InlineKeyboardButton("📊 View Base Status", callback_data="status")
     )
+
     if update.message:
-        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
+        await update.message.reply_text(
+            text,
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=kb
+        )
     else:
-        await update.callback_query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
+        await update.callback_query.edit_message_text(
+            text,
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=kb
+        )
 
 handler = CommandHandler('help', help_command)
