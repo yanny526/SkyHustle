@@ -1,64 +1,78 @@
+# handlers/challenges.py
+
 from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import CommandHandler, ContextTypes
 from modules.challenge_manager import (
     load_challenges,
     award_challenges,
-    update_player_progress,
     get_player_challenge,
 )
+from utils.format_utils import section_header, format_bar
 
 async def daily(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /daily – claim completed daily challenges & list progress
+    """
     uid = str(update.effective_user.id)
 
-    # 1) Award any newly completed dailies and send messages
+    # 1) Announce completed dailies
     awards = award_challenges(uid, 'daily')
     for ch in awards:
-        await update.message.reply_text(
-            f"🎉 *Daily Complete!* {ch.description}\n"
-            f"Rewards: +{ch.reward_credits}💳 +{ch.reward_minerals}⛏️ +{ch.reward_energy}⚡",
-            parse_mode=ParseMode.MARKDOWN
+        header = section_header("🎉 Daily Challenge Complete!", pad_char="=", pad_count=3)
+        text = (
+            f"{header}\n\n"
+            f"*{ch.description}*\n"
+            f"Rewards: +{ch.reward_credits}💳 +{ch.reward_minerals}⛏️ +{ch.reward_energy}⚡"
         )
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
     # 2) Show current progress
     challenges = load_challenges('daily')
-    lines = ['🗓️ *Daily Challenges*', '']
+    lines = [section_header("🗓️ Daily Challenges", pad_char="=", pad_count=3), ""]
     for ch in challenges:
         idx, prow = get_player_challenge(uid, ch.id)
         prog = int(prow[4] or 0) if prow else 0
         done = prow and prow[3]
-        status = '✅' if done else f'{prog}/{ch.value}'
+        bar = format_bar(ch.value, ch.value) if done else format_bar(prog, ch.value)
+        prefix = "✅ " if done else ""
         lines.append(
-            f'{status} {ch.description} '
-            f'(Reward: +{ch.reward_credits}💳 +{ch.reward_minerals}⛏️ +{ch.reward_energy}⚡)'
+            f"{bar} {prefix}{ch.description}\n"
+            f"   (Reward: +{ch.reward_credits}💳 +{ch.reward_minerals}⛏️ +{ch.reward_energy}⚡)"
         )
-    await update.message.reply_text('\n'.join(lines), parse_mode=ParseMode.MARKDOWN)
+    await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
 
 async def weekly(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /weekly – claim completed weekly challenges & list progress
+    """
     uid = str(update.effective_user.id)
 
-    # 1) Award any newly completed weeklies and send messages
+    # 1) Announce completed weeklies
     awards = award_challenges(uid, 'weekly')
     for ch in awards:
-        await update.message.reply_text(
-            f"🎉 *Weekly Complete!* {ch.description}\n"
-            f"Rewards: +{ch.reward_credits}💳 +{ch.reward_minerals}⛏️ +{ch.reward_energy}⚡",
-            parse_mode=ParseMode.MARKDOWN
+        header = section_header("🎉 Weekly Challenge Complete!", pad_char="=", pad_count=3)
+        text = (
+            f"{header}\n\n"
+            f"*{ch.description}*\n"
+            f"Rewards: +{ch.reward_credits}💳 +{ch.reward_minerals}⛏️ +{ch.reward_energy}⚡"
         )
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
     # 2) Show current progress
     challenges = load_challenges('weekly')
-    lines = ['📅 *Weekly Challenges*', '']
+    lines = [section_header("📅 Weekly Challenges", pad_char="=", pad_count=3), ""]
     for ch in challenges:
         idx, prow = get_player_challenge(uid, ch.id)
         prog = int(prow[4] or 0) if prow else 0
         done = prow and prow[3]
-        status = '✅' if done else f'{prog}/{ch.value}'
+        bar = format_bar(ch.value, ch.value) if done else format_bar(prog, ch.value)
+        prefix = "✅ " if done else ""
         lines.append(
-            f'{status} {ch.description} '
-            f'(Reward: +{ch.reward_credits}💳 +{ch.reward_minerals}⛏️ +{ch.reward_energy}⚡)'
+            f"{bar} {prefix}{ch.description}\n"
+            f"   (Reward: +{ch.reward_credits}💳 +{ch.reward_minerals}⛏️ +{ch.reward_energy}⚡)"
         )
-    await update.message.reply_text('\n'.join(lines), parse_mode=ParseMode.MARKDOWN)
+    await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
 
-handler_daily = CommandHandler('daily', daily)
+handler_daily  = CommandHandler('daily', daily)
 handler_weekly = CommandHandler('weekly', weekly)
