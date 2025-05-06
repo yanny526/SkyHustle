@@ -10,7 +10,6 @@ from datetime import time as dtime
 # Handlers
 from handlers.start import handler as start_handler
 from handlers.setname import handler as setname_handler
-from handlers.menu import handler as menu_handler
 from handlers.status import handler as status_handler, callback_handler as status_callback
 from handlers.build import handler as build_handler
 from handlers.queue import handler as queue_handler
@@ -43,7 +42,6 @@ def main():
     # 3) Register handlers
     app.add_handler(start_handler)
     app.add_handler(setname_handler)
-    app.add_handler(menu_handler)
     app.add_handler(status_handler)
     app.add_handler(status_callback)
     app.add_handler(build_handler)
@@ -69,7 +67,6 @@ def main():
     # 4) Slash commands
     async def set_bot_commands(app):
         commands = [
-            BotCommand("menu",         "📋 Show command menu"),
             BotCommand("status",       "📊 View your base status"),
             BotCommand("army",         "⚔️ View your army units"),
             BotCommand("queue",        "⏳ View pending upgrades"),
