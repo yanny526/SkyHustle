@@ -1,3 +1,5 @@
+# handlers/status.py
+
 from datetime import datetime
 import html
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -133,21 +135,23 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     report = "\n".join(lines)
 
-    # 👉 New header
-    header = f"<b>💳 Commander {commander}’s Dashboard</b>\n" \
-             f"<pre>{html.escape(report)}</pre>"
+    # New, more immersive header
+    text = (
+        f"<b>⚔️🏰 WAR ROOM BRIEFING: Commander {commander} 🏰⚔️</b>\n"
+        f"<pre>{html.escape(report)}</pre>"
+    )
 
     kb = InlineKeyboardMarkup.from_button(
         InlineKeyboardButton("🔄 Refresh", callback_data="status")
     )
 
     if update.message:
-        await update.message.reply_text(header, parse_mode=ParseMode.HTML, reply_markup=kb)
+        await update.message.reply_text(text, parse_mode=ParseMode.HTML, reply_markup=kb)
     else:
         await update.callback_query.answer()
         try:
             await update.callback_query.edit_message_text(
-                header, parse_mode=ParseMode.HTML, reply_markup=kb
+                text, parse_mode=ParseMode.HTML, reply_markup=kb
             )
         except BadRequest as e:
             if "Message is not modified" not in str(e):
@@ -157,5 +161,6 @@ async def status_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.callback_query.data == "status":
         return await status(update, context)
 
+# Export handlers
 handler          = CommandHandler("status", status)
 callback_handler = CallbackQueryHandler(status_button, pattern="^status$")
