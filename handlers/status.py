@@ -2,6 +2,7 @@
 
 from datetime import datetime
 import html
+
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.error import BadRequest
@@ -23,6 +24,10 @@ from utils.format_utils import (
     section_header,
 )
 
+# import other handlers to invoke via callbacks
+from handlers.build import build
+from handlers.queue import queue
+
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_user.id)
     now = datetime.utcnow()
@@ -31,7 +36,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     players = get_rows("Players")
     for row in players[1:]:
         if row[0] == uid:
-            commander  = html.escape(row[1])
+            commander  = html.escape(row[1] or "Unknown")
             credits    = int(row[3])
             minerals   = int(row[4])
             energy     = int(row[5])
@@ -94,27 +99,9 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lines.append("")
 
     lines.append(section_header("Army Strength"))
-    total_power = (garrison_power + deployed_power) or 1
+    total_power = garrison_power + deployed_power or 1
     lines.append(f"🛡️ Garrison : {format_bar(garrison_power, total_power)} ({garrison_power})")
     lines.append(f"🚚 Deployed : {format_bar(deployed_power, total_power)} ({deployed_power})")
-    lines.append("")
-
-    lines.append(section_header("Garrison Composition"))
-    if garrison:
-        for key, cnt in garrison.items():
-            disp, emoji, *_ = UNITS[key]
-            lines.append(f"{emoji} {disp}: {cnt}")
-    else:
-        lines.append("None")
-    lines.append("")
-
-    lines.append(section_header("Deployed Forces"))
-    if deployed:
-        for key, cnt in deployed.items():
-            disp, emoji, *_ = UNITS[key]
-            lines.append(f"{emoji} {disp}: {cnt}")
-    else:
-        lines.append("None")
     lines.append("")
 
     lines.append(section_header("Next Upgrade Paths"))
@@ -135,15 +122,18 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     report = "\n".join(lines)
 
-    # New, more immersive header
+    # New, immersive header
     text = (
         f"<b>⚔️🏰 WAR ROOM BRIEFING: Commander {commander} 🏰⚔️</b>\n"
         f"<pre>{html.escape(report)}</pre>"
     )
 
-    kb = InlineKeyboardMarkup.from_button(
-        InlineKeyboardButton("🔄 Refresh", callback_data="status")
-    )
+    # ─── Inline Quick‑Action Buttons ─────────────────────────────────────────
+    kb = InlineKeyboardMarkup([[
+        InlineKeyboardButton("🔄 Refresh", callback_data="status"),
+        InlineKeyboardButton("🏗️ Build",   callback_data="build"),
+        InlineKeyboardButton("⏳ Queue",   callback_data="queue"),
+    ]])
 
     if update.message:
         await update.message.reply_text(text, parse_mode=ParseMode.HTML, reply_markup=kb)
@@ -158,9 +148,17 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 raise
 
 async def status_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.callback_query.data == "status":
+    data = update.callback_query.data
+    if data == "status":
         return await status(update, context)
+    elif data == "build":
+        # show build help
+        context.args = ["help"]
+        return await build(update, context)
+    elif data == "queue":
+        # show queue
+        return await queue(update, context)
 
 # Export handlers
 handler          = CommandHandler("status", status)
-callback_handler = CallbackQueryHandler(status_button, pattern="^status$")
+callback_handler = CallbackQueryHandler(status_button, pattern="^(status|build|queue)$")
