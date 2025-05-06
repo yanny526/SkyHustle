@@ -58,3 +58,9 @@ def get_build_costs(building: str, level: int) -> tuple[int, int, int]:
     elif building == 'Workshop':
         return (200, 100 * level, 15 * level)
     return (0, 0, 0)
+
+def section_header(title: str, pad_char: str = '-', pad_count: int = 5) -> str:
+    """
+    Render a section header, e.g. '----- Title -----'
+    """
+    return f"{pad_char * pad_count} {title} {pad_char * pad_count}"
