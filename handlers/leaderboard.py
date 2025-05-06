@@ -1,105 +1,136 @@
 # handlers/leaderboard.py
 
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
-from telegram.ext import CommandHandler, ContextTypes
-from sheets_service import get_rows, update_row
+from telegram.ext import CommandHandler, CallbackQueryHandler, ContextTypes
+
 from utils.decorators import game_command
+from utils.format_utils import section_header
+from sheets_service import get_rows, update_row
 from modules.unit_manager import UNITS  # dynamic unit power lookup
 
 @game_command
 async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    /leaderboard - show top commanders by power and reward Top 3 placement.
+    /leaderboard – show top commanders by power (and auto-reward Top 3).
     """
-    # Load players sheet (including header)
+    args = context.args or []
+
+    # ─── Help Screen ─────────────────────────────────────────────────────────
+    if args and args[0].lower() == "help":
+        lines = [
+            section_header("🏆 Leaderboard Help 🏆", pad_char="=", pad_count=3),
+            "",
+            "View the ranking of top commanders by combined base & army power.",
+            "",
+            section_header("📜 Usage", pad_char="-", pad_count=3),
+            "`/leaderboard`",
+            "→ Show the top 10 commanders.",
+            "",
+            "🏅 Top 3 Placement",
+            "Rewards are automatically granted when you enter the Top 3 for the first time.",
+            "",
+            "Use `/leaderboard` anytime to refresh this list."
+        ]
+        text = "\n".join(lines)
+        kb = InlineKeyboardMarkup.from_button(
+            InlineKeyboardButton("🔄 Back to Leaderboard", callback_data="leaderboard")
+        )
+        if update.message:
+            await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
+        else:
+            await update.callback_query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
+        return
+
+    # ─── Compute Scores ───────────────────────────────────────────────────────
     players_sheet = get_rows('Players')
     header = players_sheet[0]
     data = players_sheet[1:]
 
-    # Sum building power
-    buildings = get_rows('Buildings')[1:]
+    # Building power
+    build_rows = get_rows('Buildings')[1:]
     build_power = {}
-    for row in buildings:
+    for uid, _, lvl, *_ in build_rows:
         try:
-            uid, _, lvl_str, *_ = row
-            build_power[uid] = build_power.get(uid, 0) + int(lvl_str)
+            build_power[uid] = build_power.get(uid, 0) + int(lvl)
         except:
-            continue
+            pass
 
-    # Sum army power
-    army = get_rows('Army')[1:]
+    # Army power
+    army_rows = get_rows('Army')[1:]
     army_power = {}
-    for row in army:
+    for uid, unit_key, cnt_str in army_rows:
         try:
-            uid, unit, count_str = row
-            _, _, _, power, _ = UNITS[unit]
-            army_power[uid] = army_power.get(uid, 0) + int(count_str) * power
+            power = UNITS[unit_key][3]
+            army_power[uid] = army_power.get(uid, 0) + int(cnt_str) * power
         except:
-            continue
+            pass
 
-    # Compile scores with UID
-    scores = []  # list of (uid, name, total_power)
-    for row in data:
-        try:
-            uid = row[0]
-            name = row[1] or "Unknown"
-            total = build_power.get(uid, 0) + army_power.get(uid, 0)
-            scores.append((uid, name, total))
-        except:
-            continue
-    
-    # Sort descending
+    # Combine and sort
+    scores = []
+    for uid, name, *rest in data:
+        total = build_power.get(uid, 0) + army_power.get(uid, 0)
+        scores.append((uid, name or "Unknown", total))
     scores.sort(key=lambda x: x[2], reverse=True)
 
-    # Reward Top 3 who haven't received badge
+    # ─── Reward Top 3 ────────────────────────────────────────────────────────
     badge_idx = None
     for i, col in enumerate(header):
         if col.lower() == 'badge':
             badge_idx = i
             break
-    # default reward values
-    credit_reward = 2000
-    mineral_reward = 1000
-    badge_text = '🏅 Top 3 Commander'
+    credit_reward, mineral_reward = 2000, 1000
+    badge_text = "🏅 Top 3 Commander"
 
-    # Iterate Top 3
-    for position, (uid, name, _) in enumerate(scores[:3], start=1):
-        # find row index in sheet
+    for pos, (uid, name, power) in enumerate(scores[:3], start=1):
         for ridx, prow in enumerate(players_sheet[1:], start=1):
-            if prow[0] == uid:
-                # ensure prow list matches header length
-                while len(prow) < len(header): prow.append('')
-                # check badge cell
-                if badge_idx is not None and prow[badge_idx] != badge_text:
-                    # grant rewards
-                    prow[3] = str(int(prow[3]) + credit_reward)
-                    prow[4] = str(int(prow[4]) + mineral_reward)
-                    prow[badge_idx] = badge_text
-                    update_row('Players', ridx, prow)
-                    # send congrats
-                    reward_msg = (
-                        f"🎉 Congratulations, Commander *{name}*!\n"
-                        f"You’ve achieved *Top {position}* on the leaderboard!\n"
-                        f"As a reward: +{credit_reward}💳 Credits and +{mineral_reward}⛏️ Minerals!"
+            if prow[0] != uid:
+                continue
+            # ensure full row
+            while len(prow) < len(header):
+                prow.append("")
+            if badge_idx is not None and prow[badge_idx] != badge_text:
+                prow[3] = str(int(prow[3]) + credit_reward)
+                prow[4] = str(int(prow[4]) + mineral_reward)
+                prow[badge_idx] = badge_text
+                update_row('Players', ridx, prow)
+                congrats = (
+                    f"🎉 Commander *{name}* reached *Top {pos}*! 🎉\n"
+                    f"Rewards: +{credit_reward}💳 +{mineral_reward}⛏️"
+                )
+                if update.message:
+                    await update.message.reply_text(congrats, parse_mode=ParseMode.MARKDOWN)
+                else:
+                    await update.callback_query.bot.send_message(
+                        update.effective_chat.id, congrats, parse_mode=ParseMode.MARKDOWN
                     )
-                    # DM or chat message
-                    if update.message:
-                        await update.message.reply_text(reward_msg, parse_mode=ParseMode.MARKDOWN)
-                    else:
-                        await context.bot.send_message(update.effective_chat.id, reward_msg, parse_mode=ParseMode.MARKDOWN)
-                break
+            break
 
-    # Build leaderboard text
-    lines = ["🏆 *Leaderboard* 🏆\n"]
+    # ─── Build Leaderboard UI ────────────────────────────────────────────────
+    lines = [section_header("🏆 Leaderboard", pad_char="=", pad_count=3), ""]
+    medals = {1: "🥇", 2: "🥈", 3: "🥉"}
     for idx, (_, name, power) in enumerate(scores[:10], start=1):
-        lines.append(f"{idx}. *{name}* — {power} Power")
+        prefix = medals.get(idx, f"{idx}.")
+        lines.append(f"{prefix} *{name}* — {power} Power")
+    lines.append("")
+    lines.append("Type `/leaderboard help` for usage info.")
+
     text = "\n".join(lines)
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔄 Refresh", callback_data="leaderboard")],
+        [InlineKeyboardButton("❓ Help", callback_data="leaderboard_help")],
+    ])
 
-    # Respond appropriately
     if update.message:
-        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
     else:
-        await update.callback_query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN)
+        await update.callback_query.answer()
+        await update.callback_query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
 
-handler = CommandHandler('leaderboard', leaderboard)
+async def leaderboard_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    data = update.callback_query.data
+    if data in ("leaderboard", "leaderboard_help"):
+        return await leaderboard(update, context)
+
+handler          = CommandHandler('leaderboard', leaderboard)
+callback_handler = CallbackQueryHandler(leaderboard_button, pattern="^leaderboard")
