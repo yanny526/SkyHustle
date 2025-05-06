@@ -1,3 +1,5 @@
+# handlers/status.py
+
 from datetime import datetime
 import html
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -14,7 +16,7 @@ from modules.building_manager import (
 )
 from modules.unit_manager import UNITS
 from sheets_service import get_rows
-from utils.format_utils import format_bar, get_building_emoji
+from utils.format_utils import format_bar, get_building_emoji, get_build_costs
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_user.id)
@@ -79,11 +81,11 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Infrastructure
     lines.append("----- Infrastructure Status -----")
     for b in all_bld:
-        lvl = binfo.get(b, 0)
-        hp  = health.get(b, {"current": 0, "max": 0})
+        lvl        = binfo.get(b, 0)
+        hp         = health.get(b, {"current": 0, "max": 0})
         current_hp = hp["current"]
-        max_hp = hp["max"]
-        bar = format_bar(current_hp, max_hp)
+        max_hp     = hp["max"]
+        bar        = format_bar(current_hp, max_hp)
         lines.append(f"{get_building_emoji(b)} {b}: Lvl {lvl} {bar} ({current_hp}/{max_hp})")
     lines.append("")
     # Army Strength
@@ -101,7 +103,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         lines.append("None")
     lines.append("")
-    # Deployed Composition
+    # Deployed Forces
     lines.append("----- Deployed Forces -----")
     if deployed:
         for key, cnt in deployed.items():
@@ -110,22 +112,21 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         lines.append("None")
     lines.append("")
-    # Upgrade Suggestions
+    # Next Upgrade Paths
     lines.append("----- Next Upgrade Paths -----")
     for b in all_bld:
         lvl = binfo.get(b, 0)
         nl  = lvl + 1
-        cost_credits  = nl * 100
-        cost_minerals = nl * 50
-        prod_info    = PRODUCTION_PER_LEVEL.get(b)
+        cC, cM, eC = get_build_costs(b, nl)
+        prod_info  = PRODUCTION_PER_LEVEL.get(b)
         if prod_info:
             key, per = prod_info
-            gain = per * nl - per * lvl
-            gain_str = f"+{gain} {key}/min"
+            gain      = per * nl - per * lvl
+            gain_str  = f"+{gain} {key}/min"
         else:
             gain_str = "–"
         lines.append(
-            f"{b}: {lvl}→{nl} | cost 🪙{cost_credits}, ⛏️{cost_minerals} | {gain_str}"
+            f"{get_building_emoji(b)} {b}: {lvl}→{nl} | cost 🪙{cC}, ⛏️{cM}, ⚡{eC} | {gain_str}"
         )
 
     # Wrap in HTML for monospace presentation
@@ -157,6 +158,5 @@ async def status_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.callback_query.data == "status":
         return await status(update, context)
 
-# Export handlers
-handler = CommandHandler("status", status)
+handler          = CommandHandler("status", status)
 callback_handler = CallbackQueryHandler(status_button, pattern="^status$")
