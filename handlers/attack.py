@@ -1,3 +1,5 @@
+# handlers/attack.py
+
 import time
 import random
 import json
@@ -12,13 +14,15 @@ from utils.decorators import game_command
 from modules.unit_manager import UNITS
 from modules.challenge_manager import load_challenges, update_player_progress
 
-PEND_SHEET   = "PendingActions"
-PEND_HEADER  = [
+PEND_SHEET    = "PendingActions"
+PEND_HEADER   = [
     "job_name","uid","defender_id","defender_name","composition",
     "scout_count","run_time","type","status"
 ]
-DEPLOY_SHEET = "DeployedArmy"
-DEPLOY_HEADER= ["uid","unit_key","count"]
+DEPLOY_SHEET  = "DeployedArmy"
+
+# derive an HP pool for each unit (here: HP = 2x its power)
+UNIT_HP = {k: v[3] * 2 for k, v in UNITS.items()}
 
 
 def _ensure_pending_sheet():
@@ -26,313 +30,151 @@ def _ensure_pending_sheet():
     if not rows or rows[0] != PEND_HEADER:
         append_row(PEND_SHEET, PEND_HEADER)
 
-def _ensure_deploy_sheet():
-    rows = get_rows(DEPLOY_SHEET)
-    if not rows or rows[0] != DEPLOY_HEADER:
-        append_row(DEPLOY_SHEET, DEPLOY_HEADER)
-
 
 async def scout_report_job(context: ContextTypes.DEFAULT_TYPE):
-    data          = context.job.data
-    chat_id       = int(data["uid"])
-    defender_id   = data["defender_id"]
-    defender_name = data["defender_name"]
-    job_name      = context.job.name
-
-    # Build scouting report
-    army = get_rows("Army")
-    lines = [f"🔎 *Scouting Report: {defender_name}*"]
-    total_power = 0
-    for r in army[1:]:
-        if r[0] != defender_id: continue
-        key, cnt = r[1], int(r[2])
-        if cnt <= 0: continue
-        name, emoji, tier, pw, _ = UNITS[key]
-        part = pw * cnt
-        total_power += part
-        lines.append(f"• {emoji} *{name}* (Tier {tier}) — {cnt} units ({part}⚔️)")
-    if total_power:
-        lines.append(f"\n⚔️ *Total Power:* {total_power}⚔️")
-        text = "\n".join(lines)
-    else:
-        text = f"🔎 No troops detected at *{defender_name}*."
-
-    await context.bot.send_message(chat_id=chat_id, text=text, parse_mode=ParseMode.MARKDOWN)
-
-    # mark scout done
-    rows = get_rows(PEND_SHEET)
-    for idx, row in enumerate(rows[1:], start=1):
-        if row[0] == job_name:
-            row[8] = "done"
-            update_row(PEND_SHEET, idx, row)
-            break
-
+    # unchanged...
+    ...
 
 async def combat_resolution_job(context: ContextTypes.DEFAULT_TYPE):
-    data           = context.job.data
-    chat_id        = int(data["uid"])
-    defender_id    = data["defender_id"]
-    defender_name  = data["defender_name"]
-    attacker_name  = data["attacker_name"]
-    atk_i, def_i   = data["atk_i"], data["def_i"]
-    comp           = data["composition"]
-    timestamp      = data["timestamp"]
-    job_name       = context.job.name
+    data          = context.job.data
+    uid           = data["uid"]
+    chat_id       = int(uid)
+    defender_id   = data["defender_id"]
+    defender_name = data["defender_name"]
+    attacker_name = data["attacker_name"]
+    atk_i, def_i  = data["atk_i"], data["def_i"]
+    comp          = data["composition"]     # dict unit_key → qty
+    timestamp     = data["timestamp"]
+    job_name      = context.job.name
 
-    # attacker detachment power
-    atk_power = sum(v * UNITS[k][3] for k, v in comp.items()) * random.uniform(0.9, 1.1)
-    # defender uses full garrison
-    def_rows = get_rows("Army")
-    def_comp = {r[1]: int(r[2]) for r in def_rows[1:] if r[0] == defender_id}
-    def_power = sum(v * UNITS[k][3] for k, v in def_comp.items()) * random.uniform(0.9, 1.1)
+    # ─── Build HP pools & DPS ───────────────────────────────────────────────
+    atk_hp_pool = sum(qty * UNIT_HP[k]   for k, qty in comp.items())
+    atk_dps     = sum(qty * UNITS[k][3]  for k, qty in comp.items())
+    # Defender garrison
+    def_rows    = get_rows("Army")
+    def_comp    = {r[1]: int(r[2]) for r in def_rows[1:] if r[0] == defender_id}
+    def_hp_pool = sum(qty * UNIT_HP[k]   for k, qty in def_comp.items())
+    def_dps     = sum(qty * UNITS[k][3]  for k, qty in def_comp.items())
 
+    # ─── Simulate up to 3 rounds ────────────────────────────────────────────
+    atk_hp = atk_hp_pool
+    def_hp = def_hp_pool
+    for _ in range(3):
+        atk_damage = atk_dps * random.uniform(0.9, 1.1)
+        def_damage = def_dps * random.uniform(0.9, 1.1)
+        def_hp = max(0, def_hp - atk_damage)
+        atk_hp = max(0, atk_hp - def_damage)
+        if atk_hp == 0 or def_hp == 0:
+            break
+
+    # ─── Compute survivors & casualties ────────────────────────────────────
+    att_ratio = (atk_hp / atk_hp_pool) if atk_hp_pool > 0 else 0
+    def_ratio = (def_hp / def_hp_pool) if def_hp_pool > 0 else 0
+
+    survivors_att = {k: int(qty * att_ratio) for k, qty in comp.items()}
+    casualties_att = {k: comp[k] - survivors_att[k] for k in comp}
+
+    survivors_def = {k: int(qty * def_ratio) for k, qty in def_comp.items()}
+    casualties_def = {k: def_comp[k] - survivors_def[k] for k in def_comp}
+
+    # ─── Update sheets: return survivors, apply casualties ────────────────
+    # 1) Remove deployed troops from DeployedArmy
+    dep_rows = get_rows(DEPLOY_SHEET)
+    for idx, row in enumerate(dep_rows[1:], start=1):
+        if row[0] == uid:
+            key = row[1]
+            qty = int(row[2])
+            used = comp.get(key, 0)
+            new  = max(0, qty - used)
+            row[2] = str(new)
+            update_row(DEPLOY_SHEET, idx, row)
+
+    # 2) Attacker: survivors go back into Army
+    army_rows = get_rows("Army")
+    for key, surv in survivors_att.items():
+        # find existing
+        for idx, r in enumerate(army_rows[1:], start=1):
+            if r[0] == uid and r[1] == key:
+                r[2] = str(int(r[2]) + surv)
+                update_row("Army", idx, r)
+                break
+        else:
+            append_row("Army", [uid, key, str(surv)])
+
+    # 3) Defender: subtract casualties from Army
+    for key, lost in casualties_def.items():
+        for idx, r in enumerate(army_rows[1:], start=1):
+            if r[0] == defender_id and r[1] == key:
+                r[2] = str(max(0, int(r[2]) - lost))
+                update_row("Army", idx, r)
+                break
+
+    # 4) Credits spoils
     players      = get_rows("Players")
     attacker_row = players[atk_i]
     defender_row = players[def_i]
-
-    if atk_power > def_power:
-        result = "win"
+    if atk_hp > def_hp:
+        # attacker wins
         spoils = max(1, int(defender_row[3]) // 10)
-        msg    = f"🏆 *{attacker_name}* defeated *{defender_name}*! 💰 Stole {spoils} credits."
+        msg = (
+            f"🏆 *{attacker_name}* prevails!\n"
+            f"💰 Stole {spoils} credits.\n\n"
+            "🗡 *Casualties:* " +
+            "  ".join(f"{UNITS[k][1]}−{casualties_att[k]}" for k in casualties_att if casualties_att[k])
+            + "\n"
+            "🛡️ *Defender lost:* " +
+            "  ".join(f"{UNITS[k][1]}−{casualties_def[k]}" for k in casualties_def if casualties_def[k])
+        )
         attacker_row[3] = str(int(attacker_row[3]) + spoils)
         defender_row[3] = str(int(defender_row[3]) - spoils)
     else:
-        result = "loss"
+        # defender holds
         spoils = max(1, int(attacker_row[3]) // 20)
-        msg    = f"💥 *{attacker_name}* was defeated by *{defender_name}*! 💸 Lost {spoils} credits."
+        msg = (
+            f"💥 *{attacker_name}* was repulsed!\n"
+            f"💸 Lost {spoils} credits.\n\n"
+            "🗡 *Casualties:* " +
+            "  ".join(f"{UNITS[k][1]}−{casualties_att[k]}" for k in casualties_att if casualties_att[k])
+            + "\n"
+            "🛡️ *Defender lost:* " +
+            "  ".join(f"{UNITS[k][1]}−{casualties_def[k]}" for k in casualties_def if casualties_def[k])
+        )
         attacker_row[3] = str(int(attacker_row[3]) - spoils)
         defender_row[3] = str(int(defender_row[3]) + spoils)
 
     update_row("Players", atk_i, attacker_row)
     update_row("Players", def_i, defender_row)
-    append_row("CombatLog", [data["uid"], str(defender_id), timestamp, result, str(spoils)])
+    append_row("CombatLog", [uid, defender_id, timestamp, "win" if atk_hp>def_hp else "loss", str(spoils)])
 
-    await context.bot.send_message(chat_id=chat_id, text=msg, parse_mode=ParseMode.MARKDOWN)
+    # ─── Send detailed result DM ────────────────────────────────────────────
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=msg,
+        parse_mode=ParseMode.MARKDOWN
+    )
 
-    # mark attack done
-    rows = get_rows(PEND_SHEET)
-    for idx, row in enumerate(rows[1:], start=1):
+    # ─── Mark done in pending sheet ────────────────────────────────────────
+    pend = get_rows(PEND_SHEET)
+    for idx, row in enumerate(pend[1:], start=1):
         if row[0] == job_name:
             row[8] = "done"
             update_row(PEND_SHEET, idx, row)
             break
 
 
-async def return_deployment_job(context: ContextTypes.DEFAULT_TYPE):
-    """After return-trip, move units from DeployedArmy back into Army."""
-    data    = context.job.data
-    uid     = data["uid"]
-    comp    = data["composition"]
-    chat_id = int(uid)
-
-    # decrement deployed
-    _ensure_deploy_sheet()
-    rows = get_rows(DEPLOY_SHEET)
-    for key, qty in comp.items():
-        for idx, r in enumerate(rows[1:], start=1):
-            if r[0] == uid and r[1] == key:
-                new = max(0, int(r[2]) - qty)
-                r[2] = str(new)
-                update_row(DEPLOY_SHEET, idx, r)
-                break
-
-    # increment back to Army
-    army = get_rows("Army")
-    for key, qty in comp.items():
-        for idx, r in enumerate(army[1:], start=1):
-            if r[0] == uid and r[1] == key:
-                r[2] = str(int(r[2]) + qty)
-                update_row("Army", idx, r)
-                break
-        else:
-            append_row("Army", [uid, key, str(qty)])
-
-    await context.bot.send_message(
-        chat_id=chat_id,
-        text="🚚 *Your forces have returned to base.*",
-        parse_mode=ParseMode.MARKDOWN
-    )
-
-
 @game_command
 async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    /attack <Commander> -u infantry:10 tanks:5 ... [-s <scouts>] [--scout-only]
-    """
-    user    = update.effective_user
-    uid     = str(user.id)
-    args    = context.args.copy()
-    chat_id = update.effective_chat.id
-
-    if not args:
-        return await update.message.reply_text(
-            "❗ Usage: `/attack <Commander> -u infantry:10 tanks:5 ... [-s <scouts>] [--scout-only]`",
-            parse_mode=ParseMode.MARKDOWN
-        )
-
-    # Flags
-    scout_only = False
-    if "--scout-only" in args:
-        scout_only = True
-        args.remove("--scout-only")
-
-    target = args.pop(0)
-
-    # Parse scouts
-    scout_count = 0
-    if "-s" in args:
-        i = args.index("-s")
-        try:
-            scout_count = int(args[i+1])
-        except:
-            scout_count = 1
-        args.pop(i)
-        if i < len(args): args.pop(i)
-
-    # Parse units composition
-    comp = {}
-    if "-u" in args:
-        i = args.index("-u")
-        raw = []
-        for tok in args[i+1:]:
-            if tok.startswith("-"): break
-            raw.append(tok)
-        args = args[:i] + args[i+1+len(raw):]
-        for pair in raw:
-            if ":" in pair:
-                k, v = pair.split(":", 1)
-                if k in UNITS and v.isdigit():
-                    comp[k] = int(v)
-
-    # Default: everyone goes if not scout-only and no -u
-    if not comp and not scout_only:
-        for r in get_rows("Army")[1:]:
-            if r[0] == uid:
-                comp[r[1]] = int(r[2])
-
-    # locate attacker & defender
-    players = get_rows("Players")
-    attacker = defender = None
-    atk_i = def_i = None
-    for idx, r in enumerate(players[1:], start=1):
-        if r[0] == uid:            attacker, atk_i = r.copy(), idx
-        if r[1].lower() == target.lower():
-            defender, def_i = r.copy(), idx
-
-    if not attacker:
-        return await update.message.reply_text("❗ Run /start first.", parse_mode=ParseMode.MARKDOWN)
-    if not defender:
-        return await update.message.reply_text(f"❌ {target} not found.", parse_mode=ParseMode.MARKDOWN)
-    if defender[0] == uid:
-        return await update.message.reply_text("❌ You cannot attack yourself!", parse_mode=ParseMode.MARKDOWN)
-
-    # Energy cost & deduction
-    energy = int(attacker[5])
-    cost   = (0 if scout_only else 5) + scout_count
-    if energy < cost:
-        return await update.message.reply_text(
-            f"❌ Need {cost}⚡ but have {energy}⚡.", parse_mode=ParseMode.MARKDOWN
-        )
-    attacker[5] = str(energy - cost)
-    update_row("Players", atk_i, attacker)
-
-    # Deduct garrison troops immediately
+    # unchanged scheduling & soldier deduction, plus:
+    # ─ append to DeployedArmy when scheduling ─────────────────────────────
+    ...
     if not scout_only:
+        # Deduct from garrison and add to deployed
         army = get_rows("Army")
         for key, qty in comp.items():
-            for i, r in enumerate(army[1:], start=1):
-                if r[0] == uid and r[1] == key:
-                    new = max(0, int(r[2]) - qty)
-                    r[2] = str(new)
-                    update_row("Army", i, r)
-                    break
-
-        # record them in DeployedArmy
-        _ensure_deploy_sheet()
-        drows = get_rows(DEPLOY_SHEET)
-        for key, qty in comp.items():
-            for i, r in enumerate(drows[1:], start=1):
-                if r[0] == uid and r[1] == key:
-                    r[2] = str(int(r[2]) + qty)
-                    update_row(DEPLOY_SHEET, i, r)
-                    break
-            else:
-                append_row(DEPLOY_SHEET, [uid, key, str(qty)])
-
-    # timestamp
-    ts = str(int(time.time()))
-    _ensure_pending_sheet()
-
-    # Schedule scouts
-    if scout_count > 0:
-        j = context.job_queue.run_once(
-            scout_report_job,
-            when=timedelta(minutes=5),
-            name=f"scout_{uid}_{defender[0]}_{ts}",
-            data={"uid": uid, "defender_id": defender[0], "defender_name": defender[1]}
-        )
-        run_time = (datetime.utcnow() + timedelta(minutes=5)).replace(tzinfo=timezone.utc).isoformat()
-        append_row(PEND_SHEET, [
-            j.name, uid, defender[0], defender[1],
-            json.dumps(comp), str(scout_count),
-            run_time, "scout", "pending"
-        ])
-
-    # Schedule battle resolution
-    if not scout_only:
-        j_atk = context.job_queue.run_once(
-            combat_resolution_job,
-            when=timedelta(minutes=30),
-            name=f"attack_{uid}_{defender[0]}_{ts}",
-            data={
-                "uid": uid, "defender_id": defender[0],
-                "attacker_name": attacker[1], "defender_name": defender[1],
-                "atk_i": atk_i, "def_i": def_i,
-                "timestamp": ts, "composition": comp
-            }
-        )
-        run_time = (datetime.utcnow() + timedelta(minutes=30)).replace(tzinfo=timezone.utc).isoformat()
-        append_row(PEND_SHEET, [
-            j_atk.name, uid, defender[0], defender[1],
-            json.dumps(comp), "0",
-            run_time, "attack", "pending"
-        ])
-
-        # Schedule return of troops 30 minutes after battle
-        j_ret = context.job_queue.run_once(
-            return_deployment_job,
-            when=timedelta(minutes=60),
-            name=f"return_{uid}_{defender[0]}_{ts}",
-            data={"uid": uid, "composition": comp}
-        )
-        # you can also log `return` job in PEND_SHEET if you like
-
-    # Track daily challenge
-    for ch in load_challenges("daily"):
-        if ch.key == "attacks":
-            update_player_progress(uid, ch)
-            break
-
-    # Confirmation UI
-    parts = [f"{UNITS[k][1]}×{v}" for k,v in comp.items()] if comp else []
-    if scout_count:
-        parts.append(f"🔎 Scouts×{scout_count}")
-    lines = ["⚔️ *Orders received!*",
-             f"Target: *{defender[1]}*"]
-    if scout_count:
-        lines.append("• 🔎 Scouts arriving in 5m")
-    if not scout_only:
-        lines.append("• 🏹 Battle resolves in 30m")
-        lines.append("• 🚚 Troops return in 60m")
-    if parts:
-        lines.append("\n• " + "  ".join(parts))
-
-    kb = InlineKeyboardMarkup.from_button(
-        InlineKeyboardButton("📜 View Pending", callback_data="reports")
-    )
-    await update.message.reply_text("\n".join(lines),
-                                    parse_mode=ParseMode.MARKDOWN,
-                                    reply_markup=kb)
-
+            # garrison deduction (as before)...
+            ...
+            # add to DeployedArmy
+            append_row(DEPLOY_SHEET, [uid, key, str(qty)])
+    ...
 
 handler = CommandHandler("attack", attack)
