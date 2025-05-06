@@ -6,6 +6,7 @@ from sheets_service import get_rows, append_row, update_row
 from utils.time_utils import format_hhmmss
 from utils.decorators import game_command
 from config import BUILDING_MAX_LEVEL
+from utils.format_utils import format_bar  # <-- new import
 
 BUILDINGS = {
     'mine': ('Mine', '⛏️'),
@@ -107,16 +108,16 @@ async def build(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         append_row('Buildings', [uid, btype, str(current_lvl), str(end_ts)])
 
-    # 6) Confirmation
+    # 6) Confirmation with progress bar
     confirm_text = (
         f"🔨 Upgrading {emoji} *{btype}* → Lvl {L}\n"
-        f"Cost: {cC}💳 {cM}⛏️ {eC}⚡ | {format_hhmmss(sec)}"
+        f"Cost: {cC}💳 {cM}⛏️ {eC}⚡ | {format_hhmmss(sec)}\n"
+        f"Progress: {format_bar(0, sec)}"
     )
     await update.message.reply_text(confirm_text, parse_mode=ParseMode.MARKDOWN)
 
     # 7) QUEST PROGRESSION STEP 2: Upgrade Power Plant
     if btype == "Power Plant":
-        # step2 reward
         header = players[0]
         while len(prow) < len(header):
             prow.append("")
