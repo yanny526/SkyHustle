@@ -1,67 +1,64 @@
-# handlers/queue.py
-
-import time
 from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import CommandHandler, ContextTypes
-from sheets_service import get_rows
-from utils.time_utils import format_hhmmss
-from utils.decorators import game_command
-from utils.format_utils import (
-    format_bar,
-    get_building_emoji,
-    get_build_time,
-    section_header,
+from modules.challenge_manager import (
+    load_challenges,
+    award_challenges,
+    update_player_progress,
+    get_player_challenge,
 )
 
-@game_command
-async def queue(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    /queue – list pending upgrades with progress bars.
-    """
+async def daily(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_user.id)
-    now = time.time()
 
-    # Gather pending builds
-    pending = []
-    for row in get_rows('Buildings')[1:]:
-        if row[0] != uid:
-            continue
-        lvl = int(row[2]) if len(row) > 2 and row[2].isdigit() else 0
-        if len(row) > 3 and row[3]:
-            try:
-                end_ts = float(row[3])
-                if end_ts > now:
-                    pending.append((row[1], lvl + 1, end_ts))
-            except ValueError:
-                continue
-
-    # No pending builds
-    if not pending:
-        text = "\n".join([
-            section_header("🔧 Upgrade Queue", pad_char="=", pad_count=3),
-            "",
-            "✅ You have no upgrades in progress.",
-            "",
-            "Start one with `/build <building>`!"
-        ])
-        return await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
-
-    # Build the queue UI
-    lines = [section_header("⏳ Upgrades In Progress", pad_char="=", pad_count=3), ""]
-    for btype, next_lvl, end_ts in pending:
-        total_sec = get_build_time(btype, next_lvl)
-        remaining = int(end_ts - now)
-        elapsed   = max(0, min(total_sec - remaining, total_sec))
-        bar       = format_bar(elapsed, total_sec)
-        emoji     = get_building_emoji(btype)
-        lines.append(
-            f"{emoji} *{btype}* → Lvl {next_lvl}\n"
-            f"{bar} ({format_hhmmss(remaining)} left)"
+    # 1) Award any newly completed dailies and send messages
+    awards = award_challenges(uid, 'daily')
+    for ch in awards:
+        await update.message.reply_text(
+            f"🎉 *Daily Complete!* {ch.description}\n"
+            f"Rewards: +{ch.reward_credits}💳 +{ch.reward_minerals}⛏️ +{ch.reward_energy}⚡",
+            parse_mode=ParseMode.MARKDOWN
         )
-        lines.append("")  # blank line between entries
 
-    text = "\n".join(lines).rstrip()
-    await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    # 2) Show current progress
+    challenges = load_challenges('daily')
+    lines = ['🗓️ *Daily Challenges*', '']
+    for ch in challenges:
+        idx, prow = get_player_challenge(uid, ch.id)
+        prog = int(prow[4] or 0) if prow else 0
+        done = prow and prow[3]
+        status = '✅' if done else f'{prog}/{ch.value}'
+        lines.append(
+            f'{status} {ch.description} '
+            f'(Reward: +{ch.reward_credits}💳 +{ch.reward_minerals}⛏️ +{ch.reward_energy}⚡)'
+        )
+    await update.message.reply_text('\n'.join(lines), parse_mode=ParseMode.MARKDOWN)
 
-handler = CommandHandler('queue', queue)
+async def weekly(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid = str(update.effective_user.id)
+
+    # 1) Award any newly completed weeklies and send messages
+    awards = award_challenges(uid, 'weekly')
+    for ch in awards:
+        await update.message.reply_text(
+            f"🎉 *Weekly Complete!* {ch.description}\n"
+            f"Rewards: +{ch.reward_credits}💳 +{ch.reward_minerals}⛏️ +{ch.reward_energy}⚡",
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    # 2) Show current progress
+    challenges = load_challenges('weekly')
+    lines = ['📅 *Weekly Challenges*', '']
+    for ch in challenges:
+        idx, prow = get_player_challenge(uid, ch.id)
+        prog = int(prow[4] or 0) if prow else 0
+        done = prow and prow[3]
+        status = '✅' if done else f'{prog}/{ch.value}'
+        lines.append(
+            f'{status} {ch.description} '
+            f'(Reward: +{ch.reward_credits}💳 +{ch.reward_minerals}⛏️ +{ch.reward_energy}⚡)'
+        )
+    await update.message.reply_text('\n'.join(lines), parse_mode=ParseMode.MARKDOWN)
+
+handler_daily = CommandHandler('daily', daily)
+handler_weekly = CommandHandler('weekly', weekly)
