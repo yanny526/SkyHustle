@@ -6,7 +6,7 @@ from sheets_service import get_rows, append_row, update_row
 from utils.time_utils import format_hhmmss
 from utils.decorators import game_command
 from config import BUILDING_MAX_LEVEL
-from utils.format_utils import get_build_time  # <-- new import
+from utils.format_utils import get_build_time, get_build_costs
 
 BUILDINGS = {
     'mine': ('Mine', '⛏️'),
@@ -60,16 +60,7 @@ async def build(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # 3) Compute next level, costs & duration
     L = current_lvl + 1
-    # costs
-    if btype == 'Mine':
-        cC, cM, eC = 100, 50 * L, 10 * L
-    elif btype == 'Power Plant':
-        cC, cM, eC = 100, 30 * L, 8 * L
-    elif btype == 'Barracks':
-        cC, cM, eC = 150, 70 * L, 12 * L
-    else:  # Workshop
-        cC, cM, eC = 200, 100 * L, 15 * L
-    # centralized duration
+    cC, cM, eC = get_build_costs(btype, L)
     sec = get_build_time(btype, L)
 
     # 4) Fetch & check resources
@@ -93,7 +84,6 @@ async def build(update: Update, context: ContextTypes.DEFAULT_TYPE):
     update_row('Players', prow_idx, prow)
 
     end_ts = time.time() + sec
-    # preserve existing building row or append new
     existing = None
     for bi, brow in enumerate(buildings[1:], start=1):
         if brow[0] == uid and brow[1] == btype:
@@ -115,7 +105,5 @@ async def build(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Cost: {cC}💳 {cM}⛏️ {eC}⚡ | {format_hhmmss(sec)}"
     )
     await update.message.reply_text(confirm_text, parse_mode=ParseMode.MARKDOWN)
-
-    # 7) Quest & challenge logic remains unchanged…
 
 handler = CommandHandler('build', build)
