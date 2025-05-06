@@ -70,7 +70,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ─── Build Status Text ─────────────────────────────────────────────────
     lines = []
     lines.append(section_header("Resources & Supplies"))
-    lines.append(f"🪙 Credits   : {credits}")
+    lines.append(f"💳 Credits   : {credits}")
     lines.append(f"⛏️ Minerals : {minerals}")
     lines.append(f"⚡ Energy   : {energy}")
     if tick_str:
@@ -128,26 +128,26 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             gain_str = "–"
         lines.append(
-            f"{get_building_emoji(b)} {b}: {lvl}→{nl} | cost 🪙{cC}, ⛏️{cM}, ⚡{eC} | {gain_str}"
+            f"{get_building_emoji(b)} {b}: {lvl}→{nl} | cost 💳{cC}, ⛏️{cM}, ⚡{eC} | {gain_str}"
         )
 
     report = "\n".join(lines)
-    text = (
-        f"<b>🛡️⚔️ War Report: Commander {commander} ⚔️🛡️</b>\n"
-        f"<pre>{html.escape(report)}</pre>"
-    )
+
+    # 👉 New header
+    header = f"<b>💳 Commander {commander}’s Dashboard</b>\n" \
+             f"<pre>{html.escape(report)}</pre>"
 
     kb = InlineKeyboardMarkup.from_button(
-        InlineKeyboardButton("🔄 Refresh Report", callback_data="status")
+        InlineKeyboardButton("🔄 Refresh", callback_data="status")
     )
 
     if update.message:
-        await update.message.reply_text(text, parse_mode=ParseMode.HTML, reply_markup=kb)
+        await update.message.reply_text(header, parse_mode=ParseMode.HTML, reply_markup=kb)
     else:
         await update.callback_query.answer()
         try:
             await update.callback_query.edit_message_text(
-                text, parse_mode=ParseMode.HTML, reply_markup=kb
+                header, parse_mode=ParseMode.HTML, reply_markup=kb
             )
         except BadRequest as e:
             if "Message is not modified" not in str(e):
