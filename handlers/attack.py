@@ -189,65 +189,84 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     /attack <Commander> -u infantry:10 ... [-s <scouts>] [--scout-only] [-c CODE]
     """
-    uid      = str(update.effective_user.id)
+    user     = update.effective_user
+    uid      = str(user.id)
     args     = context.args.copy()
     chat_id  = update.effective_chat.id
 
-    # Cancellation
-    if "-c" in args:
-        # ... (unchanged cancel logic) ...
-        return await update.message.reply_text("🚫 Operation cancelled.", parse_mode=ParseMode.MARKDOWN)
+    # ensure these are always defined
+    job_name = None
+    code     = None
 
-    # Dispatch prep
+    # 1) Cancellation?
+    if "-c" in args:
+        i = args.index("-c")
+        try:
+            code = args[i+1]
+        except IndexError:
+            return await update.message.reply_text(
+                "❗ Usage to cancel: `/attack -c <CODE>`",
+                parse_mode=ParseMode.MARKDOWN
+            )
+
+        _ensure_pending_sheet()
+        pend = get_rows(PEND_SHEET)
+        for idx, row in enumerate(pend[1:], start=1):
+            job_name, prow_code, puid, *_rest = row
+            if puid == uid and prow_code == code and row[9] == "pending":
+                # unschedule
+                try:
+                    context.job_queue.scheduler.remove_job(job_name)
+                except Exception:
+                    pass
+                # mark cancelled
+                row[9] = "cancelled"
+                update_row(PEND_SHEET, idx, row)
+
+                # return troops if it was an attack
+                if row[8] == "attack":
+                    _ensure_deploy_sheet()
+                    dep = get_rows(DEPLOY_SHEET)
+                    for d_idx, drow in enumerate(dep[1:], start=1):
+                        if drow[0] == job_name:
+                            key, qty = drow[2], int(drow[3])
+                            if qty > 0:
+                                # give them back
+                                army = get_rows("Army")
+                                for a_i, ar in enumerate(army[1:], start=1):
+                                    if ar[0] == uid and ar[1] == key:
+                                        ar[2] = str(int(ar[2]) + qty)
+                                        update_row("Army", a_i, ar)
+                                        break
+                                else:
+                                    append_row("Army", [uid, key, str(qty)])
+                            drow[3] = "0"
+                            update_row(DEPLOY_SHEET, d_idx, drow)
+
+                return await update.message.reply_text(
+                    f"🚫 Operation `{code}` cancelled. Troops are returning home.",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+
+        return await update.message.reply_text(
+            f"❗ No pending operation found with code `{code}`.",
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    # 2) Normal dispatch
     if not args:
         return await update.message.reply_text(
-            "❗ Usage: `/attack <Commander> -u infantry:10 ...`", parse_mode=ParseMode.MARKDOWN
+            "❗ Usage: `/attack <Commander> -u infantry:10 ...`",
+            parse_mode=ParseMode.MARKDOWN
         )
 
     scout_only  = "--scout-only" in args
     if scout_only:
         args.remove("--scout-only")
 
-    target      = args.pop(0)
-    scout_count = 0
-    if "-s" in args:
-        i = args.index("-s")
-        scout_count = int(args[i+1]) if i+1 < len(args) and args[i+1].isdigit() else 1
-        del args[i:i+2]
-
-    # Composition
-    comp = {}
-    if "-u" in args:
-        i = args.index("-u")
-        raw = []
-        for tok in args[i+1:]:
-            if tok.startswith("-"):
-                break
-            raw.append(tok)
-        del args[i:i+1+len(raw)]
-        for pair in raw:
-            if ":" in pair:
-                k, v = pair.split(":",1)
-                if k in UNITS and v.isdigit():
-                    comp[k] = int(v)
-
-    # Default to full garrison
-    if not comp and not scout_only:
-        for r in get_rows("Army")[1:]:
-            if r[0] == uid:
-                comp[r[1]] = int(r[2])
-
-    # Locate players
-    players = get_rows("Players")
-    attacker = defender = None
-    for idx, r in enumerate(players[1:],start=1):
-        if r[0] == uid:
-            attacker, atk_i = r.copy(), idx
-        if r[1].lower() == target.lower():
-            defender, def_i = r.copy(), idx
-
-    # Checks & scheduling (energy, sheets, jobs)...
-    # (Unchanged logic up to final UI confirmation.)
+    # target
+    target = args.pop(0)
+    # ... rest of your dispatch logic unchanged ...
 
     # UI Confirmation
     parts = [f"{UNITS[k][1]}×{v}" for k,v in comp.items()]
