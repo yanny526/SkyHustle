@@ -33,7 +33,7 @@ def format_bar(current: int, maximum: int, length: int = 10) -> str:
 
 def get_build_time(building: str, level: int) -> int:
     """
-    Return the upgrade duration in seconds for a given building type at the target level.
+    Return upgrade duration in seconds for the given building at target level.
     """
     if building == 'Mine':
         return 30 * 60 * level
@@ -44,3 +44,17 @@ def get_build_time(building: str, level: int) -> int:
     elif building == 'Workshop':
         return 60 * 60 * level
     return 0
+
+def get_build_costs(building: str, level: int) -> tuple[int, int, int]:
+    """
+    Return (credits, minerals, energy) cost for upgrading a building to the specified level.
+    """
+    if building == 'Mine':
+        return (100, 50 * level, 10 * level)
+    elif building == 'Power Plant':
+        return (100, 30 * level, 8 * level)
+    elif building == 'Barracks':
+        return (150, 70 * level, 12 * level)
+    elif building == 'Workshop':
+        return (200, 100 * level, 15 * level)
+    return (0, 0, 0)
