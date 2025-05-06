@@ -7,11 +7,12 @@ from modules.unit_manager import get_all_units_by_tier, get_unlocked_tier, UNITS
 from config import TIER_UNLOCK
 from sheets_service import get_rows
 from utils.format_utils import section_header
+from utils.decorators import game_command  # ← Added this import
 
 def format_cost(cost: dict) -> str:
     return f"{cost['c']}💳/{cost['m']}⛏️/{cost['e']}⚡"
 
-@game_command
+@game_command  # ← Ensures only players in-game can run this
 async def army(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     /army – show your army composition and tier unlocks
