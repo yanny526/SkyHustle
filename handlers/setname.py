@@ -1,100 +1,139 @@
 # handlers/setname.py
 
 import time
-from telegram import Update, KeyboardButton, ReplyKeyboardMarkup
+from datetime import date, timedelta
+from telegram import (
+    Update,
+    KeyboardButton,
+    ReplyKeyboardMarkup,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+)
 from telegram.constants import ParseMode
 from telegram.ext import CommandHandler, ContextTypes
+
 from sheets_service import get_rows, update_row
+from utils.format_utils import section_header
 
 async def setname(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    /setname <name> - Set your unique commander name and unlock your first reward.
+    /setname – show help or set your unique commander name and unlock your first reward.
     """
-    user = update.effective_user
-    uid = str(user.id)
-    args = context.args
+    uid  = str(update.effective_user.id)
+    args = context.args.copy()
 
-    if not args:
+    # 0) Help screen
+    if not args or args[0].lower() == "help":
+        lines = [
+            section_header("🆔 Commander Name Setup 🆔", pad_char="=", pad_count=3),
+            "",
+            "Ready to stake your claim? Use:",
+            "",
+            "`/setname <YourName>`",
+            "",
+            "• Only letters, numbers & underscores allowed",
+            "• Example: `/setname Iron_Legion`",
+        ]
         return await update.message.reply_text(
-            "❗ Usage: `/setname <YourName>`\n"
-            "Example: `/setname IronLegion`",
+            "\n".join(lines),
             parse_mode=ParseMode.MARKDOWN
         )
 
+    # 1) Validate name
     name = args[0].strip()
     if not name.replace("_", "").isalnum():
         return await update.message.reply_text(
-            "🚫 Invalid name. Only letters, numbers, and underscores are allowed (no spaces or symbols)."
+            section_header("🚫 Invalid Name"),
+            parse_mode=ParseMode.MARKDOWN
+        ).then(
+            lambda _: update.message.reply_text(
+                "Only letters, numbers, and underscores allowed (no spaces or symbols).",
+                parse_mode=ParseMode.MARKDOWN
+            )
         )
 
-    rows = get_rows("Players")
+    # 2) Check uniqueness
+    rows  = get_rows("Players")
     header = rows[0]
-    # collect taken names
-    taken = {r[1].strip().lower() for r in rows[1:] if len(r) > 1 and r[1]}
-
+    taken = {r[1].strip().lower() for r in rows[1:] if len(r) > 1 and r[1].strip()}
     if name.lower() in taken:
+        lines = [
+            section_header("⚠️ Name Taken"),
+            "",
+            f"Commander *{name}* is already claimed.",
+            "Try something like `/setname {name}_X`"
+        ]
         return await update.message.reply_text(
-            f"⚠️ The name *{name}* is already taken. Try `{name}_X`.",
+            "\n".join(lines),
             parse_mode=ParseMode.MARKDOWN
         )
 
-    # find and update player row
+    # 3) Update player row
     for idx, row in enumerate(rows):
         if idx == 0:
             continue
-        if row[0] == uid:
-            # ensure row has same length as header
-            while len(row) < len(header):
-                row.append("")
+        if row[0] != uid:
+            continue
 
-            original = row[1].strip()
-            first_time = original == ""
-            row[1] = name  # set commander name
+        # ensure full length
+        while len(row) < len(header):
+            row.append("")
 
-            # first-time reward logic
-            if first_time and row[7] != "step1":
-                # +500 energy reward
-                row[5] = str(int(row[5]) + 500)
-                row[7] = "step1"
-                update_row("Players", idx, row)
+        original     = row[1].strip()
+        first_time   = (original == "")
+        row[1]       = name  # set commander_name
 
-                # confirm name and reward
-                await update.message.reply_text(
-                    f"✅ Your commander name is *{name}*!\n"
-                    "🎁 You’ve earned +500 ⚡ Energy for Task 1.",
-                    parse_mode=ParseMode.MARKDOWN
-                )
-
-                # next quest text
-                text2 = (
-                    "🛡️ *You are the last hope of your region.*\n"
-                    "Command your base, rebuild power, and rise to dominate.\n\n"
-                    "🧾 *Your second task:*\n"
-                    "`/build powerplant` – Start generating energy.\n\n"
-                    "🎁 *On completion you’ll earn:* +100 ⛏️ Minerals\n"
-                    
-                )
-                markup2 = ReplyKeyboardMarkup(
-                    [[KeyboardButton("/build powerplant")], [KeyboardButton("/status")]],
-                    resize_keyboard=True
-                )
-                return await update.message.reply_text(
-                    text2,
-                    parse_mode=ParseMode.MARKDOWN,
-                    reply_markup=markup2
-                )
-
-            # not first-time or already rewarded
+        # First-time reward
+        if first_time and row[7] != "step1":
+            row[5] = str(int(row[5]) + 500)  # +500 energy
+            row[7] = "step1"
             update_row("Players", idx, row)
+
+            # 3a) Confirmation & next quest
+            lines = [
+                section_header("✅ Name Set!"),
+                "",
+                f"Welcome, Commander *{name}*!",
+                "🎁 +500 ⚡ Energy awarded.",
+                "",
+                section_header("🧾 Next Mission"),
+                "`/build powerplant` – Get your energy grid online.",
+            ]
+            kb = ReplyKeyboardMarkup(
+                [[KeyboardButton("/build powerplant")], [KeyboardButton("/status")]],
+                resize_keyboard=True
+            )
             return await update.message.reply_text(
-                f"✅ Commander name updated to *{name}*!\n"
-                "Use /menu to continue your conquest.",
-                parse_mode=ParseMode.MARKDOWN
+                "\n".join(lines),
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=kb
+            )
+        else:
+            # 3b) Name change confirmation
+            update_row("Players", idx, row)
+            lines = [
+                section_header("🔄 Name Updated"),
+                "",
+                f"Your commander name is now *{name}*. ",
+                "",
+                "Use `/status` to jump back to your base."
+            ]
+            kb = InlineKeyboardMarkup.from_button(
+                InlineKeyboardButton("📊 View Base Status", callback_data="status")
+            )
+            return await update.message.reply_text(
+                "\n".join(lines),
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=kb
             )
 
-    # user not registered
+    # 4) If no row found
     await update.message.reply_text(
-        "❗ You need to run `/start` first to register.",
+        section_header("❗ Not Registered"),
+        parse_mode=ParseMode.MARKDOWN
+    )
+    await update.message.reply_text(
+        "You need to run `/start` first to register.",
         parse_mode=ParseMode.MARKDOWN
     )
 
