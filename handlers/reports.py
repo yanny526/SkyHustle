@@ -14,45 +14,52 @@ PEND_SHEET = "PendingActions"
 
 async def reports(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    /reports – list your pending scouts & attacks (or show a friendly no-pending message).
+    /reports – list your pending scouts & attacks (or show a friendly no‑pending message).
     """
     chat_id = str(update.effective_chat.id)
     now     = datetime.now(timezone.utc)
 
     lines = []
     for row in get_rows(PEND_SHEET)[1:]:
-        # only take the first 9 columns, ignore any extras
-        job_name   = row[0]
-        uid        = row[1]
-        did        = row[2]
-        dname      = row[3]
-        comp_json  = row[4]
-        scouts     = row[5]
-        run_at     = row[6]
-        typ        = row[7]
-        status     = row[8]
+        # Unpack all 10 columns
+        job_name, uid, did, dname, comp_json, scouts, run_at, typ, status, code = (
+            row + [""] * 10  # pad in case columns missing
+        )[:10]
 
         if status != "pending" or uid != chat_id:
             continue
 
-        run_dt = datetime.fromisoformat(run_at)
+        # parse ETA
+        try:
+            run_dt = datetime.fromisoformat(run_at)
+        except Exception:
+            continue
         delta  = run_dt - now
         secs   = int(delta.total_seconds())
         if secs < 0:
             continue
         mins, secs = divmod(secs, 60)
 
+        # build line with code
         if typ == "scout":
-            lines.append(f"🔎 Scouts on *{dname}* arriving in {mins}m{secs:02d}s (×{scouts})")
+            lines.append(
+                f"🔎 [{code}] Scout on *{dname}* arriving in {mins}m{secs:02d}s (×{scouts})"
+            )
         else:
             comp = json.loads(comp_json) if comp_json else {}
             comp_str = " ".join(f"{UNITS[k][1]}×{v}" for k,v in comp.items()) or "All troops"
-            lines.append(f"🏹 Attack on *{dname}* [{comp_str}] arriving in {mins}m{secs:02d}s")
+            lines.append(
+                f"🏹 [{code}] Attack on *{dname}* [{comp_str}] arriving in {mins}m{secs:02d}s"
+            )
 
     if not lines:
         text = "🗒️ *No pending operations.*"
     else:
-        text = "🗒️ *Pending Operations:*\n" + "\n".join(lines)
+        text = (
+            "🗒️ *Pending Operations:*\n"
+            + "\n".join(lines)
+            + "\n\n❗ To cancel: `/attack -c <CODE>`"
+        )
 
     kb = InlineKeyboardMarkup.from_button(
         InlineKeyboardButton("🔄 Refresh", callback_data="reports")
@@ -67,6 +74,7 @@ async def reports(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 text, parse_mode=ParseMode.MARKDOWN, reply_markup=kb
             )
         except BadRequest as e:
+            # ignore if nothing changed
             if "Message is not modified" not in str(e):
                 raise
 
