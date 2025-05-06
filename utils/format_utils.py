@@ -1,5 +1,3 @@
-# utils/format_utils.py
-
 BUILDING_EMOJI = {
     'Mine': '⛏️',
     'Power Plant': '⚡',
@@ -36,3 +34,15 @@ def code(text: str) -> str:
     Wrap text in Markdown inline code.
     """
     return f"`{text}`"
+
+def format_bar(current: int, maximum: int, length: int = 10) -> str:
+    """
+    Return a text-based progress bar of fixed length, with filled and empty blocks, and percentage.
+    Example: [██████░░░░] 60%
+    """
+    ratio = (current / maximum) if maximum else 0
+    filled = int(ratio * length)
+    empty = length - filled
+    bar = '█' * filled + '░' * empty
+    percent = int(ratio * 100)
+    return f"[{bar}] {percent}%"
