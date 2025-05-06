@@ -5,15 +5,14 @@ from telegram.ext import CommandHandler, ContextTypes
 from sheets_service import get_rows
 from utils.time_utils import format_hhmmss
 from utils.decorators import game_command
-from utils.format_utils import format_bar, get_building_emoji
+from utils.format_utils import format_bar, get_build_time, get_building_emoji
 
 @game_command
 async def queue(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     /queue - list pending upgrades (tick & upgrades via decorator) with progress bars.
     """
-    user = update.effective_user
-    uid = str(user.id)
+    uid = str(update.effective_user.id)
     now = time.time()
 
     pending = []
@@ -34,22 +33,9 @@ async def queue(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         lines = ["⏳ *Upgrades in Progress* ⏳\n"]
         for btype, next_lvl, end_ts in pending:
-            # remaining and total duration
+            total_sec = get_build_time(btype, next_lvl)
             remaining = int(end_ts - now)
-            # Recompute total time based on building type & target level:
-            if btype == 'Mine':
-                total_sec = 30 * 60 * next_lvl
-            elif btype == 'Power Plant':
-                total_sec = 20 * 60 * next_lvl
-            elif btype == 'Barracks':
-                total_sec = 45 * 60 * next_lvl
-            else:  # Workshop
-                total_sec = 60 * 60 * next_lvl
-
-            elapsed = total_sec - remaining
-            # clamp
-            elapsed = max(0, min(elapsed, total_sec))
-
+            elapsed = max(0, min(total_sec - remaining, total_sec))
             bar = format_bar(elapsed, total_sec)
             emoji = get_building_emoji(btype)
             lines.append(
@@ -58,7 +44,6 @@ async def queue(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         text = "\n".join(lines)
 
-    # Send or edit
     if update.message:
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
     elif update.callback_query:
