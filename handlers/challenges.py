@@ -3,6 +3,7 @@
 from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import CommandHandler, ContextTypes
+from utils.decorators import game_command
 from modules.challenge_manager import (
     load_challenges,
     award_challenges,
