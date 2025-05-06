@@ -1,12 +1,20 @@
+# handlers/build.py
+
 import time
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.ext import CommandHandler, ContextTypes
+
 from sheets_service import get_rows, append_row, update_row
 from utils.time_utils import format_hhmmss
 from utils.decorators import game_command
 from config import BUILDING_MAX_LEVEL
-from utils.format_utils import get_build_time, get_build_costs
+from utils.format_utils import (
+    get_build_time,
+    get_build_costs,
+    get_building_emoji,
+    section_header,
+)
 
 BUILDINGS = {
     'mine': ('Mine', '⛏️'),
@@ -18,19 +26,41 @@ BUILDINGS = {
 
 @game_command
 async def build(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    /build <building> - start an upgrade (tick & upgrades via decorator).
-    """
-    uid = str(update.effective_user.id)
-    args = context.args
+    uid  = str(update.effective_user.id)
+    args = context.args.copy()
 
-    if not args:
+    # ─── Help Screen ─────────────────────────────────────────────────────────
+    if not args or args[0].lower() == "help":
+        lines = [
+            section_header("🏗️ BUILDING CONSTRUCTION 🏗️", pad_char="=", pad_count=3),
+            "",
+            "Expand your empire by upgrading structures:",
+            "",
+            section_header("⛏️ Upgrade Your Mine", pad_char="-", pad_count=3),
+            "`/build mine`",
+            "→ Increase mineral output each minute.",
+            "",
+            section_header("⚡ Upgrade Power Plant", pad_char="-", pad_count=3),
+            "`/build powerplant`",
+            "→ Boost your energy generation.",
+            "",
+            section_header("🛡️ Upgrade Barracks", pad_char="-", pad_count=3),
+            "`/build barracks`",
+            "→ Train military units faster.",
+            "",
+            section_header("🔧 Upgrade Workshop", pad_char="-", pad_count=3),
+            "`/build workshop`",
+            "→ Unlock advanced unit types.",
+            "",
+            "Valid buildings: mine, powerplant, barracks, workshop",
+            "Check `/queue` to view active upgrades."
+        ]
         return await update.message.reply_text(
-            "❗ Usage: `/build <building>`\n"
-            "Valid: mine, powerplant, barracks, workshop",
+            "\n".join(lines),
             parse_mode=ParseMode.MARKDOWN
         )
 
+    # ─── Validate Choice ──────────────────────────────────────────────────────
     key = args[0].lower()
     if key not in BUILDINGS:
         return await update.message.reply_text(
@@ -39,18 +69,14 @@ async def build(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     btype, emoji = BUILDINGS[key]
 
-    # 1) Fetch current level
+    # ─── Current Level & Cap Check ─────────────────────────────────────────────
     current_lvl = 0
-    buildings = get_rows('Buildings')
+    buildings = get_rows("Buildings")
     for row in buildings[1:]:
         if row[0] == uid and row[1] == btype:
-            try:
-                current_lvl = int(row[2])
-            except:
-                current_lvl = 0
+            current_lvl = int(row[2] or 0)
             break
 
-    # 2) Check cap
     max_lvl = BUILDING_MAX_LEVEL.get(btype)
     if max_lvl is not None and current_lvl >= max_lvl:
         return await update.message.reply_text(
@@ -58,52 +84,70 @@ async def build(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode=ParseMode.MARKDOWN
         )
 
-    # 3) Compute next level, costs & duration
-    L = current_lvl + 1
-    cC, cM, eC = get_build_costs(btype, L)
-    sec = get_build_time(btype, L)
+    # ─── Compute Next Level, Costs & Time ──────────────────────────────────────
+    next_lvl = current_lvl + 1
+    costC, costM, costE = get_build_costs(btype, next_lvl)
+    duration = get_build_time(btype, next_lvl)
 
-    # 4) Fetch & check resources
-    players = get_rows('Players')
-    for pi, row in enumerate(players[1:], start=1):
-        if row[0] == uid:
-            prow, prow_idx = row.copy(), pi
+    # ─── Check Resources ───────────────────────────────────────────────────────
+    players = get_rows("Players")
+    for pi, prow in enumerate(players[1:], start=1):
+        if prow[0] == uid:
+            credits, minerals, energy = map(int, (prow[3], prow[4], prow[5]))
             break
     else:
-        return await update.message.reply_text("❗ Run /start first.")
-
-    credits, minerals, energy = map(int, (prow[3], prow[4], prow[5]))
-    if credits < cC or minerals < cM or energy < eC:
         return await update.message.reply_text(
-            f"❌ Need {cC}💳 {cM}⛏️ {eC}⚡.",
+            "❗ Run /start first.",
             parse_mode=ParseMode.MARKDOWN
         )
 
-    # 5) Deduct & schedule
-    prow[3], prow[4], prow[5] = str(credits - cC), str(minerals - cM), str(energy - eC)
-    update_row('Players', prow_idx, prow)
+    if credits < costC or minerals < costM or energy < costE:
+        return await update.message.reply_text(
+            f"❌ Need {costC}💳 {costM}⛏️ {costE}⚡.",
+            parse_mode=ParseMode.MARKDOWN
+        )
 
-    end_ts = time.time() + sec
-    existing = None
-    for bi, brow in enumerate(buildings[1:], start=1):
-        if brow[0] == uid and brow[1] == btype:
-            existing = (bi, brow.copy())
-            break
+    # ─── Deduct & Schedule Upgrade ─────────────────────────────────────────────
+    # Deduct
+    players[pi][3] = str(credits - costC)
+    players[pi][4] = str(minerals - costM)
+    players[pi][5] = str(energy - costE)
+    update_row("Players", pi, players[pi])
 
-    if existing:
-        bi, brow_copy = existing
-        while len(brow_copy) < 4:
-            brow_copy.append('')
-        brow_copy[3] = str(end_ts)
-        update_row('Buildings', bi, brow_copy)
-    else:
-        append_row('Buildings', [uid, btype, str(current_lvl), str(end_ts)])
-
-    # 6) Confirmation
-    confirm_text = (
-        f"🔨 Upgrading {emoji} *{btype}* → Lvl {L}\n"
-        f"Cost: {cC}💳 {cM}⛏️ {eC}⚡ | {format_hhmmss(sec)}"
+    # Schedule
+    end_ts = time.time() + duration
+    existing = next(
+        ((bi, brow) for bi, brow in enumerate(buildings[1:], start=1)
+         if brow[0] == uid and brow[1] == btype),
+        None
     )
-    await update.message.reply_text(confirm_text, parse_mode=ParseMode.MARKDOWN)
+    if existing:
+        bi, brow = existing
+        brow = brow.copy()
+        while len(brow) < 4:
+            brow.append("")
+        brow[3] = str(end_ts)
+        update_row("Buildings", bi, brow)
+    else:
+        append_row("Buildings", [uid, btype, str(current_lvl), str(end_ts)])
 
-handler = CommandHandler('build', build)
+    # ─── Confirmation UI ───────────────────────────────────────────────────────
+    lines = [
+        section_header(f"🔨 Upgrading {btype} → Level {next_lvl}", pad_char="-", pad_count=3),
+        "",
+        f"{emoji} *{btype}* now at Level *{next_lvl}*",
+        f"Cost: {costC}💳 {costM}⛏️ {costE}⚡",
+        f"Duration: {format_hhmmss(duration)}",
+    ]
+    kb = InlineKeyboardMarkup.from_row([
+        InlineKeyboardButton("⏳ View Queue", callback_data="queue"),
+        InlineKeyboardButton("📊 Check Status", callback_data="status"),
+    ])
+
+    await update.message.reply_text(
+        "\n".join(lines),
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=kb
+    )
+
+handler = CommandHandler("build", build)
