@@ -1,5 +1,3 @@
-# handlers/status.py
-
 from datetime import datetime
 import html
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -16,7 +14,12 @@ from modules.building_manager import (
 )
 from modules.unit_manager import UNITS
 from sheets_service import get_rows
-from utils.format_utils import format_bar, get_building_emoji, get_build_costs
+from utils.format_utils import (
+    format_bar,
+    get_building_emoji,
+    get_build_costs,
+    section_header,
+)
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_user.id)
@@ -66,20 +69,19 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # ─── Build Status Text ─────────────────────────────────────────────────
     lines = []
-    # Resources
-    lines.append("----- Resources & Supplies -----")
+    lines.append(section_header("Resources & Supplies"))
     lines.append(f"🪙 Credits   : {credits}")
     lines.append(f"⛏️ Minerals : {minerals}")
     lines.append(f"⚡ Energy   : {energy}")
     if tick_str:
         lines.append(f"⏱ Tick in   : {tick_str}")
     lines.append("")
-    # Production
-    lines.append("----- Production / min -----")
+
+    lines.append(section_header("Production / min"))
     lines.append(f"🪙 {rates['credits']}   ⛏️ {rates['minerals']}   ⚡ {rates['energy']}")
     lines.append("")
-    # Infrastructure
-    lines.append("----- Infrastructure Status -----")
+
+    lines.append(section_header("Infrastructure Status"))
     for b in all_bld:
         lvl        = binfo.get(b, 0)
         hp         = health.get(b, {"current": 0, "max": 0})
@@ -88,14 +90,14 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         bar        = format_bar(current_hp, max_hp)
         lines.append(f"{get_building_emoji(b)} {b}: Lvl {lvl} {bar} ({current_hp}/{max_hp})")
     lines.append("")
-    # Army Strength
-    lines.append("----- Army Strength -----")
+
+    lines.append(section_header("Army Strength"))
     total_power = (garrison_power + deployed_power) or 1
     lines.append(f"🛡️ Garrison : {format_bar(garrison_power, total_power)} ({garrison_power})")
     lines.append(f"🚚 Deployed : {format_bar(deployed_power, total_power)} ({deployed_power})")
     lines.append("")
-    # Garrison Composition
-    lines.append("----- Garrison Composition -----")
+
+    lines.append(section_header("Garrison Composition"))
     if garrison:
         for key, cnt in garrison.items():
             disp, emoji, *_ = UNITS[key]
@@ -103,8 +105,8 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         lines.append("None")
     lines.append("")
-    # Deployed Forces
-    lines.append("----- Deployed Forces -----")
+
+    lines.append(section_header("Deployed Forces"))
     if deployed:
         for key, cnt in deployed.items():
             disp, emoji, *_ = UNITS[key]
@@ -112,8 +114,8 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         lines.append("None")
     lines.append("")
-    # Next Upgrade Paths
-    lines.append("----- Next Upgrade Paths -----")
+
+    lines.append(section_header("Next Upgrade Paths"))
     for b in all_bld:
         lvl = binfo.get(b, 0)
         nl  = lvl + 1
@@ -129,19 +131,16 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"{get_building_emoji(b)} {b}: {lvl}→{nl} | cost 🪙{cC}, ⛏️{cM}, ⚡{eC} | {gain_str}"
         )
 
-    # Wrap in HTML for monospace presentation
     report = "\n".join(lines)
     text = (
         f"<b>🛡️⚔️ War Report: Commander {commander} ⚔️🛡️</b>\n"
         f"<pre>{html.escape(report)}</pre>"
     )
 
-    # Refresh Button
     kb = InlineKeyboardMarkup.from_button(
         InlineKeyboardButton("🔄 Refresh Report", callback_data="status")
     )
 
-    # Send or Edit
     if update.message:
         await update.message.reply_text(text, parse_mode=ParseMode.HTML, reply_markup=kb)
     else:
