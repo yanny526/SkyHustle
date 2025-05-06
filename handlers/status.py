@@ -1,9 +1,9 @@
 from datetime import datetime
+import html
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.error import BadRequest
 from telegram.ext import CommandHandler, CallbackQueryHandler, ContextTypes
-import html
 
 from config import BUILDING_MAX_LEVEL
 from modules.building_manager import (
@@ -14,6 +14,7 @@ from modules.building_manager import (
 )
 from modules.unit_manager import UNITS
 from sheets_service import get_rows
+from utils.format_utils import format_bar, get_building_emoji
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_user.id)
@@ -80,12 +81,16 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for b in all_bld:
         lvl = binfo.get(b, 0)
         hp  = health.get(b, {"current": 0, "max": 0})
-        lines.append(f"{b}: Lvl {lvl} (HP {hp['current']}/{hp['max']})")
+        current_hp = hp["current"]
+        max_hp = hp["max"]
+        bar = format_bar(current_hp, max_hp)
+        lines.append(f"{get_building_emoji(b)} {b}: Lvl {lvl} {bar} ({current_hp}/{max_hp})")
     lines.append("")
     # Army Strength
     lines.append("----- Army Strength -----")
-    lines.append(f"🛡️ Garrison : {garrison_power}⚔️")
-    lines.append(f"🚚 Deployed : {deployed_power}⚔️")
+    total_power = (garrison_power + deployed_power) or 1
+    lines.append(f"🛡️ Garrison : {format_bar(garrison_power, total_power)} ({garrison_power})")
+    lines.append(f"🚚 Deployed : {format_bar(deployed_power, total_power)} ({deployed_power})")
     lines.append("")
     # Garrison Composition
     lines.append("----- Garrison Composition -----")
@@ -115,7 +120,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         prod_info    = PRODUCTION_PER_LEVEL.get(b)
         if prod_info:
             key, per = prod_info
-            gain = per*nl - per*lvl
+            gain = per * nl - per * lvl
             gain_str = f"+{gain} {key}/min"
         else:
             gain_str = "–"
