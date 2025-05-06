@@ -85,7 +85,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lines.append("")
 
     lines.append(section_header("Production / min"))
-    lines.append(f"🪙 {rates['credits']}   ⛏️ {rates['minerals']}   ⚡ {rates['energy']}")
+    lines.append(f"💳 {rates['credits']}   ⛏️ {rates['minerals']}   ⚡ {rates['energy']}")
     lines.append("")
 
     lines.append(section_header("Infrastructure Status"))
