@@ -30,15 +30,33 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Retrieve Player Data
     players = get_rows("Players")
+    commander = "Unknown Commander"
+    credits = 0
+    minerals = 0
+    energy = 0
+    premium_credits = 0
+    last_login = "N/A"
     for row in players[1:]:
         if row[0] == uid:
-            commander = html.escape(row[1] or "Unknown")
-            credits = int(row[3])
-            minerals = int(row[4])
-            energy = int(row[5])
-            premium_credits = int(row[7]) if len(row) > 7 else 0  # New premium currency
-            last_raw = row[6] if len(row) > 6 else None
-            last_seen = int(last_raw) if last_raw and last_raw.isdigit() else None
+            commander = html.escape(row[1] or "Unknown Commander")
+            try:
+                credits = int(row[3])
+            except:
+                credits = 0
+            try:
+                minerals = int(row[4])
+            except:
+                minerals = 0
+            try:
+                energy = int(row[5])
+            except:
+                energy = 0
+            try:
+                premium_credits = int(row[7]) if len(row) > 7 else 0
+            except:
+                premium_credits = 0
+            if len(row) > 6 and row[6]:
+                last_login = datetime.fromtimestamp(int(row[6])).strftime('%Y-%m-%d %H:%M')
             break
     else:
         return await update.message.reply_text("❗ Please run /start first.")
@@ -66,16 +84,11 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Supply Tick Countdown
     tick_str = ""
-    if last_seen is not None:
-        secs_left = max(0, (last_seen + 3600) - now.timestamp())
-        m, s = divmod(int(secs_left), 60)
-        tick_str = f"{m}m{s:02d}s"
 
     # Build Status Text
     lines = []
     lines.append(section_header("WAR ROOM BRIEFING", "🏰", color="gold"))
     lines.append(f"  Commander: [{commander}]")
-    lines.append(f"  Login Streak: [{streak}] days")
     lines.append(f"  Last Login: [{last_login}]")
     lines.append("")
 
@@ -124,18 +137,17 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"{get_building_emoji(b)} {b}: {lvl}→{nl} | cost 💳{cC}, ⛏️{cM}, ⚡{eC} | {gain_str}"
         )
 
+    lines.append(section_header("AVAILABLE ABILITIES", "✨", color="purple"))
+    lines.append("Use `/ability` to see special abilities for your units")
+    lines.append("Premium members can purchase abilities to enhance their units in battle!")
+
     report = "\n".join(lines)
     text = (
         f"<b>⚔️🏰 WAR ROOM BRIEFING: Commander {commander} 🏰⚔️</b>\n"
         f"<pre>{html.escape(report)}</pre>"
     )
 
-    kb = InlineKeyboardMarkup([[
-        InlineKeyboardButton("🔄 Refresh", callback_data="status"),
-        InlineKeyboardButton("🏗️ Build", callback_data="build"),
-        InlineKeyboardButton("⏳ Queue", callback_data="queue"),
-        InlineKeyboardButton("⭐ Premium", callback_data="premium"),
-    ]])
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton("🔄 Refresh", callback_data="status")]])
 
     if update.message:
         await update.message.reply_text(text, parse_mode=ParseMode.HTML, reply_markup=kb)
@@ -146,26 +158,11 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def status_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    data = query.data
-
     await query.answer()
+    data = query.data
 
     if data == "status":
         return await status(update, context)
 
-    elif data == "queue":
-        from handlers.queue import queue
-        return await queue(update, context)
-
-    elif data == "build":
-        return await query.message.reply_text(
-            "Usage: `/build <building>`\nValid: mine, powerplant, barracks, workshop",
-            parse_mode=ParseMode.MARKDOWN
-        )
-
-    elif data == "premium":
-        from handlers.premium import premium
-        return await premium(update, context)
-
 handler = CommandHandler("status", status)
-callback_handler = CallbackQueryHandler(status_button, pattern="^(status|build|queue|premium)$")
+callback_handler = CallbackQueryHandler(status_button, pattern="^(status)$")
