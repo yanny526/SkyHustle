@@ -1,4 +1,3 @@
-THIS IS MY CURRENT ATTACK.PY file
 
 # handlers/attack.py
 
