@@ -33,12 +33,9 @@ from handlers.challenges import daily, weekly
 from handlers.whisper import handler as whisper_handler
 from handlers.inbox import handler as inbox_handler
 
-# Chaos system
-from handlers.chaos import handler as chaos_handler
-from handlers.chaos_test import handler as chaos_test_handler
-from handlers.chaos_event import chaos_event_job
-from handlers.chaos_pre_notice import chaos_pre_notice_job
-
+# ←── Import AI handlers here
+from handlers.ai_commands import handler as ai_commands_handler
+from handlers.ai_commands import callback_handler as ai_callback_handler
 
 def main():
     # 1) Initialize Sheets & headers
@@ -75,9 +72,9 @@ def main():
     app.add_handler(whisper_handler)
     app.add_handler(inbox_handler)
 
-    # Chaos commands
-    app.add_handler(chaos_handler)       # /chaos preview
-    app.add_handler(chaos_test_handler)  # /chaos_test (admin)
+    # ←── Register AI handlers here
+    app.add_handler(ai_commands_handler)
+    app.add_handler(ai_callback_handler)
 
     # 4) Slash commands
     async def set_bot_commands(app):
@@ -96,6 +93,7 @@ def main():
             BotCommand("whisper",      "🤫 Send a private message"),
             BotCommand("inbox",        "📬 View your private messages"),
             BotCommand("help",         "🆘 Show help & all commands"),
+            BotCommand("ai",           "🤖 Challenge AI opponents")  # <- Added AI command
         ]
         await app.bot.set_my_commands(commands)
 
@@ -106,23 +104,7 @@ def main():
         await update.message.reply_text("❓ Unknown command. Use /help.")
     app.add_handler(MessageHandler(filters.COMMAND, unknown))
 
-    # 6) Schedule chaos pre-notice checker every minute
-    app.job_queue.run_repeating(
-        chaos_pre_notice_job,
-        interval=60,
-        first=0,
-        name="chaos_pre_notice_checker"
-    )
-
-    # 7) Schedule weekly Chaos Storm (Mon @ 09:00 UTC)
-    app.job_queue.run_daily(
-        chaos_event_job,
-        days=(0,),  # Monday
-        time=dtime(hour=9, minute=0),
-        name="weekly_chaos_storm"
-    )
-
-    # 8) Start polling
+    # 6) Start polling
     app.run_polling()
 
 
