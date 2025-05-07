@@ -13,9 +13,9 @@ from modules.unit_manager import UNITS  # dynamic unit power lookup
 async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     /leaderboard – show top commanders by power (and auto-reward Top 3).
-    Works for both messages and callback queries.
+    Also handles callback queries for “Refresh” and “Help”.
     """
-    # If this was triggered by a button, answer it to remove the “loading” spinner
+    # if this came from a button, clear the “loading” state
     if update.callback_query:
         await update.callback_query.answer()
 
@@ -29,12 +29,13 @@ async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "View the ranking of top commanders by combined base & army power.",
             "",
             section_header("📜 Usage", pad_char="-", pad_count=3),
-            "`/leaderboard` → Show the top 10 commanders.",
+            "`/leaderboard`",
+            "→ Show the top 10 commanders.",
             "",
             "🏅 Top 3 Placement",
-            "Rewards (2 000💳, 1 000⛏️) are granted once when you first hit Top 3.",
+            "Rewards are automatically granted when you enter the Top 3 for the first time.",
             "",
-            "Tap 🔄 to refresh or type `/leaderboard` again."
+            "Use `/leaderboard` anytime to refresh this list."
         ]
         text = "\n".join(lines)
         kb = InlineKeyboardMarkup.from_button(
@@ -63,11 +64,11 @@ async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Army power
     army_rows = get_rows('Army')[1:]
     army_power = {}
-    for uid, unit_key, cnt in army_rows:
+    for uid, unit_key, cnt_str in army_rows:
         if unit_key in UNITS:
             power = UNITS[unit_key][3]
             try:
-                army_power[uid] = army_power.get(uid, 0) + int(cnt) * power
+                army_power[uid] = army_power.get(uid, 0) + int(cnt_str) * power
             except ValueError:
                 pass
 
@@ -85,27 +86,27 @@ async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     for pos, (uid, name, _) in enumerate(scores[:3], start=1):
         for ridx, prow in enumerate(players_sheet[1:], start=1):
-            if prow[0] == uid:
-                # ensure row is long enough
-                while len(prow) < len(header):
-                    prow.append("")
-                # if not yet badged
-                if badge_idx is not None and prow[badge_idx] != badge_text:
-                    prow[3] = str(int(prow[3]) + credit_reward)
-                    prow[4] = str(int(prow[4]) + mineral_reward)
-                    prow[badge_idx] = badge_text
-                    update_row('Players', ridx, prow)
-                    congrats = (
-                        f"🎉 Commander *{name}* reached *Top {pos}*! 🎉\n"
-                        f"Rewards: +{credit_reward}💳 +{mineral_reward}⛏️"
+            if prow[0] != uid:
+                continue
+            # extend row if needed
+            while len(prow) < len(header):
+                prow.append("")
+            if badge_idx is not None and prow[badge_idx] != badge_text:
+                prow[3] = str(int(prow[3]) + credit_reward)
+                prow[4] = str(int(prow[4]) + mineral_reward)
+                prow[badge_idx] = badge_text
+                update_row('Players', ridx, prow)
+                congrats = (
+                    f"🎉 Commander *{name}* reached *Top {pos}*! 🎉\n"
+                    f"Rewards: +{credit_reward}💳 +{mineral_reward}⛏️"
+                )
+                if update.message:
+                    await update.message.reply_text(congrats, parse_mode=ParseMode.MARKDOWN)
+                else:
+                    await update.callback_query.bot.send_message(
+                        update.effective_chat.id, congrats, parse_mode=ParseMode.MARKDOWN
                     )
-                    if update.message:
-                        await update.message.reply_text(congrats, parse_mode=ParseMode.MARKDOWN)
-                    else:
-                        await update.callback_query.bot.send_message(
-                            update.effective_chat.id, congrats, parse_mode=ParseMode.MARKDOWN
-                        )
-                break
+            break
 
     # ─── Build Leaderboard UI ────────────────────────────────────────────────
     lines = [section_header("🏆 Leaderboard", pad_char="=", pad_count=3), ""]
@@ -114,7 +115,7 @@ async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
         prefix = medals.get(idx, f"{idx}.")
         lines.append(f"{prefix} *{name}* — {power} Power")
     lines.append("")
-    lines.append("Tap 🔄 to refresh or ❓ for help.")
+    lines.append("Type `/leaderboard help` for usage info.")
 
     text = "\n".join(lines)
     kb = InlineKeyboardMarkup([
@@ -130,10 +131,10 @@ async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def leaderboard_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    Catch both “leaderboard” and “leaderboard_help” callbacks,
-    set context.args accordingly, then re‑invoke leaderboard().
+    Handle both “leaderboard” (refresh) and “leaderboard_help” callbacks.
     """
     data = update.callback_query.data
+    # map callback to args so /leaderboard help runs
     if data == "leaderboard_help":
         context.args = ["help"]
     else:
@@ -141,6 +142,6 @@ async def leaderboard_button(update: Update, context: ContextTypes.DEFAULT_TYPE)
     return await leaderboard(update, context)
 
 
-# Export two handlers: one for /leaderboard and one for callbacks
+# Register both the command and its callbacks
 handler          = CommandHandler('leaderboard', leaderboard)
 callback_handler = CallbackQueryHandler(leaderboard_button, pattern=r"^leaderboard(_help)?$")
