@@ -33,7 +33,12 @@ async def reports(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if len(parts) == 2 and parts[1].isdigit():
             page = max(1, int(parts[1]))
 
-    chat_id = str(update.effective_chat.id)
+    # Identify the user (works in private or groups)
+    if update.message:
+        user_id = str(update.effective_user.id)
+    else:
+        user_id = str(update.callback_query.from_user.id)
+
     now = datetime.now(timezone.utc)
 
     raw = get_rows(PEND_SHEET)[1:]
