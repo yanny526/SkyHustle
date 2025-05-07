@@ -13,7 +13,10 @@ from utils.decorators import game_command
 def _build_army_lines(uid: str):
     # Fetch player name
     players = get_rows('Players')[1:]
-    commander = next((r[1] for r in players if r[0] == uid), "Commander")
+    commander = next(
+        (r[1] for r in players if r[0] == uid),
+        "Commander"
+    )
 
     # Fetch your unit counts
     army_rows = get_rows('Army')[1:]
@@ -62,58 +65,50 @@ def _build_army_lines(uid: str):
                     )
         lines.append("")
 
+    # Footer hint
     lines.append("🔄 Use `/army` again to refresh this overview.")
     return lines
 
 @game_command
 async def army(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_user.id)
-    text = "\n".join(_build_army_lines(uid))
+    lines = _build_army_lines(uid)
+    text = "\n".join(lines)
 
+    # Single row: Refresh | Attack | Build
     kb = InlineKeyboardMarkup([[
         InlineKeyboardButton("🔄 Refresh", callback_data="army"),
-        InlineKeyboardButton("🏹 Attack",  callback_data="army_attack"),
-        InlineKeyboardButton("🏗️ Build",   callback_data="army_build"),
+        InlineKeyboardButton("🏹 Attack",  callback_data="attack"),
+        InlineKeyboardButton("🏗️ Build",   callback_data="build"),
     ]])
 
     if update.message:
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
     else:
+        await update.callback_query.answer()
         await update.callback_query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
 
 async def army_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.callback_query.data == "army":
+    data = update.callback_query.data
+    if data == "army":
         return await army(update, context)
-
-async def army_attack_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.callback_query.answer()
-    await context.bot.send_message(
-        chat_id=update.effective_chat.id,
-        text=(
-            "❗ **How to Attack:**\n"
-            "`/attack <Commander> -u infantry:10 tanks:5 ...`\n"
-            "`Optional flags:`\n"
-            "  • `-s <count>` to send scouts first\n"
-            "  • `--scout-only` to only scout\n"
-            "  • `-c <CODE>` to cancel a pending attack\n"
-        ),
-        parse_mode=ParseMode.MARKDOWN
-    )
-
-async def army_build_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.callback_query.answer()
-    await context.bot.send_message(
-        chat_id=update.effective_chat.id,
-        text=(
-            "❗ **How to Build:**\n"
-            "`/build <BuildingType>`\n"
-            "Example: `/build Bank` to upgrade your Bank by 1 level."
-        ),
-        parse_mode=ParseMode.MARKDOWN
-    )
+    if data == "attack":
+        await update.callback_query.answer()
+        return await update.callback_query.edit_message_text(
+            "❗ To launch an attack, use:\n"
+            "`/attack <Commander> -u infantry:10 tanks:5 ... [-s <scouts>]`\n\n"
+            "🔄 Tap Refresh to go back to your army overview.",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    if data == "build":
+        await update.callback_query.answer()
+        return await update.callback_query.edit_message_text(
+            "❗ To upgrade or construct, use:\n"
+            "`/build <BuildingType>`\n\n"
+            "🔄 Tap Refresh to go back to your army overview.",
+            parse_mode=ParseMode.MARKDOWN
+        )
 
 # Export handlers
-handler           = CommandHandler('army', army)
-callback_handler  = CallbackQueryHandler(army_button,        pattern="^army$")
-attack_callback   = CallbackQueryHandler(army_attack_button, pattern="^army_attack$")
-build_callback    = CallbackQueryHandler(army_build_button,  pattern="^army_build$")
+handler          = CommandHandler('army', army)
+callback_handler = CallbackQueryHandler(army_button, pattern="^(army|attack|build)$")
