@@ -21,7 +21,8 @@ REQUIRED_SHEETS = [
     'Leaderboard',
     'Upgrades',
     'AI_Commanders',
-    'AI_Army'
+    'AI_Army',
+    'UnitAbilities'  # New sheet
 ]
 
 _HEADERS = {
@@ -32,7 +33,8 @@ _HEADERS = {
     'Leaderboard': ['user_id', 'total_power', 'rank'],
     'Upgrades': ['user_id', 'building_type', 'start_ts', 'end_ts', 'target_level'],
     'AI_Commanders': ['user_id', 'commander_name', 'credits', 'minerals', 'energy'],
-    'AI_Army': ['ai_id', 'unit_type', 'count']
+    'AI_Army': ['ai_id', 'unit_type', 'count'],
+    'UnitAbilities': ['user_id', 'unit_type', 'ability_id', 'level']  # New header
 }
 
 def init():
