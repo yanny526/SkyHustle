@@ -40,7 +40,6 @@ async def reports(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = str(update.callback_query.from_user.id)
 
     now = datetime.now(timezone.utc)
-
     raw = get_rows(PEND_SHEET)[1:]
     ops = []
     players = {r[0]: r[1] for r in get_rows("Players")[1:]}
@@ -62,11 +61,11 @@ async def reports(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             secs, eta = float('inf'), "??"
 
-        # outgoing or incoming
-        if uid == chat_id:
+        # Determine outgoing vs incoming
+        if uid == user_id:
             role = 'outgoing'
             actor = defender_name
-        elif defender_id == chat_id:
+        elif defender_id == user_id:
             role = 'incoming'
             parts = job_name.split("_")
             attacker_id = parts[1] if len(parts) > 1 else None
@@ -74,7 +73,7 @@ async def reports(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             continue
 
-        # build entry
+        # Build entry
         entry = { 'type': typ, 'role': role, 'actor': actor, 'eta': eta, 'secs': secs, 'code': code_str }
         if typ == 'scout':
             entry['count'] = int(scouts) if scouts.isdigit() else 1
@@ -86,7 +85,7 @@ async def reports(update: Update, context: ContextTypes.DEFAULT_TYPE):
             entry['comp'] = ' '.join(f"{UNITS[k][1]}×{v}" for k,v in comp.items()) or 'All troops'
         ops.append(entry)
 
-    # sort by soonest
+    # sort by ETA
     ops.sort(key=lambda o: o['secs'])
     total = len(ops)
     total_pages = max(1, ceil(total / PAGE_SIZE))
@@ -121,7 +120,7 @@ async def reports(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 else:
                     lines.append(f"• 🚨 Incoming attack by *{o['actor']}* — {o['comp']} — ETA {o['eta']} — {md_code(o['code'])}")
         lines.append("")
-        lines.append("❗ Cancel with `/attack -c <code>`.")
+        lines.append("❗ Cancel with `/attack -c <code>`. ")
 
     text = "\n".join(lines)
 
