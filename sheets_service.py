@@ -22,6 +22,8 @@ REQUIRED_SHEETS = [
     'CombatLog',
     'Leaderboard',
     'Upgrades',
+    'AI_Commanders',  # <- Added AI sheet
+    'AI_Army'        # <- Added AI army sheet
 ]
 
 # Default header row for each tab
@@ -32,6 +34,8 @@ _HEADERS = {
     'CombatLog':   ['attacker_id', 'defender_id', 'timestamp', 'result', 'spoils_credits'],
     'Leaderboard': ['user_id', 'total_power', 'rank'],
     'Upgrades':    ['user_id', 'building_type', 'start_ts', 'end_ts', 'target_level'],
+    'AI_Commanders': ['user_id', 'commander_name', 'credits', 'minerals', 'energy'],  # <- Added AI headers
+    'AI_Army': ['ai_id', 'unit_type', 'count']  # <- Added AI army headers
 }
 
 def init():
@@ -63,10 +67,13 @@ def _ensure_header_row(sheet_name: str, header: list[str]):
     Check the first row of `sheet_name`; if it doesn't match `header`, overwrite it.
     """
     range_name = f"{sheet_name}!1:1"
-    result = _service.spreadsheets().values().get(
-        spreadsheetId=SHEET_ID,
-        range=range_name
-    ).execute()
+    try:
+        result = _service.spreadsheets().values().get(
+            spreadsheetId=SHEET_ID,
+            range=range_name
+        ).execute()
+    except HttpError:
+        result = {'values': []}
     existing = result.get('values', [])
     if not existing or existing[0] != header:
         _service.spreadsheets().values().update(
@@ -82,10 +89,13 @@ def get_rows(sheet_name: str) -> list[list[str]]:
     """
     time.sleep(0.5)  # guard against eventual consistency after modifications
     range_name = f"{sheet_name}!A1:Z"
-    resp = _service.spreadsheets().values().get(
-        spreadsheetId=SHEET_ID,
-        range=range_name
-    ).execute()
+    try:
+        resp = _service.spreadsheets().values().get(
+            spreadsheetId=SHEET_ID,
+            range=range_name
+        ).execute()
+    except HttpError:
+        return []
     return resp.get('values', [])
 
 def update_row(sheet_name: str, row_index: int, values: list[str]):
