@@ -201,7 +201,7 @@ async def combat_resolution_job(context: ContextTypes.DEFAULT_TYPE):
 @game_command
 async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    /attack <Commander> -u infantry:5 tanks:2 ... [-s <scouts>] [--scout-only] [-c CODE]
+    /attack <Commander> -u infantry:5 tanks:2 ... [-s <scouts>] [-c CODE]
     """
     user = update.effective_user
     uid = str(user.id)
@@ -219,8 +219,8 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "`/attack <Commander> -u infantry:5 tanks:2`\n"
             "→ Launch a combined arms strike.\n\n"
             "=== 🔎 Recon Only ===\n"
-            "`/attack <Commander> --scout-only -s 3`\n"
-            "→ Send 3 scouts to gather intel.\n\n"
+            "`/attack <Commander> -s 3`\n"
+            "→ Send 3 scouts to gather intel (scout only).\n\n"
             "=== ❌ Abort Mission ===\n"
             "`/attack -c <CODE>`\n"
             "→ Cancel an en route mission.\n\n"
@@ -257,6 +257,7 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 row[9] = "cancelled"
                 update_row(PEND_SHEET, idx, row)
 
+                # return troops if attack
                 if row[8] == "attack":
                     _ensure_deploy_sheet()
                     dep = get_rows(DEPLOY_SHEET)
@@ -288,16 +289,14 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 2) Normal dispatch
     if not args:
         return await update.message.reply_text(
-            "❗ Usage: `/attack <Commander> -u infantry:5 tanks:2 ... [-s <scouts>] [--scout-only]`",
+            "❗ Usage: `/attack <Commander> -u infantry:5 tanks:2 ... [-s <scouts>]`",
             parse_mode=ParseMode.MARKDOWN
         )
 
-    scout_only = "--scout-only" in args
-    if scout_only:
-        args.remove("--scout-only")
+    # scout-only when -s provided
+    scout_only = "-s" in args
 
-    target = args.pop(0)
-
+    # scouts and count
     scout_count = 0
     if "-s" in args:
         i = args.index("-s")
@@ -309,6 +308,10 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if i < len(args):
             args.pop(i)
 
+    # target commander
+    target = args.pop(0)
+
+    # custom composition
     comp = {}
     if "-u" in args:
         i = args.index("-u")
@@ -324,11 +327,13 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if k in UNITS and v.isdigit():
                     comp[k] = int(v)
 
+    # default comp unless scouting only
     if not comp and not scout_only:
         for r in get_rows("Army")[1:]:
             if r[0] == uid:
                 comp[r[1]] = int(r[2])
 
+    # locate players
     players = get_rows("Players")
     attacker = defender = None
     atk_i = def_i = None
@@ -345,6 +350,7 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if defender[0] == uid:
         return await update.message.reply_text("❌ You cannot attack yourself!", parse_mode=ParseMode.MARKDOWN)
 
+    # energy check
     energy = int(attacker[5])
     cost   = (0 if scout_only else 5) + scout_count
     if energy < cost:
@@ -359,6 +365,7 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
     code   = f"{random.randint(0,99):02X}{chr(random.randint(65,90))}"
     job_name = None
 
+    # schedule main attack if not scout-only
     if not scout_only:
         army = get_rows("Army")
         job_name = f"attack_{uid}_{defender[0]}_{job_ts}_{code}"
@@ -377,6 +384,7 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
             json.dumps(comp), "0", run_at, "attack", "pending"
         ])
 
+    # schedule scouts if requested
     if scout_count > 0:
         scout_code = f"{random.randint(0,99):02X}{chr(random.randint(65,90))}"
         scout_name = f"scout_{uid}_{defender[0]}_{job_ts}_{scout_code}"
@@ -395,6 +403,7 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
             run_at, "scout", "pending"
         ])
 
+    # schedule combat job
     if job_name:
         context.job_queue.run_once(
             combat_resolution_job,
@@ -412,11 +421,13 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
             }
         )
 
+    # update challenges
     for ch in load_challenges("daily"):
         if ch.key == "attacks":
             update_player_progress(uid, ch)
             break
 
+    # confirmation UI
     parts = [f"{UNITS[k][1]}×{v}" for k,v in comp.items()]
     if scout_count:
         parts.append(f"🔎 Scouts×{scout_count}")
