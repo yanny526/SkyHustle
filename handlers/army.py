@@ -75,18 +75,40 @@ async def army(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lines = _build_army_lines(uid)
     text = "\n".join(lines)
 
-    kb = InlineKeyboardMarkup.from_button(
-        InlineKeyboardButton("🔄 Refresh", callback_data="army")
-    )
+    # Single row: Refresh | Attack | Build
+    kb = InlineKeyboardMarkup([[
+        InlineKeyboardButton("🔄 Refresh", callback_data="army"),
+        InlineKeyboardButton("🏹 Attack",  callback_data="attack"),
+        InlineKeyboardButton("🏗️ Build",   callback_data="build"),
+    ]])
+
     if update.message:
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
     else:
+        await update.callback_query.answer()
         await update.callback_query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
 
 async def army_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.callback_query.data == "army":
+    data = update.callback_query.data
+    if data == "army":
         return await army(update, context)
+    if data == "attack":
+        await update.callback_query.answer()
+        return await update.callback_query.edit_message_text(
+            "❗ To launch an attack, use:\n"
+            "`/attack <Commander> -u infantry:10 tanks:5 ... [-s <scouts>]`\n\n"
+            "🔄 Tap Refresh to go back to your army overview.",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    if data == "build":
+        await update.callback_query.answer()
+        return await update.callback_query.edit_message_text(
+            "❗ To upgrade or construct, use:\n"
+            "`/build <BuildingType>`\n\n"
+            "🔄 Tap Refresh to go back to your army overview.",
+            parse_mode=ParseMode.MARKDOWN
+        )
 
 # Export handlers
 handler          = CommandHandler('army', army)
-callback_handler = CallbackQueryHandler(army_button, pattern="^army$")
+callback_handler = CallbackQueryHandler(army_button, pattern="^(army|attack|build)$")
