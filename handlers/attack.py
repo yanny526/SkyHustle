@@ -15,14 +15,14 @@ from modules.unit_manager import UNITS
 from modules.challenge_manager import load_challenges, update_player_progress
 
 # where we track troops in flight
-DEPLOY_SHEET = "DeployedArmy"
-DEPLOY_HEADER = ["job_name", "uid", "unit_key", "quantity"]
+DEPLOY_SHEET  = "DeployedArmy"
+DEPLOY_HEADER = ["job_name","uid","unit_key","quantity"]
 
 # where we track pending operations & their codes
-PEND_SHEET = "PendingActions"
+PEND_SHEET  = "PendingActions"
 PEND_HEADER = [
-    "job_name", "code", "uid", "defender_id", "defender_name",
-    "composition", "scout_count", "run_time", "type", "status"
+    "job_name","code","uid","defender_id","defender_name",
+    "composition","scout_count","run_time","type","status"
 ]
 
 def _ensure_deploy_sheet():
@@ -36,11 +36,11 @@ def _ensure_pending_sheet():
         append_row(PEND_SHEET, PEND_HEADER)
 
 async def scout_report_job(context: ContextTypes.DEFAULT_TYPE):
-    data = context.job.data
-    chat_id = int(data["uid"])
-    defender_id = data["defender_id"]
+    data          = context.job.data
+    chat_id       = int(data["uid"])
+    defender_id   = data["defender_id"]
     defender_name = data["defender_name"]
-    job_name = context.job.name
+    job_name      = context.job.name
 
     # Build the scouting report
     army = get_rows("Army")
@@ -79,16 +79,15 @@ async def scout_report_job(context: ContextTypes.DEFAULT_TYPE):
             break
 
 async def combat_resolution_job(context: ContextTypes.DEFAULT_TYPE):
-    data = context.job.data
-    uid = data["uid"]
-    defender_id = data["defender_id"]
-    defender_name = data["defender_name"]
-    attacker_name = data["attacker_name"]
-    atk_i = data["atk_i"]
-    def_i = data["def_i"]
-    comp = data["composition"]
-    ts = data["timestamp"]
-    job_name = context.job.name
+    data           = context.job.data
+    uid            = data["uid"]
+    defender_id    = data["defender_id"]
+    defender_name  = data["defender_name"]
+    attacker_name  = data["attacker_name"]
+    atk_i, def_i   = data["atk_i"], data["def_i"]
+    comp           = data["composition"]
+    ts             = data["timestamp"]
+    job_name       = context.job.name
 
     # 1) Pull back the in‑flight detachment
     _ensure_deploy_sheet()
@@ -112,9 +111,9 @@ async def combat_resolution_job(context: ContextTypes.DEFAULT_TYPE):
     def_power = sum(v * UNITS[k][3] for k, v in full_def.items()) * random.uniform(0.9, 1.1)
 
     # 4) Resolve win/loss & spoils
-    players = get_rows("Players")
-    attacker_row = players[atk_i]
-    defender_row = players[def_i]
+    players       = get_rows("Players")
+    attacker_row  = players[atk_i]
+    defender_row  = players[def_i]
     if atk_power > def_power:
         result = "win"
         spoils = max(1, int(defender_row[3]) // 10)
@@ -137,9 +136,9 @@ async def combat_resolution_job(context: ContextTypes.DEFAULT_TYPE):
 
     surv, cas = {}, {}
     for key, sent in comp.items():
-        lost = sent - survival(sent, atk_power, def_power)
+        lost      = sent - survival(sent, atk_power, def_power)
         surv[key] = sent - lost
-        cas[key] = lost
+        cas[key]  = lost
 
     # 6) Return survivors to your garrison
     army_rows = get_rows("Army")
@@ -189,11 +188,37 @@ async def combat_resolution_job(context: ContextTypes.DEFAULT_TYPE):
 @game_command
 async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    /attack <Commander> -u infantry:10 tanks:5 ... [-s <scouts>] [--scout-only] [-c CODE]
+    /attack <Commander> -u infantry:5 tanks:2 ... [-s <scouts>] [--scout-only] [-c CODE]
     """
     user = update.effective_user
     uid = str(user.id)
     args = context.args.copy()
+
+    # Enhanced help UI when no arguments provided
+    if not args:
+        kb = InlineKeyboardMarkup.from_button(
+            InlineKeyboardButton("📜 View Pending", callback_data="reports")
+        )
+        help_text = (
+            "----- 🏰 COMMAND CENTER: Attack Protocols -----\n\n"
+            "Welcome, Commander! Issue your orders with confidence:\n\n"
+            "=== ⚔️ Standard Assault ===\n"
+            "`/attack <Commander> -u infantry:5 tanks:2`\n"
+            "→ Launch a combined arms strike.\n\n"
+            "=== 🔎 Recon Only ===\n"
+            "`/attack <Commander> --scout-only -s 3`\n"
+            "→ Send 3 scouts to gather intel.\n\n"
+            "=== ❌ Abort Mission ===\n"
+            "`/attack -c <CODE>`\n"
+            "→ Cancel an en route mission.\n\n"
+            "After dispatch, press *View Pending* below to track missions."
+        )
+        return await update.message.reply_text(
+            help_text,
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=kb
+        )
+
     chat_id = update.effective_chat.id
 
     # 1) Cancellation?
@@ -253,7 +278,7 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 2) Normal dispatch
     if not args:
         return await update.message.reply_text(
-            "❗ Usage: `/attack <Commander> -u infantry:10 tanks:5 ... [-s <scouts>] [--scout-only]`",
+            "❗ Usage: `/attack <Commander> -u infantry:5 tanks:2 ... [-s <scouts>] [--scout-only]`",
             parse_mode=ParseMode.MARKDOWN
         )
 
@@ -317,7 +342,7 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # energy check
     energy = int(attacker[5])
-    cost = (0 if scout_only else 5) + scout_count
+    cost   = (0 if scout_only else 5) + scout_count
     if energy < cost:
         return await update.message.reply_text(f"❌ Need {cost}⚡ but have {energy}⚡.", parse_mode=ParseMode.MARKDOWN)
     attacker[5] = str(energy - cost)
@@ -328,7 +353,7 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
     _ensure_pending_sheet()
 
     job_ts = str(int(time.time()))
-    code = f"{random.randint(0,99):02X}{chr(random.randint(65,90))}"
+    code   = f"{random.randint(0,99):02X}{chr(random.randint(65,90))}"
     job_name = None
 
     if not scout_only:
