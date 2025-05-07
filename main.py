@@ -7,23 +7,19 @@ from telegram import BotCommand
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 from datetime import time as dtime
 
-# Handlers
-from handlers.start import handler as start_handler
-from handlers.setname import handler as setname_handler
-from handlers.status import handler as status_handler, callback_handler as status_callback
-from handlers.build import handler as build_handler
-from handlers.queue import handler as queue_handler
-from handlers.train import handler as train_handler
-
-# ←── Import both the CommandHandler *and* the new CallbackQueryHandler
-from handlers.attack import handler    as attack_handler, \
-                             callback_handler as attack_callback
-
-from handlers.reports import handler as reports_handler, callback_handler as reports_callback
+# — Your existing handlers —
+from handlers.start       import handler as start_handler
+from handlers.setname     import handler as setname_handler
+from handlers.status      import handler as status_handler, callback_handler as status_callback
+from handlers.build       import handler as build_handler
+from handlers.queue       import handler as queue_handler
+from handlers.train       import handler as train_handler
+from handlers.attack      import handler as attack_handler
+from handlers.reports     import handler as reports_handler, callback_handler as reports_callback
 from handlers.leaderboard import handler as leaderboard_handler, callback_handler as leaderboard_callback
-from handlers.help import handler as help_handler
+from handlers.help        import handler as help_handler
 
-# Army (with your extra army callbacks)
+# ←── Army and its three callbacks
 from handlers.army import (
     handler           as army_handler,
     callback_handler  as army_callback,
@@ -32,14 +28,13 @@ from handlers.army import (
 )
 
 from handlers.achievements import handler as achievements_handler
-from handlers.announce import handler as announce_handler
-from handlers.challenges import daily, weekly
-from handlers.whisper import handler as whisper_handler
-from handlers.inbox import handler as inbox_handler
+from handlers.announce     import handler as announce_handler
+from handlers.challenges   import daily, weekly
+from handlers.whisper      import handler as whisper_handler
+from handlers.inbox        import handler as inbox_handler
 
-# Chaos system
-from handlers.chaos import handler as chaos_handler
-from handlers.chaos_test import handler as chaos_test_handler
+from handlers.chaos       import handler as chaos_handler
+from handlers.chaos_test  import handler as chaos_test_handler
 from handlers.chaos_event import chaos_event_job
 from handlers.chaos_pre_notice import chaos_pre_notice_job
 
@@ -59,23 +54,18 @@ def main():
     app.add_handler(build_handler)
     app.add_handler(queue_handler)
     app.add_handler(train_handler)
-
-    # ─── Your Attack handlers ──────────────────────────────────────────────
-    app.add_handler(attack_handler)    # `/attack …`
-    app.add_handler(attack_callback)   # ⚔️ Attack button on that help card
-
-    app.add_handler(reports_handler)   # `/reports`
-    app.add_handler(reports_callback)  # 📜 View Pending
-
+    app.add_handler(attack_handler)
+    app.add_handler(reports_handler)
+    app.add_handler(reports_callback)
     app.add_handler(leaderboard_handler)
     app.add_handler(leaderboard_callback)
     app.add_handler(help_handler)
 
-    # ─── Army (with its three callbacks) ───────────────────────────────────
-    app.add_handler(army_handler)
-    app.add_handler(army_callback)
-    app.add_handler(army_attack_callback)
-    app.add_handler(army_build_callback)
+    # ←── Army page + inline buttons
+    app.add_handler(army_handler)            # /army
+    app.add_handler(army_callback)           # 🔄 Refresh
+    app.add_handler(army_attack_callback)    # 🏹 Attack
+    app.add_handler(army_build_callback)     # 🏗️ Build
 
     app.add_handler(achievements_handler)
     app.add_handler(announce_handler)
@@ -115,23 +105,21 @@ def main():
         await update.message.reply_text("❓ Unknown command. Use /help.")
     app.add_handler(MessageHandler(filters.COMMAND, unknown))
 
-    # 6) Chaos pre‑notice checker
+    # 6) Scheduler tasks
     app.job_queue.run_repeating(
         chaos_pre_notice_job,
         interval=60,
         first=0,
         name="chaos_pre_notice_checker"
     )
-
-    # 7) Weekly Chaos Storm
     app.job_queue.run_daily(
         chaos_event_job,
-        days=(0,),
+        days=(0,),  # Monday
         time=dtime(hour=9, minute=0),
         name="weekly_chaos_storm"
     )
 
-    # 8) Start polling
+    # 7) Start polling
     app.run_polling()
 
 
