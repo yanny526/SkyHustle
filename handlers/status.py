@@ -24,8 +24,7 @@ from utils.format_utils import (
     section_header,
 )
 
-# import the handlers we’ll call
-from handlers.build import build
+# import queue so we can call it directly
 from handlers.queue import queue
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -69,7 +68,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # ─── Supply Tick Countdown ─────────────────────────────────────────
     tick_str = ""
-    if 'last_seen' in locals() and last_seen is not None:
+    if last_seen is not None:
         secs_left = max(0, (last_seen + 3600) - now.timestamp())
         m, s = divmod(int(secs_left), 60)
         tick_str = f"{m}m{s:02d}s"
@@ -85,7 +84,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lines.append("")
 
     lines.append(section_header("Production / min"))
-    lines.append(f"🪙 {rates['credits']}   ⛏️ {rates['minerals']}   ⚡ {rates['energy']}")
+    lines.append(f"💳 {rates['credits']}   ⛏️ {rates['minerals']}   ⚡ {rates['energy']}")
     lines.append("")
 
     lines.append(section_header("Infrastructure Status"))
@@ -149,21 +148,23 @@ async def status_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     data  = query.data
 
-    # Acknowledge the button press
+    # Acknowledge button tap
     await query.answer()
 
     if data == "status":
         return await status(update, context)
 
-    elif data == "build":
-        # inject a message object so build() can reply
-        update.message = query.message
-        context.args   = []  # no args → show usage/help
-        return await build(update, context)
-
     elif data == "queue":
-        # queue() already handles callback_query properly
+        # queue() handles callback_query itself
         return await queue(update, context)
+
+    elif data == "build":
+        # Simply show the build usage help
+        help_text = (
+            "❗ Usage: `/build <building>`\n"
+            "Valid: mine, powerplant, barracks, workshop"
+        )
+        return await query.message.reply_text(help_text, parse_mode=ParseMode.MARKDOWN)
 
 # Export handlers
 handler          = CommandHandler("status", status)
