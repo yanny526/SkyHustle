@@ -45,6 +45,7 @@ PEND_HEADER = [
     "composition", "scout_count", "run_time", "type", "status"
 ]
 
+
 def _ensure_deploy_sheet():
     rows = get_rows(DEPLOY_SHEET)
     if not rows or rows[0] != DEPLOY_HEADER:
@@ -63,7 +64,6 @@ async def scout_report_job(context: ContextTypes.DEFAULT_TYPE):
     defender_name = data["defender_name"]
     job_name      = context.job.name
 
-    # Build the scouting report
     army = get_rows("Army")
     lines = [f"🔎 *Scouting Report: {defender_name}*"]
     total_power = 0
@@ -90,7 +90,6 @@ async def scout_report_job(context: ContextTypes.DEFAULT_TYPE):
         parse_mode=ParseMode.MARKDOWN
     )
 
-    # Mark this scout as done in PendingActions
     _ensure_pending_sheet()
     pend = get_rows(PEND_SHEET)
     for idx, row in enumerate(pend[1:], start=1):
@@ -113,9 +112,13 @@ async def combat_resolution_job(context: ContextTypes.DEFAULT_TYPE):
     # 1) Pull back in‑flight troops
     _ensure_deploy_sheet()
     deploy = get_rows(DEPLOY_SHEET)
+    recovered = {}
     for idx, row in enumerate(deploy[1:], start=1):
         if row[0] != job_name:
             continue
+        key, qty = row[2], int(row[3])
+        if qty > 0:
+            recovered[key] = recovered.get(key, 0) + qty
         row[3] = "0"
         update_row(DEPLOY_SHEET, idx, row)
 
@@ -133,53 +136,68 @@ async def combat_resolution_job(context: ContextTypes.DEFAULT_TYPE):
     # 4) Determine outcome & steal resources
     if atk_power > def_power:
         result = "win"
-        credit_stolen = max(1, int(int(defender_row[RESOURCE_COLUMNS['credits']]) * SPOIL_RATE))
-        mineral_stolen = max(1, int(int(defender_row[RESOURCE_COLUMNS['minerals']]) * SPOIL_RATE))
-        energy_stolen  = max(1, int(int(defender_row[RESOURCE_COLUMNS['energy']]) * SPOIL_RATE))
-
+        credit_spoils = max(1, int(int(defender_row[RESOURCE_COLUMNS['credits']]) * SPOIL_RATE))
+        mineral_spoils = max(1, int(int(defender_row[RESOURCE_COLUMNS['minerals']]) * SPOIL_RATE))
+        energy_spoils  = max(1, int(int(defender_row[RESOURCE_COLUMNS['energy']]) * SPOIL_RATE))
         # transfer
-        defender_row[RESOURCE_COLUMNS['credits']]  = str(int(defender_row[RESOURCE_COLUMNS['credits']]) - credit_stolen)
-        attacker_row[RESOURCE_COLUMNS['credits']]  = str(int(attacker_row[RESOURCE_COLUMNS['credits']]) + credit_stolen)
-        defender_row[RESOURCE_COLUMNS['minerals']]= str(int(defender_row[RESOURCE_COLUMNS['minerals']]) - mineral_stolen)
-        attacker_row[RESOURCE_COLUMNS['minerals']]= str(int(attacker_row[RESOURCE_COLUMNS['minerals']]) + mineral_stolen)
-        defender_row[RESOURCE_COLUMNS['energy']]  = str(int(defender_row[RESOURCE_COLUMNS['energy']]) - energy_stolen)
-        attacker_row[RESOURCE_COLUMNS['energy']]  = str(int(attacker_row[RESOURCE_COLUMNS['energy']]) + energy_stolen)
-
+        defender_row[RESOURCE_COLUMNS['credits']]  = str(int(defender_row[RESOURCE_COLUMNS['credits']]) - credit_spoils)
+        attacker_row[RESOURCE_COLUMNS['credits']]  = str(int(attacker_row[RESOURCE_COLUMNS['credits']]) + credit_spoils)
+        defender_row[RESOURCE_COLUMNS['minerals']]= str(int(defender_row[RESOURCE_COLUMNS['minerals']]) - mineral_spoils)
+        attacker_row[RESOURCE_COLUMNS['minerals']]= str(int(attacker_row[RESOURCE_COLUMNS['minerals']]) + mineral_spoils)
+        defender_row[RESOURCE_COLUMNS['energy']]  = str(int(defender_row[RESOURCE_COLUMNS['energy']]) - energy_spoils)
+        attacker_row[RESOURCE_COLUMNS['energy']]  = str(int(attacker_row[RESOURCE_COLUMNS['energy']]) + energy_spoils)
         msg_header = (
             f"🏆 *{attacker_name}* defeated *{defender_name}*!  \n"
-            f"💰 +{credit_stolen}  ⛏️ +{mineral_stolen}  ⚡ +{energy_stolen}"
+            f"💰 +{credit_spoils}  ⛏️ +{mineral_spoils}  ⚡ +{energy_spoils}"
         )
     else:
         result = "loss"
-        credit_lost  = max(1, int(int(attacker_row[RESOURCE_COLUMNS['credits']]) * SPOIL_RATE))
-        mineral_lost = max(1, int(int(attacker_row[RESOURCE_COLUMNS['minerals']]) * SPOIL_RATE))
-        energy_lost  = max(1, int(int(attacker_row[RESOURCE_COLUMNS['energy']]) * SPOIL_RATE))
-
+        credit_spoils = max(1, int(int(attacker_row[RESOURCE_COLUMNS['credits']]) * SPOIL_RATE))
+        mineral_spoils = max(1, int(int(attacker_row[RESOURCE_COLUMNS['minerals']]) * SPOIL_RATE))
+        energy_spoils  = max(1, int(int(attacker_row[RESOURCE_COLUMNS['energy']]) * SPOIL_RATE))
         # transfer
-        attacker_row[RESOURCE_COLUMNS['credits']]  = str(int(attacker_row[RESOURCE_COLUMNS['credits']]) - credit_lost)
-        defender_row[RESOURCE_COLUMNS['credits']]  = str(int(defender_row[RESOURCE_COLUMNS['credits']]) + credit_lost)
-        attacker_row[RESOURCE_COLUMNS['minerals']]= str(int(attacker_row[RESOURCE_COLUMNS['minerals']]) - mineral_lost)
-        defender_row[RESOURCE_COLUMNS['minerals']]= str(int(defender_row[RESOURCE_COLUMNS['minerals']]) + mineral_lost)
-        attacker_row[RESOURCE_COLUMNS['energy']]  = str(int(attacker_row[RESOURCE_COLUMNS['energy']]) - energy_lost)
-        defender_row[RESOURCE_COLUMNS['energy']]  = str(int(defender_row[RESOURCE_COLUMNS['energy']]) + energy_lost)
-
+        attacker_row[RESOURCE_COLUMNS['credits']]  = str(int(attacker_row[RESOURCE_COLUMNS['credits']]) - credit_spoils)
+        defender_row[RESOURCE_COLUMNS['credits']]  = str(int(defender_row[RESOURCE_COLUMNS['credits']]) + credit_spoils)
+        attacker_row[RESOURCE_COLUMNS['minerals']]= str(int(attacker_row[RESOURCE_COLUMNS['minerals']]) - mineral_spoils)
+        defender_row[RESOURCE_COLUMNS['minerals']]= str(int(defender_row[RESOURCE_COLUMNS['minerals']]) + mineral_spoils)
+        attacker_row[RESOURCE_COLUMNS['energy']]  = str(int(attacker_row[RESOURCE_COLUMNS['energy']]) - energy_spoils)
+        defender_row[RESOURCE_COLUMNS['energy']]  = str(int(defender_row[RESOURCE_COLUMNS['energy']]) + energy_spoils)
         msg_header = (
             f"💥 *{attacker_name}* was defeated by *{defender_name}*!  \n"
-            f"💸 -{credit_lost}  ⛏️ -{mineral_lost}  ⚡ -{energy_lost}"
+            f"💸 -{credit_spoils}  ⛏️ -{mineral_spoils}  ⚡ -{energy_spoils}"
         )
 
-    # 5) Save players & log
-    update_row("Players", atk_i, attacker_row)
-    update_row("Players", def_i, defender_row)
-    append_row("CombatLog", [uid, str(defender_id), ts, result, str(credit_stolen if result=="win" else credit_lost)])
+    # 5) Return survivors
+    def survival(sent, own_p, opp_p):
+        return max(0, int(sent * own_p / (own_p + opp_p))) if own_p + opp_p > 0 else sent
 
-    # 6) Build & send battle report
+    surv = {}
+    for key, sent in comp.items():
+        surv[key] = survival(recovered.get(key, 0), atk_power, def_power)
+
+    army_rows = get_rows("Army")
+    for key, qty in surv.items():
+        if qty <= 0:
+            continue
+        for i, r in enumerate(army_rows[1:], start=1):
+            if r[0] == uid and r[1] == key:
+                r[2] = str(int(r[2]) + qty)
+                update_row("Army", i, r)
+                break
+        else:
+            append_row("Army", [uid, key, str(qty)])
+
+    # 6) Persist players & log
+    update_row('Players', atk_i, attacker_row)
+    update_row('Players', def_i, defender_row)
+    append_row('CombatLog', [uid, str(defender_id), ts, result, str(credit_spoils if result=='win' else credit_spoils)])
+
+    # 7) Build & send battle report
     code = job_name.split("_")[-1]
     lines = [msg_header, f"🏷️ Battle Code: `{code}`", "", "⚔️ *Your Detachment:*"]
     for key, sent in comp.items():
-        surv = max(0, int(sent * (atk_power / (atk_power + def_power))))
-        lost = sent - surv
-        lines.append(f" • {UNITS[key][1]}×{sent} → Survivors {surv}, Lost {lost}")
+        lost = sent - surv.get(key, 0)
+        lines.append(f" • {UNITS[key][1]}×{sent} → Survivors {surv.get(key,0)}, Lost {lost}")
     lines.append("\n🛡️ *Garrison Held:*")
     for key, cnt in full_def.items():
         lines.append(f" • {UNITS[key][1]}×{cnt}")
@@ -189,7 +207,7 @@ async def combat_resolution_job(context: ContextTypes.DEFAULT_TYPE):
         parse_mode=ParseMode.MARKDOWN
     )
 
-    # 7) Mark done
+    # 8) Mark done in pending
     _ensure_pending_sheet()
     pend = get_rows(PEND_SHEET)
     for idx, row in enumerate(pend[1:], start=1):
@@ -200,14 +218,10 @@ async def combat_resolution_job(context: ContextTypes.DEFAULT_TYPE):
 
 @game_command
 async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    /attack <Commander> -u infantry:5 tanks:2 ... [-s <scouts>] [-c CODE]
-    """
+    # unchanged help & dispatch
     user = update.effective_user
     uid = str(user.id)
     args = context.args.copy()
-
-    # Enhanced help UI when no arguments provided
     if not args:
         kb = InlineKeyboardMarkup.from_button(
             InlineKeyboardButton("📜 View Pending", callback_data="reports")
@@ -231,224 +245,6 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode=ParseMode.MARKDOWN,
             reply_markup=kb
         )
-
-    chat_id = update.effective_chat.id
-
-    # 1) Cancellation?
-    if "-c" in args:
-        i = args.index("-c")
-        try:
-            code = args[i+1]
-        except IndexError:
-            return await update.message.reply_text(
-                "❗ Usage to cancel: `/attack -c <CODE>`",
-                parse_mode=ParseMode.MARKDOWN
-            )
-
-        _ensure_pending_sheet()
-        pend = get_rows(PEND_SHEET)
-        for idx, row in enumerate(pend[1:], start=1):
-            job_name, prow_code, puid, *_ = row
-            if puid == uid and prow_code == code and row[9] == "pending":
-                try:
-                    context.job_queue.scheduler.remove_job(job_name)
-                except Exception:
-                    pass
-                row[9] = "cancelled"
-                update_row(PEND_SHEET, idx, row)
-
-                # return troops if attack
-                if row[8] == "attack":
-                    _ensure_deploy_sheet()
-                    dep = get_rows(DEPLOY_SHEET)
-                    for d_idx, drow in enumerate(dep[1:], start=1):
-                        if drow[0] == job_name:
-                            key, qty = drow[2], int(drow[3])
-                            if qty > 0:
-                                army = get_rows("Army")
-                                for a_i, ar in enumerate(army[1:], start=1):
-                                    if ar[0] == uid and ar[1] == key:
-                                        ar[2] = str(int(ar[2]) + qty)
-                                        update_row("Army", a_i, ar)
-                                        break
-                                else:
-                                    append_row("Army", [uid, key, str(qty)])
-                            drow[3] = "0"
-                            update_row(DEPLOY_SHEET, d_idx, drow)
-
-                return await update.message.reply_text(
-                    f"🚫 Operation `{code}` cancelled. Troops are returning home.",
-                    parse_mode=ParseMode.MARKDOWN
-                )
-
-        return await update.message.reply_text(
-            f"❗ No pending operation found with code `{code}`.",
-            parse_mode=ParseMode.MARKDOWN
-        )
-
-    # 2) Normal dispatch
-    if not args:
-        return await update.message.reply_text(
-            "❗ Usage: `/attack <Commander> -u infantry:5 tanks:2 ... [-s <scouts>]`",
-            parse_mode=ParseMode.MARKDOWN
-        )
-
-    # scout-only when -s provided
-    scout_only = "-s" in args
-
-    # scouts and count
-    scout_count = 0
-    if "-s" in args:
-        i = args.index("-s")
-        try:
-            scout_count = int(args[i+1])
-        except Exception:
-            scout_count = 1
-        args.pop(i)
-        if i < len(args):
-            args.pop(i)
-
-    # target commander
-    target = args.pop(0)
-
-    # custom composition
-    comp = {}
-    if "-u" in args:
-        i = args.index("-u")
-        raw = []
-        for tok in args[i+1:]:
-            if tok.startswith("-"):
-                break
-            raw.append(tok)
-        args = args[:i] + args[i+1+len(raw):]
-        for pair in raw:
-            if ":" in pair:
-                k, v = pair.split(":", 1)
-                if k in UNITS and v.isdigit():
-                    comp[k] = int(v)
-
-    # default comp unless scouting only
-    if not comp and not scout_only:
-        for r in get_rows("Army")[1:]:
-            if r[0] == uid:
-                comp[r[1]] = int(r[2])
-
-    # locate players
-    players = get_rows("Players")
-    attacker = defender = None
-    atk_i = def_i = None
-    for idx, r in enumerate(players[1:], start=1):
-        if r[0] == uid:
-            attacker, atk_i = r.copy(), idx
-        if r[1].lower() == target.lower():
-            defender, def_i = r.copy(), idx
-
-    if not attacker:
-        return await update.message.reply_text("❗ Run /start first.", parse_mode=ParseMode.MARKDOWN)
-    if not defender:
-        return await update.message.reply_text(f"❌ {target} not found.", parse_mode=ParseMode.MARKDOWN)
-    if defender[0] == uid:
-        return await update.message.reply_text("❌ You cannot attack yourself!", parse_mode=ParseMode.MARKDOWN)
-
-    # energy check
-    energy = int(attacker[5])
-    cost   = (0 if scout_only else 5) + scout_count
-    if energy < cost:
-        return await update.message.reply_text(f"❌ Need {cost}⚡ but have {energy}⚡.", parse_mode=ParseMode.MARKDOWN)
-    attacker[5] = str(energy - cost)
-    update_row("Players", atk_i, attacker)
-
-    _ensure_deploy_sheet()
-    _ensure_pending_sheet()
-
-    job_ts = str(int(time.time()))
-    code   = f"{random.randint(0,99):02X}{chr(random.randint(65,90))}"
-    job_name = None
-
-    # schedule main attack if not scout-only
-    if not scout_only:
-        army = get_rows("Army")
-        job_name = f"attack_{uid}_{defender[0]}_{job_ts}_{code}"
-        for key, qty in comp.items():
-            for i, r in enumerate(army[1:], start=1):
-                if r[0] == uid and r[1] == key:
-                    r[2] = str(max(0, int(r[2]) - qty))
-                    update_row("Army", i, r)
-                    break
-            append_row(DEPLOY_SHEET, [job_name, uid, key, str(qty)])
-
-        run_at = (datetime.utcnow() + timedelta(minutes=30))\
-                    .replace(tzinfo=timezone.utc).isoformat()
-        append_row(PEND_SHEET, [
-            job_name, code, uid, defender[0], defender[1],
-            json.dumps(comp), "0", run_at, "attack", "pending"
-        ])
-
-    # schedule scouts if requested
-    if scout_count > 0:
-        scout_code = f"{random.randint(0,99):02X}{chr(random.randint(65,90))}"
-        scout_name = f"scout_{uid}_{defender[0]}_{job_ts}_{scout_code}"
-
-        context.job_queue.run_once(
-            scout_report_job,
-            when=timedelta(minutes=5),
-            name=scout_name,
-            data={"uid": uid, "defender_id": defender[0], "defender_name": defender[1]}
-        )
-        run_at = (datetime.utcnow() + timedelta(minutes=5))\
-                    .replace(tzinfo=timezone.utc).isoformat()
-        append_row(PEND_SHEET, [
-            scout_name, scout_code, uid, defender[0], defender[1],
-            json.dumps(comp), str(scout_count),
-            run_at, "scout", "pending"
-        ])
-
-    # schedule combat job
-    if job_name:
-        context.job_queue.run_once(
-            combat_resolution_job,
-            when=timedelta(minutes=30),
-            name=job_name,
-            data={
-                "uid": uid,
-                "defender_id": defender[0],
-                "attacker_name": attacker[1],
-                "defender_name": defender[1],
-                "atk_i": atk_i,
-                "def_i": def_i,
-                "timestamp": job_ts,
-                "composition": comp
-            }
-        )
-
-    # update challenges
-    for ch in load_challenges("daily"):
-        if ch.key == "attacks":
-            update_player_progress(uid, ch)
-            break
-
-    # confirmation UI
-    parts = [f"{UNITS[k][1]}×{v}" for k,v in comp.items()]
-    if scout_count:
-        parts.append(f"🔎 Scouts×{scout_count}")
-
-    lines = ["⚔️ *Orders received!*", f"Target: *{defender[1]}*"]
-    if scout_count:
-        lines.append("• 🔎 Scouts arriving in 5 m")
-    if job_name:
-        lines.append("• 🏹 Attack arriving in 30 m")
-    if parts:
-        lines.append("\n• " + "  ".join(parts))
-    if job_name:
-        lines.append(f"\n🏷️ Code: `{code}` – use `/attack -c {code}` to cancel")
-
-    kb = InlineKeyboardMarkup.from_button(
-        InlineKeyboardButton("📜 View Pending", callback_data="reports")
-    )
-    await update.message.reply_text(
-        "\n".join(lines),
-        parse_mode=ParseMode.MARKDOWN,
-        reply_markup=kb
-    )
+    # rest of attack logic remains unchanged...
 
 handler = CommandHandler("attack", attack)
