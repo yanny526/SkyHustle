@@ -24,8 +24,10 @@ async def reports(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Collect pending operations
     ops = []
     for row in get_rows(PEND_SHEET)[1:]:
-        # Ensure we have 10 columns
-        job_name, uid, defender_id, defender_name, comp_json, scouts, run_at, typ, status, code_str = (
+        # Ensure we have 10 columns, in correct order:
+        # job_name, code, uid, defender_id, defender_name,
+        # comp_json, scouts, run_at, typ, status
+        job_name, code_str, uid, defender_id, defender_name, comp_json, scouts, run_at, typ, status = (
             row + [""] * 10
         )[:10]
         if uid != chat_id or status != "pending":
@@ -34,7 +36,7 @@ async def reports(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Parse ETA
         try:
             run_dt = datetime.fromisoformat(run_at)
-        except:
+        except Exception:
             continue
         delta = run_dt - now
         secs  = int(delta.total_seconds())
@@ -43,11 +45,18 @@ async def reports(update: Update, context: ContextTypes.DEFAULT_TYPE):
         m, s = divmod(secs, 60)
 
         if typ == "scout":
-            ops.append(f"🔎 Scout on *{defender_name}* arriving in {m}m{s:02d}s  {md_code(code_str)}  (×{scouts})")
+            ops.append(
+                f"🔎 Scout on *{defender_name}* arriving in {m}m{s:02d}s  {md_code(code_str)}  (×{scouts})"
+            )
         else:
-            comp = json.loads(comp_json) if comp_json else {}
+            try:
+                comp = json.loads(comp_json) if comp_json else {}
+            except json.JSONDecodeError:
+                comp = {}
             comp_str = " ".join(f"{UNITS[k][1]}×{v}" for k, v in comp.items()) or "All troops"
-            ops.append(f"🏹 Attack on *{defender_name}* ({comp_str}) arriving in {m}m{s:02d}s  {md_code(code_str)}")
+            ops.append(
+                f"🏹 Attack on *{defender_name}* ({comp_str}) arriving in {m}m{s:02d}s  {md_code(code_str)}"
+            )
 
     # Build response
     if not ops:
@@ -64,7 +73,7 @@ async def reports(update: Update, context: ContextTypes.DEFAULT_TYPE):
             lines.append(f"• {line}")
         lines.extend([
             "",
-            f"❗ Cancel with `/attack -c <code>`"
+            "❗ Cancel with `/attack -c <code>`"
         ])
         text = "\n".join(lines)
 
@@ -74,14 +83,21 @@ async def reports(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     if update.message:
-        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
+        await update.message.reply_text(
+            text,
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=kb
+        )
     else:
         await update.callback_query.answer()
         try:
             await update.callback_query.edit_message_text(
-                text, parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+                text,
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=kb
             )
         except BadRequest as e:
+            # ignore if no changes
             if "Message is not modified" not in str(e):
                 raise
 
