@@ -24,7 +24,7 @@ from utils.format_utils import (
     section_header,
 )
 
-# import other handlers to invoke via callbacks
+# import the handlers we’ll call
 from handlers.build import build
 from handlers.queue import queue
 
@@ -32,7 +32,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_user.id)
     now = datetime.utcnow()
 
-    # ─── Retrieve Player Data ───────────────────────────────────────────────
+    # ─── Retrieve Player Data ────────────────────────────────────────────
     players = get_rows("Players")
     for row in players[1:]:
         if row[0] == uid:
@@ -46,13 +46,13 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         return await update.message.reply_text("❗ Please run /start first.")
 
-    # ─── Production & Infrastructure ───────────────────────────────────────
+    # ─── Production & Infrastructure ────────────────────────────────────
     binfo   = get_building_info(uid)
     rates   = get_production_rates(binfo)
     health  = get_building_health(uid)
     all_bld = ["Bank"] + list(BUILDING_MAX_LEVEL.keys())
 
-    # ─── Army Composition & Strength ────────────────────────────────────────
+    # ─── Army Composition & Strength ───────────────────────────────────
     army_rows = get_rows("Army")
     garrison = {r[1]: int(r[2]) for r in army_rows[1:] if r[0] == uid}
     garrison_power = sum(cnt * UNITS[key][3] for key, cnt in garrison.items())
@@ -67,14 +67,14 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
             deployed[key] = deployed.get(key, 0) + cnt
     deployed_power = sum(cnt * UNITS[key][3] for key, cnt in deployed.items())
 
-    # ─── Supply Tick Countdown ─────────────────────────────────────────────
+    # ─── Supply Tick Countdown ─────────────────────────────────────────
     tick_str = ""
     if 'last_seen' in locals() and last_seen is not None:
         secs_left = max(0, (last_seen + 3600) - now.timestamp())
         m, s = divmod(int(secs_left), 60)
         tick_str = f"{m}m{s:02d}s"
 
-    # ─── Build Status Text ─────────────────────────────────────────────────
+    # ─── Build Status Text ─────────────────────────────────────────────
     lines = []
     lines.append(section_header("Resources & Supplies"))
     lines.append(f"💳 Credits   : {credits}")
@@ -85,7 +85,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lines.append("")
 
     lines.append(section_header("Production / min"))
-    lines.append(f"💳 {rates['credits']}   ⛏️ {rates['minerals']}   ⚡ {rates['energy']}")
+    lines.append(f"🪙 {rates['credits']}   ⛏️ {rates['minerals']}   ⚡ {rates['energy']}")
     lines.append("")
 
     lines.append(section_header("Infrastructure Status"))
@@ -121,14 +121,12 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     report = "\n".join(lines)
-
-    # New, immersive header
     text = (
         f"<b>⚔️🏰 WAR ROOM BRIEFING: Commander {commander} 🏰⚔️</b>\n"
         f"<pre>{html.escape(report)}</pre>"
     )
 
-    # ─── Inline Quick‑Action Buttons ─────────────────────────────────────────
+    # ─── Inline Quick‑Action Buttons ───────────────────────────────────
     kb = InlineKeyboardMarkup([[
         InlineKeyboardButton("🔄 Refresh", callback_data="status"),
         InlineKeyboardButton("🏗️ Build",   callback_data="build"),
@@ -148,15 +146,23 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 raise
 
 async def status_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    data = update.callback_query.data
+    query = update.callback_query
+    data  = query.data
+
+    # Acknowledge the button press
+    await query.answer()
+
     if data == "status":
         return await status(update, context)
+
     elif data == "build":
-        # show build help
-        context.args = ["help"]
+        # inject a message object so build() can reply
+        update.message = query.message
+        context.args   = []  # no args → show usage/help
         return await build(update, context)
+
     elif data == "queue":
-        # show queue
+        # queue() already handles callback_query properly
         return await queue(update, context)
 
 # Export handlers
