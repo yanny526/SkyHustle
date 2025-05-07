@@ -19,7 +19,7 @@ from handlers.reports import handler as reports_handler, callback_handler as rep
 from handlers.leaderboard import handler as leaderboard_handler, callback_handler as leaderboard_callback
 from handlers.help import handler as help_handler
 
-# Army + its new callbacks
+# ←── Updated imports here to pull in all army callbacks
 from handlers.army import (
     handler           as army_handler,
     callback_handler  as army_callback,
@@ -56,13 +56,13 @@ def main():
     app.add_handler(queue_handler)
     app.add_handler(train_handler)
     app.add_handler(attack_handler)
-    app.add_handler(reports_handler)
-    app.add_handler(reports_callback)
+    app.add_handler(reports_handler)     # /reports for pending
+    app.add_handler(reports_callback)    # 📜 View Pending button
     app.add_handler(leaderboard_handler)
     app.add_handler(leaderboard_callback)
     app.add_handler(help_handler)
 
-    # ←── Army + callbacks
+    # ←── Register army and its three callbacks
     app.add_handler(army_handler)
     app.add_handler(army_callback)
     app.add_handler(army_attack_callback)
@@ -76,8 +76,8 @@ def main():
     app.add_handler(inbox_handler)
 
     # Chaos commands
-    app.add_handler(chaos_handler)
-    app.add_handler(chaos_test_handler)
+    app.add_handler(chaos_handler)       # /chaos preview
+    app.add_handler(chaos_test_handler)  # /chaos_test (admin)
 
     # 4) Slash commands
     async def set_bot_commands(app):
@@ -101,12 +101,12 @@ def main():
 
     app.post_init = set_bot_commands
 
-    # 5) Unknown‑command fallback
+    # 5) Unknown-command fallback
     async def unknown(update, context):
         await update.message.reply_text("❓ Unknown command. Use /help.")
     app.add_handler(MessageHandler(filters.COMMAND, unknown))
 
-    # 6) Schedule chaos pre‑notice checker every minute
+    # 6) Schedule chaos pre-notice checker every minute
     app.job_queue.run_repeating(
         chaos_pre_notice_job,
         interval=60,
@@ -117,7 +117,7 @@ def main():
     # 7) Schedule weekly Chaos Storm (Mon @ 09:00 UTC)
     app.job_queue.run_daily(
         chaos_event_job,
-        days=(0,),
+        days=(0,),  # Monday
         time=dtime(hour=9, minute=0),
         name="weekly_chaos_storm"
     )
