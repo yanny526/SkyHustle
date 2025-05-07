@@ -1,3 +1,5 @@
+# utils/format_utils.py
+
 BUILDING_EMOJI = {
     'Mine': '⛏️',
     'Power Plant': '⚡',
@@ -23,6 +25,14 @@ def bold(text: str) -> str:
 def code(text: str) -> str:
     return f"`{text}`"
 
+def section_header(title: str, emoji: str = "", underline: str = "═", color: str = "gold") -> str:
+    """
+    Create a visually appealing section header with optional emoji and color.
+    """
+    return f"\n[{color}]╔═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╗[/]\n" \
+           f" [{color}]║ [{emoji}]  {title}  [{emoji}] ║[/]\n" \
+           f" [{color}]╚═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╝[/]\n"
+
 def format_bar(current: int, maximum: int, length: int = 10) -> str:
     ratio = (current / maximum) if maximum else 0
     filled = int(ratio * length)
@@ -32,9 +42,6 @@ def format_bar(current: int, maximum: int, length: int = 10) -> str:
     return f"[{bar}] {percent}%"
 
 def get_build_time(building: str, level: int) -> int:
-    """
-    Return upgrade duration in seconds for the given building at target level.
-    """
     if building == 'Mine':
         return 30 * 60 * level
     elif building == 'Power Plant':
@@ -46,9 +53,6 @@ def get_build_time(building: str, level: int) -> int:
     return 0
 
 def get_build_costs(building: str, level: int) -> tuple[int, int, int]:
-    """
-    Return (credits, minerals, energy) cost for upgrading a building to the specified level.
-    """
     if building == 'Mine':
         return (100, 50 * level, 10 * level)
     elif building == 'Power Plant':
@@ -58,9 +62,3 @@ def get_build_costs(building: str, level: int) -> tuple[int, int, int]:
     elif building == 'Workshop':
         return (200, 100 * level, 15 * level)
     return (0, 0, 0)
-
-def section_header(title: str, pad_char: str = '-', pad_count: int = 5) -> str:
-    """
-    Render a section header, e.g. '----- Title -----'
-    """
-    return f"{pad_char * pad_count} {title} {pad_char * pad_count}"
