@@ -40,3 +40,14 @@ TIER_UNLOCK = {
     2: {'Barracks': 3, 'Workshop': 2},
     3: {'Barracks': 5, 'Workshop': 4},
 }
+
+# --- Spoils Configuration ---
+# Percentage of each resource stolen on victory
+SPOIL_RATE = 0.10  # 10%
+
+# Map resource names to their column index in the Players sheet
+RESOURCE_COLUMNS = {
+    'credits': 3,
+    'minerals': 4,
+    'energy': 5,
+}
