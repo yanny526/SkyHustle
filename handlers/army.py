@@ -107,7 +107,7 @@ async def army_build_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text=(
             "❗ **How to Build:**\n"
             "`/build <BuildingType>`\n"
-            "`Example:` `/build Bank` to upgrade your Bank by 1 level."
+            "Example: `/build Bank` to upgrade your Bank by 1 level."
         ),
         parse_mode=ParseMode.MARKDOWN
     )
