@@ -14,12 +14,16 @@ from handlers.status import handler as status_handler, callback_handler as statu
 from handlers.build import handler as build_handler
 from handlers.queue import handler as queue_handler
 from handlers.train import handler as train_handler
-from handlers.attack import handler as attack_handler
+
+# ←── Import both the CommandHandler *and* the new CallbackQueryHandler
+from handlers.attack import handler    as attack_handler, \
+                             callback_handler as attack_callback
+
 from handlers.reports import handler as reports_handler, callback_handler as reports_callback
 from handlers.leaderboard import handler as leaderboard_handler, callback_handler as leaderboard_callback
 from handlers.help import handler as help_handler
 
-# ←── Updated imports here to pull in all army callbacks
+# Army (with your extra army callbacks)
 from handlers.army import (
     handler           as army_handler,
     callback_handler  as army_callback,
@@ -55,14 +59,19 @@ def main():
     app.add_handler(build_handler)
     app.add_handler(queue_handler)
     app.add_handler(train_handler)
-    app.add_handler(attack_handler)
-    app.add_handler(reports_handler)     # /reports for pending
-    app.add_handler(reports_callback)    # 📜 View Pending button
+
+    # ─── Your Attack handlers ──────────────────────────────────────────────
+    app.add_handler(attack_handler)    # `/attack …`
+    app.add_handler(attack_callback)   # ⚔️ Attack button on that help card
+
+    app.add_handler(reports_handler)   # `/reports`
+    app.add_handler(reports_callback)  # 📜 View Pending
+
     app.add_handler(leaderboard_handler)
     app.add_handler(leaderboard_callback)
     app.add_handler(help_handler)
 
-    # ←── Register army and its three callbacks
+    # ─── Army (with its three callbacks) ───────────────────────────────────
     app.add_handler(army_handler)
     app.add_handler(army_callback)
     app.add_handler(army_attack_callback)
@@ -76,8 +85,8 @@ def main():
     app.add_handler(inbox_handler)
 
     # Chaos commands
-    app.add_handler(chaos_handler)       # /chaos preview
-    app.add_handler(chaos_test_handler)  # /chaos_test (admin)
+    app.add_handler(chaos_handler)
+    app.add_handler(chaos_test_handler)
 
     # 4) Slash commands
     async def set_bot_commands(app):
@@ -106,7 +115,7 @@ def main():
         await update.message.reply_text("❓ Unknown command. Use /help.")
     app.add_handler(MessageHandler(filters.COMMAND, unknown))
 
-    # 6) Schedule chaos pre-notice checker every minute
+    # 6) Chaos pre‑notice checker
     app.job_queue.run_repeating(
         chaos_pre_notice_job,
         interval=60,
@@ -114,10 +123,10 @@ def main():
         name="chaos_pre_notice_checker"
     )
 
-    # 7) Schedule weekly Chaos Storm (Mon @ 09:00 UTC)
+    # 7) Weekly Chaos Storm
     app.job_queue.run_daily(
         chaos_event_job,
-        days=(0,),  # Monday
+        days=(0,),
         time=dtime(hour=9, minute=0),
         name="weekly_chaos_storm"
     )
