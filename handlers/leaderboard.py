@@ -118,7 +118,7 @@ async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = "\n".join(lines)
     kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("🔄 Refresh", callback_data="leaderboard")],
-        [InlineKeyboardButton("❓ Help", callback_data="leaderboard_help")],
+        [InlineKeyboardButton("❓ Help",    callback_data="leaderboard_help")],
     ])
 
     if update.message:
@@ -127,10 +127,17 @@ async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.callback_query.answer()
         await update.callback_query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
 
+
 async def leaderboard_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = update.callback_query.data
-    if data in ("leaderboard", "leaderboard_help"):
-        return await leaderboard(update, context)
+    # determine which view to show
+    if data == "leaderboard_help":
+        context.args = ["help"]
+    else:
+        context.args = []
+    await update.callback_query.answer()
+    return await leaderboard(update, context)
+
 
 handler          = CommandHandler('leaderboard', leaderboard)
-callback_handler = CallbackQueryHandler(leaderboard_button, pattern="^leaderboard")
+callback_handler = CallbackQueryHandler(leaderboard_button, pattern="^leaderboard(_help)?$")
