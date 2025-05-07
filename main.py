@@ -25,7 +25,8 @@ from handlers.announce import handler as announce_handler
 from handlers.challenges import daily, weekly
 from handlers.whisper import handler as whisper_handler
 from handlers.inbox import handler as inbox_handler
-from handlers.premium import handler as premium_handler, callback_handler as premium_callback_handler  # New import
+from handlers.premium import handler as premium_handler, callback_handler as premium_callback_handler
+from handlers.abilities import handler as abilities_handler  # New import
 
 def main():
     sheets_init()
@@ -55,8 +56,9 @@ def main():
     app.add_handler(CommandHandler("weekly", weekly))
     app.add_handler(whisper_handler)
     app.add_handler(inbox_handler)
-    app.add_handler(premium_handler)  # New handler
-    app.add_handler(premium_callback_handler)  # New callback handler
+    app.add_handler(premium_handler)
+    app.add_handler(premium_callback_handler)
+    app.add_handler(abilities_handler)  # New handler
 
     async def set_bot_commands(app):
         commands = [
@@ -74,7 +76,8 @@ def main():
             BotCommand("whisper", "🤫 Send a private message"),
             BotCommand("inbox", "📬 View your private messages"),
             BotCommand("help", "🆘 Show help & all commands"),
-            BotCommand("premium", "⭐ Access premium features"),  # New command
+            BotCommand("premium", "⭐ Access premium features"),
+            BotCommand("ability", "✨ View and purchase special unit abilities"),  # New command
         ]
         await app.bot.set_my_commands(commands)
 
