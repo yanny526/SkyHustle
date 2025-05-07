@@ -16,7 +16,7 @@ from handlers.queue import handler as queue_handler
 from handlers.train import handler as train_handler
 from handlers.attack import handler as attack_handler
 from handlers.reports import handler as reports_handler, callback_handler as reports_callback
-from handlers.leaderboard import handler as leaderboard_handler
+from handlers.leaderboard import handler as leaderboard_handler, callback_handler as leaderboard_callback
 from handlers.help import handler as help_handler
 from handlers.army import handler as army_handler
 from handlers.achievements import handler as achievements_handler
@@ -51,6 +51,7 @@ def main():
     app.add_handler(reports_handler)     # /reports for pending
     app.add_handler(reports_callback)    # 📜 View Pending button
     app.add_handler(leaderboard_handler)
+    app.add_handler(leaderboard_callback)
     app.add_handler(help_handler)
     app.add_handler(army_handler)
     app.add_handler(achievements_handler)
