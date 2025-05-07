@@ -10,95 +10,112 @@ from telegram.ext import CommandHandler, CallbackQueryHandler, ContextTypes
 
 from sheets_service import get_rows
 from modules.unit_manager import UNITS
-from utils.format_utils import code as md_code
+from utils.format_utils import section_header, code as md_code
 
 PEND_SHEET = "PendingActions"
 
 async def reports(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    /reports – display your pending missions with enhanced UI.
+    /reports – list your pending scouts & assaults in a captivating UI.
     """
     chat_id = str(update.effective_chat.id)
     now = datetime.now(timezone.utc)
 
-    raw = get_rows(PEND_SHEET)[1:]
+    rows = get_rows(PEND_SHEET)[1:]
     ops = []
-    for row in raw:
+    for row in rows:
         job_name, code_str, uid, defender_id, defender_name, comp_json, scouts, run_at, typ, status = (
             row + [""] * 10
         )[:10]
         if uid != chat_id or status != "pending":
             continue
-
         # compute ETA
         try:
             run_dt = datetime.fromisoformat(run_at)
-            secs = int((run_dt - now).total_seconds())
+            delta = run_dt - now
+            secs = int(delta.total_seconds())
             if secs <= 0:
                 continue
             m, s = divmod(secs, 60)
             eta = f"{m}m{s:02d}s"
         except Exception:
-            secs, eta = float('inf'), "??"
+            secs, eta = float('inf'), "unknown"
 
         if typ == "scout":
-            count = int(scouts) if scouts.isdigit() else scouts or 1
-            ops.append({"type":"scout","defender":defender_name,"count":count,"eta":eta,"secs":secs,"code":code_str})
+            count = int(scouts) if scouts.isdigit() else scouts or "1"
+            ops.append({
+                "type": "scout",
+                "defender_name": defender_name,
+                "count": count,
+                "eta": eta,
+                "secs": secs,
+                "code": code_str
+            })
         else:
             try:
                 comp = json.loads(comp_json) if comp_json else {}
-            except Exception:
+            except json.JSONDecodeError:
                 comp = {}
             comp_str = " ".join(f"{UNITS[k][1]}×{v}" for k, v in comp.items()) or "All troops"
-            ops.append({"type":"attack","defender":defender_name,"comp":comp_str,"eta":eta,"secs":secs,"code":code_str})
-
-    # sort by ETA
-    ops.sort(key=lambda o: o.get("secs", float('inf')))
+            ops.append({
+                "type": "attack",
+                "defender_name": defender_name,
+                "comp_str": comp_str,
+                "eta": eta,
+                "secs": secs,
+                "code": code_str
+            })
+    # sort by soonest
+    ops.sort(key=lambda o: o["secs"])
 
     total = len(ops)
-    lines = []
-
-    # Header
-    lines.append("📜 ----- Pending Missions -----")
-    lines.append("")
     if total == 0:
-        lines.append("✅ You have no pending missions.")
-        lines.append("")
-        lines.append("Dispatch an operation with `/attack <Commander> ...`.")
+        text_lines = [
+            section_header("🗒️ Pending Missions"),
+            "",
+            "✅ You have no pending missions.",
+            "",
+            "Dispatch an operation with `/attack <Commander> ...`"
+        ]
     else:
-        lines.append(f"🔥 {total} mission{'s' if total!=1 else ''} in progress")
-
-        # Recon Section
-        scouts = [o for o in ops if o['type']=='scout']
+        text_lines = [
+            section_header("🗒️ Pending Missions"),
+            f"🔥 *{total}* mission{'s' if total!=1 else ''} in progress", ""
+        ]
+        # Recon
+        scouts = [o for o in ops if o["type"] == "scout"]
         if scouts:
-            lines.append("")
-            lines.append("🔎 ----- Recon Operations -----")
+            text_lines += [section_header("🔎 Recon Operations"), ""]
             for o in scouts:
-                lines.append(f"• 👁️ *{o['defender']}* — Scouts×{o['count']} — ETA {o['eta']} — {md_code(o['code'])}")
-
-        # Assault Section
-        attacks = [o for o in ops if o['type']=='attack']
+                text_lines.append(
+                    f"• 👁️ *{o['defender_name']}* — Scouts: {o['count']} — ETA {o['eta']} — {md_code(o['code'])}"
+                )
+            text_lines.append("")
+        # Assault
+        attacks = [o for o in ops if o["type"] == "attack"]
         if attacks:
-            lines.append("")
-            lines.append("🏹 ----- Assault Operations -----")
+            text_lines += [section_header("🏹 Assault Operations"), ""]
             for o in attacks:
-                lines.append(f"• 💥 *{o['defender']}* — {o['comp']} — ETA {o['eta']} — {md_code(o['code'])}")
+                text_lines.append(
+                    f"• 💥 *{o['defender_name']}* — {o['comp_str']} — ETA {o['eta']} — {md_code(o['code'])}"
+                )
+        text_lines.extend(["", "❗ Cancel with `/attack -c <code>`"])
 
-        lines.append("")
-        lines.append("❗ Cancel with `/attack -c <code>`.")
-
-    text = "\n".join(lines)
-
+    text = "\n".join(text_lines)
     kb = InlineKeyboardMarkup.from_button(
         InlineKeyboardButton("🔄 Refresh", callback_data="reports")
     )
 
     if update.message:
-        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
+        await update.message.reply_text(
+            text, parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+        )
     else:
         await update.callback_query.answer()
         try:
-            await update.callback_query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
+            await update.callback_query.edit_message_text(
+                text, parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+            )
         except BadRequest as e:
             if "Message is not modified" not in str(e):
                 raise
