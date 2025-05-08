@@ -4,7 +4,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 import time
 
-from bot.modules.player import Player
+from modules.player import Player
 from utils.format import section_header
 
 async def handler(update: Update, context: ContextTypes.DEFAULT_TYPE):

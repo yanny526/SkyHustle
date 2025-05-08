@@ -37,7 +37,7 @@ logging.basicConfig(
 )
 
 async def post_init(app):
-    await app.bot.set_my_commands([
+    await app.set_my_commands([
         ("start", "Start the game"),
         ("status", "View your base status"),
         ("build", "Construct buildings"),

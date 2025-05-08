@@ -18,7 +18,7 @@ async def private_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = ' '.join(args[1:])
 
     try:
-        await context.bot.send_message(
+        await context.send_message(
             chat_id=recipient_id,
             text=f"{section_header('PRIVATE MESSAGE', ✉️', 'none')}\n\n"
                  f"**From**: {update.effective_user.name}\n"
@@ -59,7 +59,7 @@ async def alliance_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for row in players[1:]:
         if len(row) > 9 and row[9] == alliance:
             try:
-                await context.bot.send_message(
+                await context.send_message(
                     chat_id=row[0],
                     text=f"{section_header('ALLIANCE CHAT', '👥', 'none')}\n\n"
                          f"**From**: {update.effective_user.name}\n"

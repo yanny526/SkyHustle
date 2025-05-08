@@ -19,7 +19,7 @@ async def send_notification(context: ContextTypes.DEFAULT_TYPE):
             energy = row[4]
             break
 
-    await context.bot.send_message(
+    await context.send_message(
         chat_id=player_id,
         text=f"{section_header('NOTIFICATION', '🔔', 'yellow')}\n\n"
              f"Your resources are low!\n"
