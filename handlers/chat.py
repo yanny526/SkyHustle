@@ -20,9 +20,9 @@ async def private_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         await context.send_message(
             chat_id=recipient_id,
-            text=f"{section_header('PRIVATE MESSAGE', ✉️', 'none')}\n\n"
+            text=f"{section_header('PRIVATE MESSAGE', '✉️', 'none')}\n\n"
                  f"**From**: {update.effective_user.name}\n"
-                 f"**Message**: {message}",
+                 f"**Message**: {message}\n",
             parse_mode="Markdown"
         )
         await update.message.reply_text(
