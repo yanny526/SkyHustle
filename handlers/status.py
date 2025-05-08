@@ -6,7 +6,7 @@ import time
 from datetime import datetime
 
 from modules.save_system import load_player_data, load_buildings_data, load_units_data
-from modules.chaos_events import active_events
+from handlers.chaos_events import active_events
 from modules.endgame import endgame_challenges
 from modules.weather import get_current_weather
 from utils.format import section_header
