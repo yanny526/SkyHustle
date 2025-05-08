@@ -1,0 +1,88 @@
+# bot/modules/weather.py
+
+import random
+from datetime import datetime, timedelta
+
+class WeatherEffect:
+    def __init__(self, name, description, duration, combat_modifier, production_modifier):
+        self.name = name
+        self.description = description
+        self.duration = duration  # in hours
+        self.combat_modifier = combat_modifier  # multiplier for combat power
+        self.production_modifier = production_modifier  # multiplier for resource production
+        self.start_time = datetime.now()
+        self.end_time = self.start_time + timedelta(hours=duration)
+
+    def is_active(self):
+        return datetime.now() <= self.end_time
+
+    def apply_effect(self):
+        return self.combat_modifier, self.production_modifier
+
+    def to_dict(self):
+        return {
+            "name": self.name,
+            "description": self.description,
+            "duration": self.duration,
+            "combat_modifier": self.combat_modifier,
+            "production_modifier": self.production_modifier,
+            "start_time": self.start_time.isoformat(),
+            "end_time": self.end_time.isoformat()
+        }
+
+def create_random_weather():
+    weather_types = [
+        {
+            "name": "Fog of War",
+            "description": "Reduces combat accuracy and visibility",
+            "duration": 2,
+            "combat_modifier": 0.8,
+            "production_modifier": 0.9
+        },
+        {
+            "name": "Solar Flare",
+            "description": "Increases energy production but damages electronic units",
+            "duration": 1,
+            "combat_modifier": 1.0,
+            "production_modifier": 1.2
+        },
+        {
+            "name": "Meteor Shower",
+            "description": "Randomly destroys buildings but provides rare resources",
+            "duration": 3,
+            "combat_modifier": 1.1,
+            "production_modifier": 0.8
+        },
+        {
+            "name": "Gravity Storm",
+            "description": "Slows unit movement but increases defensive strength",
+            "duration": 2,
+            "combat_modifier": 1.1,
+            "production_modifier": 0.9
+        },
+        {
+            "name": "Quantum Anomaly",
+            "description": "Randomly swaps resources between players",
+            "duration": 1,
+            "combat_modifier": 1.0,
+            "production_modifier": 1.0
+        }
+    ]
+    weather_data = random.choice(weather_types)
+    return WeatherEffect(
+        weather_data["name"],
+        weather_data["description"],
+        weather_data["duration"],
+        weather_data["combat_modifier"],
+        weather_data["production_modifier"]
+    )
+
+current_weather = None
+
+def get_current_weather():
+    global current_weather
+    if current_weather and current_weather.is_active():
+        return current_weather
+    else:
+        current_weather = create_random_weather()
+        return current_weather

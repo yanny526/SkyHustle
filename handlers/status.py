@@ -1,168 +1,141 @@
 # handlers/status.py
 
+from telegram import Update
+from telegram.ext import ContextTypes
+import time
 from datetime import datetime
-import html
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.constants import ParseMode
-from telegram.error import BadRequest
-from telegram.ext import CommandHandler, CallbackQueryHandler, ContextTypes
+from modules.save_system import load_player_data, load_buildings_data, load_units_data
+from modules.chaos_events import active_events
+from modules.endgame import endgame_challenges
+from modules.weather import get_current_weather
+from utils.format import section_header
 
-from config import BUILDING_MAX_LEVEL
-from modules.building_manager import (
-    PRODUCTION_PER_LEVEL,
-    get_building_info,
-    get_production_rates,
-    get_building_health,
-)
-from modules.unit_manager import UNITS
-from sheets_service import get_rows, update_row
-from utils.format_utils import (
-    format_bar,
-    get_building_emoji,
-    get_build_costs,
-    section_header,
-)
-
-async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_user.id)
-    now = datetime.utcnow()
+    name = update.effective_user.first_name
 
-    # Retrieve Player Data
-    players = get_rows("Players")
-    commander = "Unknown Commander"
-    credits = 0
-    minerals = 0
-    energy = 0
-    premium_credits = 0
-    last_login = "N/A"
-    for row in players[1:]:
-        if row[0] == uid:
-            commander = html.escape(row[1] or "Unknown Commander")
-            try:
-                credits = int(row[3])
-            except:
-                credits = 0
-            try:
-                minerals = int(row[4])
-            except:
-                minerals = 0
-            try:
-                energy = int(row[5])
-            except:
-                energy = 0
-            try:
-                premium_credits = int(row[7]) if len(row) > 7 else 0
-            except:
-                premium_credits = 0
-            if len(row) > 6 and row[6]:
-                last_login = datetime.fromtimestamp(int(row[6])).strftime('%Y-%m-%d %H:%M')
+    # Load player data
+    player_data = load_player_data(uid)
+    buildings_data = load_buildings_data(uid)
+    units_data = load_units_data(uid)
+
+    # Format last login
+    last_login = datetime.fromtimestamp(player_data["last_login"]).strftime('%Y-%m-%d %H:%M')
+
+    # Format active chaos events
+    events_text = "None"
+    if active_events:
+        events_text = "\n".join([f"• {event.name}: {event.description}" for event in active_events])
+
+    # Format endgame challenges
+    challenges_text = "\n".join([
+        f"• {challenge.name}: {'✅' if challenge.completed else '❌'}" for challenge in endgame_challenges
+    ])
+
+    # Get current weather
+    weather = get_current_weather()
+    weather_text = f"**Current Weather**: {weather.name}\n{weather.description}\nCombat Modifier: {weather.combat_modifier:.1f}x\nProduction Modifier: {weather.production_modifier:.1f}x"
+
+    # Determine player's faction
+    player_faction = "None"
+    for faction_id, faction in factions.items():
+        if uid in faction.members:
+            player_faction = faction.name
             break
-    else:
-        return await update.message.reply_text("❗ Please run /start first.")
 
-    # Production & Infrastructure
-    binfo = get_building_info(uid)
-    rates = get_production_rates(binfo)
-    health = get_building_health(uid)
-    all_bld = ["Bank"] + list(BUILDING_MAX_LEVEL.keys())
+    # Retrieve defensive structures
+    defensive_structures = get_rows("DefensiveStructures")
+    defense_info = "None"
+    for row in defensive_structures[1:]:
+        if row[0] == uid:
+            defense_info = f"{row[1]} - Level {row[2]} (Defense: {row[3]}x)"
+            break
 
-    # Army Composition & Strength
-    army_rows = get_rows("Army")
-    garrison = {r[1]: int(r[2]) for r in army_rows[1:] if r[0] == uid}
-    garrison_power = sum(cnt * UNITS[key][3] for key, cnt in garrison.items())
+    # Retrieve unlocked research items
+    unlocked_research = [item.name for item in research_items.values() if item.unlocked]
+    research_text = "Unlocked Research:\n" + "\n".join(unlocked_research) if unlocked_research else "No research unlocked yet"
 
-    dep_rows = get_rows("DeployedArmy")
-    deployed = {}
-    for r in dep_rows[1:]:
-        if r[0] != uid:
-            continue
-        key, cnt = r[1], int(r[2])
-        if cnt > 0:
-            deployed[key] = deployed.get(key, 0) + cnt
-    deployed_power = sum(cnt * UNITS[key][3] for key, cnt in deployed.items())
-
-    # Supply Tick Countdown
-    tick_str = ""
-
-    # Build Status Text
-    lines = []
-    lines.append(section_header("WAR ROOM BRIEFING", "🏰", color="gold"))
-    lines.append(f"  Commander: [{commander}]")
-    lines.append(f"  Last Login: [{last_login}]")
-    lines.append("")
-
-    lines.append(section_header("RESOURCES", "💰", color="green"))
-    lines.append(f"  Credits:  [{credits}]")
-    lines.append(f"  Minerals: [{minerals}]")
-    lines.append(f"  Energy:   [{energy}]")
-    lines.append(f"  Premium Credits: [{premium_credits}] ⭐")  # New premium currency display
-    lines.append("")
-
-    lines.append(section_header("PRODUCTION RATES", "⚙️", color="blue"))
-    lines.append(f"  Credits: [{rates['credits']}/min]")
-    lines.append(f"  Minerals: [{rates['minerals']}/min]")
-    lines.append(f"  Energy:   [{rates['energy']}/min]")
-    lines.append("")
-
-    lines.append(section_header("INFRASTRUCTURE STATUS", "🏭", color="magenta"))
-    for b in all_bld:
-        lvl = binfo.get(b, 0)
-        hp = health.get(b, {"current": 0, "max": 0})
-        current_hp = hp["current"]
-        max_hp = hp["max"]
-        bar = format_bar(current_hp, max_hp)
-        lines.append(f"{get_building_emoji(b)} {b}: Lvl {lvl} {bar} ({current_hp}/{max_hp})")
-    lines.append("")
-
-    lines.append(section_header("ARMY STRENGTH", "⚔️", color="red"))
-    total_power = garrison_power + deployed_power or 1
-    lines.append(f"🛡️ Garrison : {format_bar(garrison_power, total_power)} ({garrison_power})")
-    lines.append(f"🚚 Deployed : {format_bar(deployed_power, total_power)} ({deployed_power})")
-    lines.append("")
-
-    lines.append(section_header("NEXT UPGRADE PATHS", "➡️", color="cyan"))
-    for b in all_bld:
-        lvl = binfo.get(b, 0)
-        nl = lvl + 1
-        cC, cM, eC = get_build_costs(b, nl)
-        prod_info = PRODUCTION_PER_LEVEL.get(b)
-        if prod_info:
-            key, per = prod_info
-            gain = per * nl - per * lvl
-            gain_str = f"+{gain} {key}/min"
-        else:
-            gain_str = "–"
-        lines.append(
-            f"{get_building_emoji(b)} {b}: {lvl}→{nl} | cost 💳{cC}, ⛏️{cM}, ⚡{eC} | {gain_str}"
+    # Retrieve current alliance war status
+    war_status = "No active alliance war"
+    current_war = get_current_war()
+    if current_war:
+        status = current_war.get_status()
+        time_left = (status["end_time"] - datetime.now()).total_seconds() / 3600
+        war_status = (
+            f"Alliance War: {status['alliance1']} vs {status['alliance2']}\n"
+            f"Score: {status['score'][status['alliance1']]} - {status['score'][status['alliance2']]}\n"
+            f"Time Left: {time_left:.1f} hours"
         )
 
-    lines.append(section_header("AVAILABLE ABILITIES", "✨", color="purple"))
-    lines.append("Use `/ability` to see special abilities for your units")
-    lines.append("Premium members can purchase abilities to enhance their units in battle!")
+    # Retrieve evolved units
+    evolved_units = []
+    for evo in evolutions:
+        if evo.unlocked:
+            evolved_units.append(evo.name)
+    evolved_units_text = "Evolved Units:\n" + "\n".join(evolved_units) if evolved_units else "No units evolved yet"
 
-    report = "\n".join(lines)
-    text = (
-        f"<b>⚔️🏰 WAR ROOM BRIEFING: Commander {commander} 🏰⚔️</b>\n"
-        f"<pre>{html.escape(report)}</pre>"
+    # Check if user is an admin
+    admins = get_rows("Admins")
+    is_admin = any(row[0] == uid for row in admins[1:])
+
+    await update.message.reply_text(
+        f"{section_header('WAR ROOM BRIEFING', '🏰')}\n\n"
+        f"Commander: {player_data['name']}\n"
+        f"Faction: {player_faction}\n"
+        f"Alliance: {player_data['alliance']}\n"
+        f"Global Rank: #{player_data['global_rank']}\n"
+        f"Level: {player_data['level']}⭐ (Exp: {player_data['experience']})\n"
+        f"Last Login: {last_login}\n\n"
+        f"{section_header('RESOURCES', '💰')}\n"
+        f"Credits: {player_data['credits']}💰 | Minerals: {player_data['minerals']}⛏️ | Energy: {player_data['energy']}⚡\n"
+        f"SkyBucks: {player_data['skybucks']}\n\n"
+        f"{section_header('BASE DEFENSES', '🛡️')}\n"
+        f"{defense_info}\n\n"
+        f"{section_header('RESEARCH', '🔬')}\n"
+        f"{research_text}\n\n"
+        f"{section_header('EVOLVED UNITS', '✨')}\n"
+        f"{evolved_units_text}\n\n"
+        f"{section_header('ALLIANCE WAR', '⚔️')}\n"
+        f"{war_status}\n\n"
+        f"{section_header('BASE STATUS', '🏭')}\n"
+        f"Barracks: Level {buildings_data.get('barracks', {'level': 1})['level']} ({buildings_data.get('barracks', {'production': 10})['production']}/min)\n"
+        f"Factory: Level {buildings_data.get('factory', {'level': 1})['level']} ({buildings_data.get('factory', {'production': 15})['production']}/min)\n"
+        f"Research Lab: Level {buildings_data.get('research_lab', {'level': 1})['level']} ({buildings_data.get('research_lab', {'production': 20})['production']}/min)\n\n"
+        f"{section_header('FORCES', '⚔️')}\n"
+        f"Infantry: {units_data.get('infantry', 0)}/50 👨‍✈️\n"
+        f"Tanks: {units_data.get('tanks', 0)}/30 🛡️\n"
+        f"Artillery: {units_data.get('artillery', 0)}/20 🚀\n\n"
+        f"{section_header('CURRENT WEATHER', '🌤️')}\n"
+        f"{weather_text}\n\n"
+        f"{section_header('ACTIVE CHAOS EVENTS', '🌪️')}\n"
+        f"{events_text}\n\n"
+        f"{section_header('ENDGAME CHALLENGES', '🎯')}\n"
+        f"{challenges_text}\n\n"
+        f"{section_header('ACHIEVEMENTS', '🏅')}\n"
+        "Use /achievements to view your progress!\n\n"
+        "Use /build to construct buildings!\n"
+        "Use /train to train units!\n"
+        "Use /specialize to enhance your units with special abilities!\n"
+        "Use /attack to conquer territories!\n"
+        "Use /shop for useful items!\n"
+        "Use /blackmarket for premium items!\n"
+        "Use /alliance to manage alliances!\n"
+        "Use /leaderboard to view rankings!\n"
+        "Use /daily for daily rewards!\n"
+        "Use /events to see current events!\n"
+        "Use /notifications to set up notifications!\n"
+        "Use /msg to send private messages!\n"
+        "Use /save to save your progress!\n"
+        "Use /faction to join a faction!\n"
+        "Use /chaos to view or trigger chaos events!\n"
+        "Use /endgame for endgame challenges!\n"
+        "Use /tutorial to access the game tutorial!\n"
+        "Use /weather to check current weather conditions!\n"
+        "Use /evolve to evolve your units!\n"
+        "Use /defensive to build defensive structures!\n"
+        "Use /research to unlock advanced technologies!\n"
+        "Use /war to participate in alliance wars!\n"
+        f"Use /admin to access admin commands!{'' if is_admin else ' (Not an admin)'}",
+        parse_mode="Markdown"
     )
-
-    kb = InlineKeyboardMarkup([[InlineKeyboardButton("🔄 Refresh", callback_data="status")]])
-
-    if update.message:
-        await update.message.reply_text(text, parse_mode=ParseMode.HTML, reply_markup=kb)
-    else:
-        await update.callback_query.edit_message_text(
-            text, parse_mode=ParseMode.HTML, reply_markup=kb
-        )
-
-async def status_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    data = query.data
-
-    if data == "status":
-        return await status(update, context)
-
-handler = CommandHandler("status", status)
-callback_handler = CallbackQueryHandler(status_button, pattern="^(status)$")

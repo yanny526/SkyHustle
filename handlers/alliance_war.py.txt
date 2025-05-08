@@ -1,0 +1,58 @@
+# handlers/alliance_war.py
+
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ContextTypes
+
+from modules.alliance_war import start_war, get_current_war
+from utils.format import section_header
+
+async def handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    args = context.args
+    uid = str(update.effective_user.id)
+
+    if not args:
+        current_war = get_current_war()
+        if current_war:
+            status = current_war.get_status()
+            time_left = (status["end_time"] - datetime.now()).total_seconds() / 3600
+
+            await update.message.reply_text(
+                f"{section_header('ALLIANCE WAR', '🔥')}\n\n"
+                f"**{status['alliance1']}** vs **{status['alliance2']}**\n"
+                f"Score: {status['score'][status['alliance1']]} - {status['score'][status['alliance2']]}\n"
+                f"Time Left: {time_left:.1f} hours\n\n"
+                "Use /warattack <player_id> to participate!",
+                parse_mode="Markdown"
+            )
+        else:
+            await update.message.reply_text(
+                "No active alliance wars. Use /warstart <alliance1> <alliance2> to start one (admin only).",
+                parse_mode="Markdown"
+            )
+        return
+
+    action = args[0].lower()
+    if action == "start" and len(args) > 2 and context.bot_data.get("is_admin", False):
+        alliance1 = args[1]
+        alliance2 = args[2]
+        start_war(alliance1, alliance2)
+        await update.message.reply_text(
+            f"🔥 *Alliance War Started!* 🔥\n\n"
+            f"{alliance1} vs {alliance2}\n"
+            f"Duration: 24 hours",
+            parse_mode="Markdown"
+        )
+    elif action == "attack" and len(args) > 1:
+        target_id = args[1]
+        current_war = get_current_war()
+        if current_war:
+            result = current_war.attack(uid, target_id)
+            await update.message.reply_text(
+                result,
+                parse_mode="Markdown"
+            )
+        else:
+            await update.message.reply_text(
+                "No active alliance wars!",
+                parse_mode="Markdown"
+            )

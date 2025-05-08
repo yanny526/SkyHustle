@@ -1,0 +1,36 @@
+# handlers/events.py
+
+from telegram import Update
+from telegram.ext import ContextTypes
+
+from utils.format import section_header
+
+current_event = {
+    "name": "Resource Rush",
+    "description": "Double mineral production for all players!",
+    "start": None,
+    "end": None,
+    "active": False
+}
+
+async def handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    now = datetime.now()
+
+    if current_event["active"] and now >= current_event["start"] and now <= current_event["end"]:
+        await update.message.reply_text(
+            f"{section_header('ACTIVE EVENT', '🎉', 'magenta')}\n\n"
+            f"**{current_event['name']}**\n"
+            f"{current_event['description']}\n\n"
+            f"Started: {current_event['start'].strftime('%Y-%m-%d %H:%M')}\n"
+            f"Ends: {current_event['end'].strftime('%Y-%m-%d %H:%M')}",
+            parse_mode="Markdown"
+        )
+    else:
+        await update.message.reply_text(
+            f"{section_header('UPCOMING EVENT', '📅', 'magenta')}\n\n"
+            f"**{current_event['name']}**\n"
+            f"{current_event['description']}\n\n"
+            f"Starting: {current_event['start'].strftime('%Y-%m-%d %H:%M')}\n"
+            f"Ending: {current_event['end'].strftime('%Y-%m-%d %H:%M')}",
+            parse_mode="Markdown"
+        )
