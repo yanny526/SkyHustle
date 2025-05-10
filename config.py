@@ -10,4 +10,8 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 SHEET_ID = os.getenv("SHEET_ID")
 
 # Decode base64 credentials
-SERVICE_ACCOUNT_INFO = json.loads(base64.b64decode(BASE64_CREDS).decode('utf-8'))
+SERVICE_ACCOUNT_INFO = None
+if BASE64_CREDS:
+    import base64, json
+    decoded = base64.b64decode(BASE64_CREDS)
+    SERVICE_ACCOUNT_INFO = json.loads(decoded)

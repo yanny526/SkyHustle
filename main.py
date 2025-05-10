@@ -1,8 +1,7 @@
-#!/usr/bin/env python3
-import logging
+# bot/main.py
 
-from telegram import BotCommand
-from telegram.ext import Application, CommandHandler, MessageHandler, filters
+import logging
+from telegram.ext import Application, CommandHandler
 
 from config import BOT_TOKEN
 from handlers.start import handler as start_handler
@@ -34,41 +33,39 @@ from handlers.alliance_war import handler as war_handler
 from handlers.admin import handler as admin_handler
 
 logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 
 async def post_init(app):
-    # Register bot commands on startup
-    await app.bot.set_my_commands([
-        BotCommand("start", "Start the game"),
-        BotCommand("status", "View your base status"),
-        BotCommand("build", "Construct buildings"),
-        BotCommand("train", "Train units"),
-        BotCommand("attack", "Attack other players"),
-        BotCommand("shop", "Visit the normal shop"),
-        BotCommand("blackmarket", "Visit the black market"),
-        BotCommand("achievements", "View your achievements"),
-        BotCommand("alliance", "Manage alliances"),
-        BotCommand("leaderboard", "View leaderboards"),
-        BotCommand("daily", "Claim daily rewards"),
-        BotCommand("events", "View current events"),
-        BotCommand("notifications", "Set up notifications"),
-        BotCommand("msg", "Send a private message"),
-        BotCommand("save", "Save your progress"),
-        BotCommand("load", "Load your progress"),
-        BotCommand("faction", "Join or view factions"),
-        BotCommand("chaos", "View or trigger chaos events"),
-        BotCommand("endgame", "Attempt endgame challenges"),
-        BotCommand("tutorial", "Access the game tutorial"),
-        BotCommand("scan", "Get suggested targets"),
-        BotCommand("specialize", "Enhance units with special abilities"),
-        BotCommand("weather", "Check current weather conditions"),
-        BotCommand("evolve", "Evolve your units"),
-        BotCommand("defensive", "Build defensive structures"),
-        BotCommand("research", "Unlock advanced technologies"),
-        BotCommand("war", "Participate in alliance wars"),
-        BotCommand("admin", "Access admin commands"),
+    await app.set_my_commands([
+        ("start", "Start the game"),
+        ("status", "View your base status"),
+        ("build", "Construct buildings"),
+        ("train", "Train units"),
+        ("attack", "Attack other players"),
+        ("shop", "Visit the normal shop"),
+        ("blackmarket", "Visit the black market"),
+        ("achievements", "View your achievements"),
+        ("alliance", "Manage alliances"),
+        ("leaderboard", "View leaderboards"),
+        ("daily", "Claim daily rewards"),
+        ("events", "View current events"),
+        ("notifications", "Set up notifications"),
+        ("msg", "Send a private message"),
+        ("save", "Save your progress"),
+        ("load", "Load your progress"),
+        ("faction", "Join or view factions"),
+        ("chaos", "View or trigger chaos events"),
+        ("endgame", "Attempt endgame challenges"),
+        ("tutorial", "Access the game tutorial"),
+        ("scan", "Get suggested targets"),
+        ("specialize", "Enhance units with special abilities"),
+        ("weather", "Check current weather conditions"),
+        ("evolve", "Evolve your units"),
+        ("defensive", "Build defensive structures"),
+        ("research", "Unlock advanced technologies"),
+        ("war", "Participate in alliance wars"),
+        ("admin", "Access admin commands"),
     ])
 
 def main():

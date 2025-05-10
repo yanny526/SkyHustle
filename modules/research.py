@@ -1,63 +1,79 @@
-"""
-modules/research.py
-
-Defines ResearchItem class and all available research items.
-"""
-
-from typing import Callable, List
+# bot/modules/research.py
 
 class ResearchItem:
-    def __init__(
-        self,
-        name: str,
-        description: str,
-        prerequisites: List['ResearchItem'],
-        costs: dict,
-        action: Callable[[str], str]
-    ):
+    def __init__(self, name, description, prerequisites, cost, effect):
         self.name = name
         self.description = description
-        self.prerequisites = prerequisites
-        self.costs = costs
-        self.action = action
+        self.prerequisites = prerequisites  # List of research items that must be completed first
+        self.cost = cost  # {'credits': 100, 'minerals': 50}
+        self.effect = effect  # Function to apply the effect
+        self.unlocked = False
 
-# === Research effect functions ===
+    def is_unavailable(self, player_id):
+        # Check if prerequisites are met
+        for prereq in self.prerequisites:
+            if not prereq.unlocked:
+                return True
+        return False
 
-def infantry_research(player_id: str) -> str:
-    # TODO: insert real logic for applying advanced infantry research
-    return "Advanced Infantry research completed."
+    def apply_effect(self, player_id):
+        # Apply the research effect
+        return self.effect(player_id)
 
-def energy_efficiency(player_id: str) -> str:
-    # TODO: insert real logic for applying energy efficiency research
-    return "Energy Efficiency research completed."
+    def to_dict(self):
+        return {
+            "name": self.name,
+            "description": self.description,
+            "prerequisites": [prereq.name for prereq in self.prerequisites],
+            "cost": self.cost,
+            "unlocked": self.unlocked
+        }
 
-# === Research items registry ===
+def advanced_infantry(player_id):
+    # Update infantry power
+    units = get_rows("Units")
+    for idx, row in enumerate(units[1:], start=1):
+        if row[0] == player_id and row[1] == "infantry":
+            current_power = int(row[3])
+            new_power = current_power * 1.3
+            row[3] = str(new_power)
+            update_row("Units", idx, row)
+            return f"Infantry power increased by 30%!"
+    return "Infantry not found."
 
-research_items: dict[str, ResearchItem] = {}
+def energy_efficiency(player_id):
+    # Update energy production
+    buildings = get_rows("Buildings")
+    for idx, row in enumerate(buildings[1:], start=1):
+        if row[0] == player_id and row[1] == "Research Lab":
+            current_production = int(row[3])
+            new_production = current_production * 1.2
+            row[3] = str(new_production)
+            update_row("Buildings", idx, row)
+            return f"Research Lab energy production increased by 20%!"
+    return "Research Lab not found."
 
-# 1) Advanced Infantry
-research_items['advanced_infantry'] = ResearchItem(
-    name='Advanced Infantry',
-    description='Unlock advanced infantry units.',
-    prerequisites=[],
-    costs={'credits': 500, 'minerals': 200},
-    action=infantry_research
-)
-
-# 2) Energy Efficiency
-research_items['energy_efficiency'] = ResearchItem(
-    name='Energy Efficiency',
-    description='Improve energy production efficiency.',
-    prerequisites=[],
-    costs={'credits': 800, 'minerals': 300},
-    action=energy_efficiency
-)
-
-# 3) Quantum Shielding (requires advanced infantry)
-research_items['quantum_shielding'] = ResearchItem(
-    name='Quantum Shielding',
-    description='Develop advanced shielding technology for units.',
-    prerequisites=[research_items['advanced_infantry']],
-    costs={'credits': 1200, 'minerals': 500, 'skybucks': 100},
-    action=lambda pid: 'Quantum Shielding research completed.'
-)
+# Define research items
+research_items = {
+    "advanced_infantry": ResearchItem(
+        "Advanced Infantry",
+        "Upgrade infantry with advanced weaponry and armor",
+        [],
+        {"credits": 500, "minerals": 200},
+        advanced_infantry
+    ),
+    "energy_efficiency": ResearchItem(
+        "Energy Efficiency",
+        "Improve energy production efficiency",
+        [],
+        {"credits": 800, "minerals": 300},
+        energy_efficiency
+    ),
+    "quantum_shielding": ResearchItem(
+        "Quantum Shielding",
+        "Develop advanced shielding technology for units",
+        [research_items["advanced_infantry"]],
+        {"credits": 1200, "minerals": 500, "skybucks": 100},
+        lambda pid: "Shielding technology unlocked!"
+    )
+}
