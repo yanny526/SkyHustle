@@ -6,6 +6,7 @@ import time
 
 from modules.player import Player
 from utils.format import section_header
+from sheets_service import get_rows, append_row  # Added import
 
 async def handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_user.id)
@@ -16,12 +17,11 @@ async def handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     player_exists = any(row[0] == uid for row in players[1:])
 
     if not player_exists:
-        # Register new player
-        new_player = Player(uid, name)
-        append_row("Players", list(new_player.to_dict().values()))
+        # Register new player with starting resources
+        append_row("Players", [uid, name, 1000, 500, 200])
         await update.message.reply_text(
-            f"🚀 Welcome to SkyHustle, Commander {name}! 🚀\n\n"
-            "You've been registered with:\n"
+            section_header("WELCOME", "👋") + "\n\n"
+            "Welcome! You’ve received:\n"
             "1000💰 Credits | 500⛏️ Minerals | 200⚡ Energy\n"
             "Use these commands to get started:\n"
             "/status - View your base status\n"
