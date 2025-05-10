@@ -1,4 +1,3 @@
-
 def safe_int(x):
     try:
         return int(x)
@@ -81,13 +80,13 @@ def load_player_data(player_id):
         if row[0] == player_id:
             return {
                 "name": row[1],
-                "credits": int(row[2]),
-                "minerals": int(row[3]),
-                "energy": int(row[4]),
+                "credits": safe_int(row[2]),
+                "minerals": safe_int(row[3]),
+                "energy": safe_int(row[4]),
                 "skybucks": safe_int(row[5]),
-                "experience": int(row[6]),
-                "level": int(row[7]),
-                "last_login": int(row[8]) if len(row) > 8 else int(time.time()),
+                "experience": safe_int(row[6]),
+                "level": safe_int(row[7]),
+                "last_login": safe_int(row[8]) if len(row) > 8 else int(time.time()),
                 "alliance": row[9] if len(row) > 9 else "",
                 "global_rank": row[10] if len(row) > 10 else "?"
             }
@@ -110,8 +109,8 @@ def load_buildings_data(player_id):
     for row in buildings[1:]:
         if row[0] == player_id:
             building_info[row[1]] = {
-                "level": int(row[2]),
-                "production": int(row[3])
+                "level": safe_int(row[2]),
+                "production": safe_int(row[3])
             }
     return building_info
 
@@ -120,5 +119,5 @@ def load_units_data(player_id):
     unit_info = {}
     for row in units[1:]:
         if row[0] == player_id:
-            unit_info[row[1]] = int(row[2])
+            unit_info[row[1]] = safe_int(row[2])
     return unit_info
