@@ -20,9 +20,11 @@ def get_rows(sheet_name: str) -> list[list[str]]:
     Returns a list of rows, each row is a list of cell values (strings).
     """
     try:
+        # Specify a column range (A:Z) so the API can parse it
+        range_str = f"{sheet_name}!A:Z"
         resp = _sheets.values().get(
             spreadsheetId=SHEET_ID,
-            range=sheet_name
+            range=range_str
         ).execute()
         return resp.get("values", [])
     except Exception as e:
@@ -32,10 +34,10 @@ def get_rows(sheet_name: str) -> list[list[str]]:
 
 def update_row(sheet_name: str, row_index: int, row_values: list) -> None:
     """
-    Overwrite the row at `row_index` (0-based) in `sheet_name` with `row_values`.
+    Overwrite a particular row (row_index is zero-based) in sheet_name.
     """
     try:
-        # Google Sheets rows are 1-based, so add 1
+        # Google Sheets rows are 1-based
         range_str = f"{sheet_name}!A{row_index + 1}"
         body = {"values": [row_values]}
         _sheets.values().update(
@@ -54,9 +56,10 @@ def append_row(sheet_name: str, row_values: list) -> None:
     """
     try:
         body = {"values": [row_values]}
+        # Again, include a column range so the API can parse the request
         _sheets.values().append(
             spreadsheetId=SHEET_ID,
-            range=sheet_name,
+            range=f"{sheet_name}!A:Z",
             valueInputOption="RAW",
             insertDataOption="INSERT_ROWS",
             body=body
