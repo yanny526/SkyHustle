@@ -1,0 +1,48 @@
+# bot/modules/faction.py
+
+class Faction:
+    def __init__(self, name, description, bonus_type, bonus_value):
+        self.name = name
+        self.description = description
+        self.bonus_type = bonus_type  # e.g., "credits", "minerals", "energy", "combat"
+        self.bonus_value = bonus_value  # multiplier for the bonus
+        self.members = []
+
+    def add_member(self, player_id):
+        if player_id not in self.members:
+            self.members.append(player_id)
+
+    def remove_member(self, player_id):
+        if player_id in self.members:
+            self.members.remove(player_id)
+
+    def to_dict(self):
+        return {
+            "name": self.name,
+            "description": self.description,
+            "bonus_type": self.bonus_type,
+            "bonus_value": self.bonus_value,
+            "members": self.members
+        }
+
+# Define available factions
+factions = {
+    "terran": Faction(
+        "Terran Dominion",
+        "Balanced faction with moderate bonuses to all resources.",
+        "production",
+        1.1
+    ),
+    "zerg": Faction(
+        "Zerg Swarm",
+        "Focus on rapid unit production and energy efficiency.",
+        "energy",
+        1.2
+    ),
+    "protoss": Faction(
+        "Protoss Empire",
+        "Specialize in advanced technology and mineral production.",
+        "minerals",
+        1.15
+    )
+}
