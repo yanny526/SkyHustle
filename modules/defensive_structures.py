@@ -1,0 +1,34 @@
+# bot/modules/defensive_structures.py
+
+class DefensiveStructure:
+    def __init__(self, name, description, defense_bonus, resource_cost):
+        self.name = name
+        self.description = description
+        self.defense_bonus = defense_bonus
+        self.resource_cost = resource_cost  # {'credits': 100, 'minerals': 50}
+        self.level = 1
+
+    def upgrade(self, player_id):
+        # Deduct resources for upgrade
+        player_data = load_player_data(player_id)
+        for resource, amount in self.resource_cost.items():
+            if resource == 'credits':
+                player_data['credits'] -= amount
+            if resource == 'minerals':
+                player_data['minerals'] -= amount
+            if resource == 'skybucks':
+                player_data['skybucks'] -= amount
+        save_player_data(player_id, player_data)
+
+        # Increase defense bonus
+        self.defense_bonus *= 1.5
+        self.level += 1
+
+    def to_dict(self):
+        return {
+            "name": self.name,
+            "description": self.description,
+            "defense_bonus": self.defense_bonus,
+            "resource_cost": self.resource_cost,
+            "level": self.level
+        }

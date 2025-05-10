@@ -1,0 +1,63 @@
+# handlers/leaderboard.py
+
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ContextTypes
+
+from utils.format import section_header
+
+async def handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    args = context.args
+
+    if not args or args[0].lower() not in ["players", "alliances"]:
+        kb = [
+            [InlineKeyboardButton("Player Leaderboard", callback_data="leaderboard_players")],
+            [InlineKeyboardButton("Alliance Leaderboard", callback_data="leaderboard_alliances")],
+            [InlineKeyboardButton("Close", callback_data="close")]
+        ]
+
+        await update.message.reply_text(
+            f"{section_header('LEADERBOARDS', '🏆', 'orange')}\n\n"
+            "Compete for the top ranks in SkyHustle:\n\n"
+            "Use /leaderboard players to view player rankings\n"
+            "Use /leaderboard alliances to view alliance rankings",
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup(kb)
+        )
+        return
+
+    leaderboard_type = args[0].lower()
+    if leaderboard_type == "players":
+        # Retrieve and sort players by level and experience
+        players = get_rows("Players")
+        sorted_players = sorted(players[1:], key=lambda x: (int(x[7]), int(x[6])), reverse=True)
+
+        leaderboard_text = f"{section_header('PLAYER LEADERBOARD', '👨‍✈️', 'orange')}\n\n"
+        for i, player in enumerate(sorted_players[:10], 1):
+            try:
+                level = int(player[7])
+                experience = int(player[6])
+                leaderboard_text += f"{i}. {player[1]} - Level {level}⭐ (Exp: {experience})\n"
+            except:
+                leaderboard_text += f"{i}. {player[1]} - Level 1⭐ (Exp: 0)\n"
+
+        await update.message.reply_text(
+            leaderboard_text,
+            parse_mode="Markdown"
+        )
+    elif leaderboard_type == "alliances":
+        # Retrieve and sort alliances by total power
+        alliances = get_rows("Alliances")
+        sorted_alliances = sorted(alliances[1:], key=lambda x: int(x[4] if x[4] else 0), reverse=True)
+
+        leaderboard_text = f"{section_header('ALLIANCE LEADERBOARD', '🤝', 'orange')}\n\n"
+        for i, alliance in enumerate(sorted_alliances[:10], 1):
+            try:
+                total_power = int(alliance[4])
+                leaderboard_text += f"{i}. {alliance[0]} - Total Power: {total_power}\n"
+            except:
+                leaderboard_text += f"{i}. {alliance[0]} - Total Power: 0\n"
+
+        await update.message.reply_text(
+            leaderboard_text,
+            parse_mode="Markdown"
+        )

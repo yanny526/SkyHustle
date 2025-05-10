@@ -1,0 +1,52 @@
+# handlers/unit_specialization.py
+
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ContextTypes
+
+from modules.unit_specialization import specializations
+from utils.format import section_header
+
+async def handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid = str(update.effective_user.id)
+    args = context.args
+
+    if not args:
+        kb = []
+        for unit_type, specs in specializations.items():
+            for spec in specs:
+                kb.append([InlineKeyboardButton(
+                    f"{spec.name} ({unit_type})",
+                    callback_data=f"spec_{unit_type}_{spec.name}"
+                )])
+
+        kb.append([InlineKeyboardButton("Close", callback_data="close")])
+
+        await update.message.reply_text(
+            f"{section_header('UNIT SPECIALIZATIONS', '✨')}\n\n"
+            "Select a specialization to enhance your units:\n\n" +
+            "\n".join([f"{unit_type.capitalize()}: {spec.name} - {spec.description}" for unit_type, specs in specializations.items() for spec in specs]),
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup(kb)
+        )
+        return
+
+    # Example of applying a specialization (simplified)
+    specialization_name = " ".join(args)
+    for unit_type, specs in specializations.items():
+        for spec in specs:
+            if spec.name.lower() == specialization_name.lower():
+                # Apply the specialization effect
+                player_units = load_units_data(uid)
+                unit_count = player_units.get(unit_type, 0)
+                result = spec.apply_effect(uid, unit_count)
+                await update.message.reply_text(
+                    f"✨ *Specialization Applied!* ✨\n\n"
+                    f"{result}",
+                    parse_mode="Markdown"
+                )
+                return
+
+    await update.message.reply_text(
+        "Specialization not found. Use /specialize to see available options.",
+        parse_mode="Markdown"
+    )

@@ -1,0 +1,37 @@
+# bot/modules/unit_specialization.py
+
+class UnitSpecialization:
+    def __init__(self, unit_type, name, description, effect):
+        self.unit_type = unit_type
+        self.name = name
+        self.description = description
+        self.effect = effect  # Function to apply the effect
+
+    def apply_effect(self, player_id, unit_count):
+        # Apply the specialization effect
+        return self.effect(player_id, unit_count)
+
+def critical_strike(player_id, unit_count):
+    # Increase critical strike chance for infantry
+    return f"Infantry critical strike chance increased by 30% for {unit_count} units!"
+
+def defensive_bonus(player_id, unit_count):
+    # Increase defense for tanks
+    return f"Tanks defense increased by 25% for {unit_count} units!"
+
+def long_range_bonus(player_id, unit_count):
+    # Increase attack range and damage for artillery
+    return f"Artillery attack range and damage increased by 20% for {unit_count} units!"
+
+# Define specializations for each unit type
+specializations = {
+    "infantry": [
+        UnitSpecialization("infantry", "Critical Strike", "30% chance to deal double damage", critical_strike)
+    ],
+    "tanks": [
+        UnitSpecialization("tanks", "Defensive Fortification", "25% reduction in damage taken", defensive_bonus)
+    ],
+    "artillery": [
+        UnitSpecialization("artillery", "Long-Range Precision", "20% increase in attack range and damage", long_range_bonus)
+    ]
+}
