@@ -54,26 +54,29 @@ def energy_efficiency(player_id):
     return "Research Lab not found."
 
 # Define research items
-research_items = {
-    "advanced_infantry": ResearchItem(
-        "Advanced Infantry",
-        "Upgrade infantry with advanced weaponry and armor",
-        [],
-        {"credits": 500, "minerals": 200},
-        advanced_infantry
-    ),
-    "energy_efficiency": ResearchItem(
-        "Energy Efficiency",
-        "Improve energy production efficiency",
-        [],
-        {"credits": 800, "minerals": 300},
-        energy_efficiency
-    ),
-    "quantum_shielding": ResearchItem(
-        "Quantum Shielding",
-        "Develop advanced shielding technology for units",
-        [research_items["advanced_infantry"]],
-        {"credits": 1200, "minerals": 500, "skybucks": 100},
-        lambda pid: "Shielding technology unlocked!"
-    )
-}
+research_items = {}
+
+# Initialize research items
+research_items['advanced_infantry'] = ResearchItem(
+    'Advanced Infantry',
+    'Unlock advanced infantry units',
+    [],
+    {'credits': 500, 'minerals': 200},
+    advanced_infantry
+)
+
+research_items['energy_efficiency'] = ResearchItem(
+    'Energy Efficiency',
+    'Improve energy production efficiency',
+    [],
+    {'credits': 800, 'minerals': 300},
+    energy_efficiency
+)
+
+research_items['quantum_shielding'] = ResearchItem(
+    'Quantum Shielding',
+    'Develop advanced shielding technology for units',
+    [research_items['advanced_infantry']],
+    {'credits': 1200, 'minerals': 500, 'skybucks': 100},
+    lambda pid: 'Shielding technology unlocked!'
+)
