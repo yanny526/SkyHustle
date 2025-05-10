@@ -1,7 +1,7 @@
 # bot/main.py
 
 import logging
-from telegram.ext import Application, CommandHandler
+from telegram.ext import Application,CommandHandler,MessageHandler,filters
 
 from config import BOT_TOKEN
 from handlers.start import handler as start_handler
