@@ -2,15 +2,33 @@
 
 class Application:
     """Stub of the high-level Application builder."""
+    def __init__(self):
+        # In real life app.bot is the Bot instance
+        self.bot = self
+
     @classmethod
     def builder(cls):
-        return cls()
-    def token(self, token: str):
-        return self
-    def build(self):
-        return self
+        # Builder pattern: Application.builder().token(...).build()
+        class Builder:
+            def __init__(self):
+                self._token = None
+            def token(self, token: str):
+                self._token = token
+                return self
+            def build(self):
+                return Application()
+        return Builder()
+
     def run_polling(self):
-        # No-op in stub
+        # No-op stub
+        pass
+
+    def add_handler(self, handler):
+        # Stub for registering handlers
+        pass
+
+    def set_my_commands(self, commands):
+        # Stub for setting bot commands
         pass
 
 class CommandHandler:
@@ -39,7 +57,7 @@ class ContextTypes:
     """Stub for context types."""
     DEFAULT_TYPE = None
 
-# Simple filter stub so you can write filters.TEXT & ~filters.COMMAND
+# Simple filter stub to allow `filters.TEXT & ~filters.COMMAND`
 class _FilterStub:
     def __and__(self, other): return self
     def __invert__(self): return self
