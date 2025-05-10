@@ -1,3 +1,10 @@
+
+def safe_int(x):
+    try:
+        return int(x)
+    except (ValueError, TypeError):
+        return 0
+
 # bot/modules/save_system.py
 
 from sheets_service import get_rows, update_row, append_row
@@ -77,7 +84,7 @@ def load_player_data(player_id):
                 "credits": int(row[2]),
                 "minerals": int(row[3]),
                 "energy": int(row[4]),
-                "skybucks": int(row[5]),
+                "skybucks": safe_int(row[5]),
                 "experience": int(row[6]),
                 "level": int(row[7]),
                 "last_login": int(row[8]) if len(row) > 8 else int(time.time()),
