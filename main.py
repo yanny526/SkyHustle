@@ -71,9 +71,13 @@ async def post_init(app):
         BotCommand("admin", "Access admin commands"),
     ])
 
+
+async def error_handler(update, context):
+    logging.exception("Unhandled exception in update: %s", update)
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
     app.post_init = post_init
+    app.add_error_handler(error_handler)
 
     app.add_handler(CommandHandler("start", start_handler))
     app.add_handler(CommandHandler("status", status_handler))
