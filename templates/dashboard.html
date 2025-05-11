@@ -1,0 +1,207 @@
+{% extends "layout.html" %}
+
+{% block title %}SkyHustle - Admin Dashboard{% endblock %}
+
+{% block head_content %}
+<!-- Chart.js for statistics graphs -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-header text-center">
+    <h1 class="display-5 fw-bold">SkyHustle Admin Dashboard</h1>
+    <p class="lead">Monitor game statistics and player activity</p>
+</div>
+
+<!-- Stats Overview Cards -->
+<div class="row mb-5" id="stats-cards">
+    <div class="col-md-4 mb-4">
+        <div class="card stats-card bg-primary bg-opacity-25 h-100">
+            <div class="card-body text-center">
+                <div class="stats-icon">
+                    <i class="fas fa-users"></i>
+                </div>
+                <h3 class="stat-value" id="player-count">
+                    <span class="placeholder-glow">
+                        <span class="placeholder w-75"></span>
+                    </span>
+                </h3>
+                <p class="stat-label">Players</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4 mb-4">
+        <div class="card stats-card bg-success bg-opacity-25 h-100">
+            <div class="card-body text-center">
+                <div class="stats-icon">
+                    <i class="fas fa-handshake"></i>
+                </div>
+                <h3 class="stat-value" id="alliance-count">
+                    <span class="placeholder-glow">
+                        <span class="placeholder w-75"></span>
+                    </span>
+                </h3>
+                <p class="stat-label">Alliances</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4 mb-4">
+        <div class="card stats-card bg-danger bg-opacity-25 h-100">
+            <div class="card-body text-center">
+                <div class="stats-icon">
+                    <i class="fas fa-bolt"></i>
+                </div>
+                <h3 class="stat-value" id="active-wars">
+                    <span class="placeholder-glow">
+                        <span class="placeholder w-75"></span>
+                    </span>
+                </h3>
+                <p class="stat-label">Active Wars</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts Section -->
+<div class="row mb-5">
+    <div class="col-lg-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <i class="fas fa-chart-line me-2"></i>Player Activity
+            </div>
+            <div class="card-body">
+                <canvas id="playerActivityChart" height="250"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <i class="fas fa-chart-pie me-2"></i>Resource Distribution
+            </div>
+            <div class="card-body">
+                <canvas id="resourceDistributionChart" height="250"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Game Activity Log -->
+<div class="card mb-5">
+    <div class="card-header">
+        <i class="fas fa-history me-2"></i>Recent Activity
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-dark table-hover">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Player</th>
+                        <th>Action</th>
+                        <th>Details</th>
+                    </tr>
+                </thead>
+                <tbody id="activity-log">
+                    <tr>
+                        <td colspan="4" class="text-center">
+                            <div class="spinner-border spinner-border-sm text-secondary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            Loading activity data...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Fetch game statistics
+    fetch('/api/stats')
+        .then(response => response.json())
+        .then(data => {
+            // Update stats cards
+            document.getElementById('player-count').textContent = data.player_count || 0;
+            document.getElementById('alliance-count').textContent = data.alliance_count || 0;
+            document.getElementById('active-wars').textContent = data.active_wars || 0;
+            
+            // Initialize player activity chart (with placeholder data)
+            const activityCtx = document.getElementById('playerActivityChart').getContext('2d');
+            const activityChart = new Chart(activityCtx, {
+                type: 'line',
+                data: {
+                    labels: ['7 days ago', '6 days ago', '5 days ago', '4 days ago', '3 days ago', '2 days ago', 'Yesterday', 'Today'],
+                    datasets: [{
+                        label: 'Active Players',
+                        data: [0, 0, 0, 0, 0, 0, 0, data.player_count || 0],
+                        borderColor: '#0d6efd',
+                        backgroundColor: 'rgba(13, 110, 253, 0.1)',
+                        tension: 0.3,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                precision: 0
+                            }
+                        }
+                    }
+                }
+            });
+            
+            // Initialize resource distribution chart
+            const resourceCtx = document.getElementById('resourceDistributionChart').getContext('2d');
+            const resourceChart = new Chart(resourceCtx, {
+                type: 'pie',
+                data: {
+                    labels: ['Credits', 'Minerals', 'Energy'],
+                    datasets: [{
+                        data: [60, 25, 15],
+                        backgroundColor: [
+                            'rgba(255, 193, 7, 0.8)',
+                            'rgba(13, 202, 240, 0.8)',
+                            'rgba(25, 135, 84, 0.8)'
+                        ],
+                        hoverOffset: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+            
+            // Show placeholder activity log
+            document.getElementById('activity-log').innerHTML = `
+                <tr>
+                    <td colspan="4" class="text-center text-muted">
+                        No recent activity to display
+                    </td>
+                </tr>
+            `;
+        })
+        .catch(error => {
+            console.error('Error fetching stats:', error);
+            document.querySelectorAll('.stats-card .stat-value').forEach(el => {
+                el.innerHTML = '<span class="text-danger">Error</span>';
+            });
+        });
+});
+</script>
+{% endblock %}
