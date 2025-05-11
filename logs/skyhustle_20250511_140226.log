@@ -1,4 +1,0 @@
-2025-05-11 14:02:26,753 - root - INFO - Logging initialized
-2025-05-11 14:02:26,753 - root - INFO - Log file: logs/skyhustle_20250511_140226.log
-2025-05-11 14:02:26,753 - root - INFO - Environment: {"python_version": "3.11.10 (main, Sep  7 2024, 01:03:31) [GCC 13.3.0]", "platform": "linux", "has_bot_token": false, "has_base64_creds": false, "has_sheet_id": false}
-2025-05-11 14:02:26,753 - root - CRITICAL - BOT_TOKEN environment variable not set. Exiting.

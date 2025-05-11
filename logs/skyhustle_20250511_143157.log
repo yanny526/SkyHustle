@@ -1,6 +1,0 @@
-2025-05-11 14:31:57,952 - root - INFO - Logging initialized
-2025-05-11 14:31:57,953 - root - INFO - Log file: logs/skyhustle_20250511_143157.log
-2025-05-11 14:31:57,953 - root - INFO - Environment: {"python_version": "3.11.10 (main, Sep  7 2024, 01:03:31) [GCC 13.3.0]", "platform": "linux", "has_bot_token": true, "has_base64_creds": true, "has_sheet_id": true}
-2025-05-11 14:31:58,281 - root - INFO - Google Sheets initialized successfully
-2025-05-11 14:31:58,281 - root - INFO - Starting SkyHustle Telegram Bot...
-2025-05-11 14:31:58,344 - root - INFO - Starting polling...
