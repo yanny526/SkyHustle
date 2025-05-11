@@ -1,0 +1,22 @@
+2025-05-11 14:06:28,678 - root - INFO - Logging initialized
+2025-05-11 14:06:28,678 - root - INFO - Log file: logs/skyhustle_20250511_140628.log
+2025-05-11 14:06:28,679 - root - INFO - Environment: {"python_version": "3.11.10 (main, Sep  7 2024, 01:03:31) [GCC 13.3.0]", "platform": "linux", "has_bot_token": true, "has_base64_creds": true, "has_sheet_id": true}
+2025-05-11 14:06:28,679 - root - INFO - Starting SkyHustle Telegram Bot...
+2025-05-11 14:06:28,851 - root - INFO - Starting polling...
+2025-05-11 14:06:29,186 - root - CRITICAL - Failed to start bot: 'Application' object has no attribute 'start_polling'
+Traceback (most recent call last):
+  File "/home/runner/workspace/main.py", line 38, in main
+    asyncio.run(setup_bot(bot_token))
+  File "/nix/store/clx0mcir7qw8zk36zbr4jra789g3knf6-python3-3.11.10/lib/python3.11/asyncio/runners.py", line 190, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "/nix/store/clx0mcir7qw8zk36zbr4jra789g3knf6-python3-3.11.10/lib/python3.11/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/nix/store/clx0mcir7qw8zk36zbr4jra789g3knf6-python3-3.11.10/lib/python3.11/asyncio/base_events.py", line 654, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/bot/telegram_bot.py", line 94, in setup_bot
+    await application.start_polling(allowed_updates=Update.ALL_TYPES)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'Application' object has no attribute 'start_polling'

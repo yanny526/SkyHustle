@@ -1,0 +1,280 @@
+## SkyHustle Product Requirements Document (PRD)
+
+### 1. Executive Summary
+
+SkyHustle is a Telegram-based strategy RPG where players build and manage futuristic aerial bases, train diverse armies, research cutting-edge technologies, form alliances, and engage in PvE/PvP battles—all via intuitive chat commands and interactive menus. This PRD provides an end-to-end specification, ensuring an AI developer can implement, test, and extend the system without ambiguity.
+
+---
+
+### 2. Product Vision & Value Proposition
+
+* **Vision**: To deliver a deeply strategic, community-driven game experience entirely within Telegram, lowering entry barriers and maximizing viral potential.
+* **Value Proposition**:
+
+  * **Accessibility**: No separate client—players use familiar Telegram.
+  * **Social Engagement**: Alliance and chat features drive retention.
+  * **Lightweight Persistence**: Cloud-based Google Sheets removes heavy infrastructure.
+  * **Extensibility**: Modular codebase and clear APIs allow rapid feature rollout.
+
+---
+
+### 3. Objectives & KPIs
+
+| Category     | KPI                                    | Target              |
+| ------------ | -------------------------------------- | ------------------- |
+| Engagement   | DAU                                    | ≥ 35% of installs   |
+|              | Commands/session                       | ≥ 6                 |
+| Retention    | Day-1 retention                        | ≥ 55%               |
+|              | Day-7 retention                        | ≥ 25%               |
+| Monetization | Premium conversion (microtransactions) | ≥ 4%                |
+|              | ARPU                                   | ≥ \$0.75/user/month |
+| Performance  | API response latency                   | < 300 ms            |
+|              | Error rate                             | < 0.02%             |
+| Reliability  | Uptime                                 | ≥ 99.98%            |
+
+---
+
+### 4. Detailed Personas
+
+1. **Casual Strategist (Alex)**: Logs in multiple times/day, uses `/status`, `/build`, `/train`.
+2. **Competitive Commander (Ravi)**: Coordinates war via `/war`, tracks rival bases with `/scan`.
+3. **Completionist (Marina)**: Chronicles progress in `/achievements`, optimizes `/research`.
+4. **Alliance Manager (Leo)**: Uses `/alliance` subcommands, posts in alliance chat, schedules events.
+5. **Technical Moderator (Taylor)**: Manages sweeper bot tasks, monitors metrics via `/admin stats`.
+
+---
+
+### 5. End-to-End User Journeys
+
+#### 5.1 Onboarding & Tutorial
+
+* **Initial Interaction**:
+
+  1. `/start` triggers welcome message + two-button inline: **Begin Tutorial**, **Skip Tutorial**.
+  2. Tutorial sequence uses stateful FSM: each step validates user response before proceeding.
+* **Tutorial Steps**:
+
+  1. Teach `/status` and parse output card.
+  2. Teach `/build <structure> [quantity]` with inline selection and quick-reply shortcuts.
+  3. Teach `/train <unit_type> [count]`.
+  4. Show `/setname <name>` to customize display.
+* **Completion**: Grant bonus resources, mark `tutorial_completed=true` in `Players` sheet.
+
+#### 5.2 Core Loop & Engagement
+
+* **Daily Cycle**:
+
+  * At 00:00 UTC, scheduled cron triggers `/daily` availability push via Bot API.
+  * Inline claim button opens resource summary + next-day countdown.
+* **Resource Planning**:
+
+  * `/status` card displays dynamic bar charts using emoji grids.
+  * `/autobuild` suggests building sequences based on resource ratios.
+
+#### 5.3 Social & Competitive Play
+
+* **Alliance Lifecycle**:
+
+  * `/alliance create <name>` → generates join code; broadcasts in chat.
+  * `/alliance invite @user` sends DM invite.
+  * `/alliance info` returns alliance stats: member count, power ranking.
+* **Alliance War**:
+
+  * War creation reserved for leaders.
+  * Inline menu to select opposing alliance.
+  * Members get `/war deploy` commands and status updates.
+* **PvP Duels**:
+
+  * `/scan` uses ELO-like rating to find ±10% power targets.
+  * `/attack <player_id>` simulates combat with random seed; returns JSON payload logged.
+
+---
+
+### 6. Feature Specifications
+
+#### 6.1 Command Reference & Parameters
+
+| Command                 | Arguments                                       | Description                                                                                                                                       |
+| ----------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/status`               | —                                               | Show current resources, queues, and player level.                                                                                                 |
+| `/build <id> [qty]`     | `id`: structure key, `qty`: optional integer    | Queue buildings; validation: max queue length 5.                                                                                                  |
+| `/train <unit> [count]` | `unit`: unit key, `count`: optional integer     | Recruit units; supports presets (e.g., `/train default`).                                                                                         |
+| `/research [<tech_id>]` | `tech_id`: optional technology key              | List or unlock tech; enforce prerequisites.                                                                                                       |
+| `/unit_evolution`       | —                                               | Show eligible units, materials, success chance.                                                                                                   |
+| `/defensive`            | —                                               | Manage defensive structures; turret auto-target tuning.                                                                                           |
+| `/attack <player_id>`   | external player Telegram ID                     | Validate target, show power comparison, confirm attack.                                                                                           |
+| `/scan`                 | —                                               | Suggest targets; paginated inline.                                                                                                                |
+| `/alliance <subcmd>`    | see subcommands                                 | `create`, `join`, `leave`, `invite`, `info`, `disband`.                                                                                           |
+| `/war <subcmd>`         | `create`, `join`, `deploy`, `status`, `results` | Full alliance war management.                                                                                                                     |
+| `/leaderboard [scope]`  | `scope`: global/faction/alliance                | Show ranked lists; paginated.                                                                                                                     |
+| `/daily`                | —                                               | Claim login reward; streak logic.                                                                                                                 |
+| `/achievements`         | —                                               | List achievements, progress, claim rewards.                                                                                                       |
+| `/events`               | —                                               | Show active events; join via inline.                                                                                                              |
+| `/notifications`        | `on/off`, event types                           | Subscribe/unsubscribe to custom event notifications.                                                                                              |
+| `/tutorial`             | `start/skip`                                    | Restart or skip tutorial; resets tutorial state.                                                                                                  |
+| `/weather`              | —                                               | Provide fun ambient weather themed messages.                                                                                                      |
+| `/save` & `/load`       | —                                               | Force save/load state to/from Google Sheets.                                                                                                      |
+| `/setname <name>`       | `name`: string ≤32 chars                        | Persist custom display name; validate alphanumeric + spaces; **name must be unique** across all players; used consistently in all game functions. |
+
+#### 8.5 Environment Variables
+
+* `BASE64_CREDS`: Base64-encoded Google service account credentials JSON (used to authenticate with Google Sheets API).
+* `BOT_TOKEN`: Telegram Bot API token for `python-telegram-bot` Application.
+* `SHEET_ID`: The Google Sheet ID where game data (players, buildings, units, etc.) is stored.
+
+**Implementation Note**: Codebase is written in Python 3.11+. Use `os.getenv()` or a configuration loader to retrieve these at startup, and validate presence before application initialization.
+
+---
+
+### 9. Data Model & Schemas `name`: string ≤32 chars                     | Persist custom display name; validate alphanumeric + spaces.                            |
+
+#### 6.2 Response Templates
+
+* **Success**: Prefix with ✅ and concise summary.
+* **Error**: Prefix with ❌, include command example.
+* **Info**: Prefix with ℹ️ for neutral info messages.
+
+---
+
+### 7. UI/UX & Interaction Patterns
+
+* **Inline Keyboards**:
+
+  * Use callback data encoding JSON: `{cmd:"build",id:"turret"}`.
+  * Buttons: max 5 per row; consistent styling (icons + text).
+* **Markdown & Emojis**:
+
+  * Escape user input; sanitize all Markdown V2 characters.
+  * Use resource icons: 🛡️, ⚔️, 💎, ⚙️.
+* **Progress Indicators**: Emoji bars with dynamic length based on percentages.
+
+---
+
+### 8. Technical Architecture & Guidelines
+
+#### 8.1 Code Organization
+
+```
+/handlers       # Telegram command handlers
+/modules        # Business logic & data access
+/utils          # Helpers: formatting, validation, logging
+/tests          # Pytest suites: unit and integration
+/docs           # PRD, API specs, architecture diagrams
+```
+
+#### 8.2 Coding Conventions
+
+* **Language**: Python 3.11+
+* **Style**: PEP8, black formatting, flake8 linting.
+* **Async**: All handler functions async; use `asyncio` for concurrency.
+* **Logging**: Structured JSON logs at INFO / ERROR levels.
+* **Secrets**: Use environment variables; load via `python-dotenv` in development.
+
+#### 8.3 Data Access & Persistence
+
+* **Sheets Service**:
+
+  * Abstract Google API calls behind `sheets_service` module.
+  * Cache hot data (e.g., tech tree) in Redis with TTL=1h.
+* **Error Handling**:
+
+  * Retry on Google API 5xx up to 3 times with exponential backoff.
+  * Fallback to local cache if persistent failures.
+
+#### 8.4 Testing Strategy
+
+* **Unit Tests**:
+
+  * Cover all pure functions > 95% coverage.
+  * Use fixtures to mock external calls (Google API, Bot API).
+* **Integration Tests**:
+
+  * Spin up a test Telegram Bot using `pytest-asyncio`.
+  * Assert full command-response flows end-to-end.
+* **CI/CD**:
+
+  * GitHub Actions pipeline: lint → test → build Docker image → push to registry → deploy staging.
+
+---
+
+### 9. Data Model & Schemas
+
+```sql
+CREATE TABLE Players (
+  player_id TEXT PRIMARY KEY,
+  display_name TEXT NOT NULL,
+  credits INTEGER DEFAULT 0,
+  minerals INTEGER DEFAULT 0,
+  energy INTEGER DEFAULT 0,
+  skybucks INTEGER DEFAULT 0,
+  experience INTEGER DEFAULT 0,
+  tutorial_completed BOOLEAN DEFAULT FALSE,
+  last_login TIMESTAMP
+);
+-- Similar definitions for Buildings, Units, Research, Alliance, AllianceWars, Events
+```
+
+---
+
+### 10. API & Integration Contracts
+
+* **Internal Bot API**:
+
+  * **executeCommand(player\_id: str, command: str, args: dict)** → `{status, message, data}`.
+* **External Webhook (Future)**:
+
+  * `/webhook/commands` accepts POST JSON payloads, responds with Telegram update JSON.
+
+---
+
+### 11. Security, Permissions & Rate Limits
+
+* **Authentication**:
+
+  * Bot uses OAuth 2.0 service account for Google Sheets.
+* **Authorization**:
+
+  * `/admin` guarded by `ADMIN_IDS`; reject unauthorized requests.
+* **Rate Limiting**:
+
+  * 1 req/sec per user, 10 req/sec per bot; enforce via Redis token bucket.
+
+---
+
+### 12. Observability & Operations
+
+* **Metrics**:
+
+  * Track command usage counters (Prometheus).
+  * Response latency histograms.
+* **Alerts**:
+
+  * PagerDuty alert on error rate spikes (>0.1% in 5m).
+* **Backups**:
+
+  * Nightly Google Sheet snapshot to S3.
+* **Support**:
+
+  * `/support` command logs ticket in Airtable; notifies #support Slack.
+
+---
+
+### 13. Roadmap & Timeline
+
+| Phase   | Weeks   | Deliverables                                                          |
+| ------- | ------- | --------------------------------------------------------------------- |
+| Phase 1 | 2       | Core engine; all commands v1; PRD implementation; inline UIs          |
+| Phase 2 | 4       | Alliance wars v1; auto-queue enhancements; caching & error resilience |
+| Phase 3 | 4       | Monetization layer; shop; blackmarket; tiered premium passes          |
+| Phase 4 | 3       | Analytics dashboard; API endpoints; multi-language support            |
+| Phase 5 | Ongoing | Live events; content updates; community feedback loops                |
+
+---
+
+### 14. Glossary
+
+* **DAU**: Daily Active Users
+* **ARPU**: Average Revenue Per User
+* **TTL**: Time To Live (cache)
+* **FSM**: Finite State Machine
+* **ELO**: Player matchmaking rating algorithm

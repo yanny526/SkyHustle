@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SkyHustle - Simple Dashboard</title>
+    <style>
+        body {
+            font-family: monospace;
+            background-color: #222;
+            color: #eee;
+            padding: 20px;
+        }
+        .section {
+            margin-bottom: 20px;
+            border: 1px solid #444;
+            padding: 10px;
+        }
+        h1 {
+            color: #fff;
+        }
+        h2 {
+            color: #aaa;
+            border-bottom: 1px solid #444;
+            padding-bottom: 5px;
+        }
+        .status {
+            color: #4CAF50;
+        }
+        .error {
+            color: #F44336;
+        }
+        pre {
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <h1>SkyHustle Telegram Bot</h1>
+    <p>Simple status dashboard</p>
+    
+    <div class="section">
+        <h2>Bot Status</h2>
+        <p>Status: <span class="status">Running</span></p>
+        <p>Version: 1.0.0</p>
+    </div>
+    
+    <div class="section">
+        <h2>API Status</h2>
+        <p>Check the API at: <a href="/api/stats" style="color: #29B6F6;">/api/stats</a></p>
+    </div>
+    
+    <div class="section">
+        <h2>Bot Commands</h2>
+        <pre>
+/start    - Start the bot and show welcome message
+/help     - Show available commands
+/status   - Show player status and resources
+/build    - Build structures
+/train    - Train units
+/research - Research technologies
+        </pre>
+    </div>
+    
+    <div class="section">
+        <h2>Telegram Bot Instructions</h2>
+        <p>1. Find the bot on Telegram with the username you specified when creating it</p>
+        <p>2. Start a conversation with the bot by clicking "Start" or sending /start</p>
+        <p>3. Use the commands listed above to interact with the bot</p>
+    </div>
+    
+    <div class="section">
+        <h2>Technical Information</h2>
+        <p>Bot is using:</p>
+        <ul>
+            <li>python-telegram-bot for Telegram integration</li>
+            <li>gspread for Google Sheets integration</li>
+            <li>Flask for this web dashboard</li>
+        </ul>
+    </div>
+</body>
+</html>
