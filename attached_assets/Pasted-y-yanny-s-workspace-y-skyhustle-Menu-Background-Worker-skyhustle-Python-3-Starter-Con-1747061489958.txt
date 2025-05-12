@@ -1,0 +1,111 @@
+y
+yanny's workspace
+
+
+y
+skyhustle
+Menu
+Background Worker
+skyhustle
+Python 3
+Starter
+
+Connect
+
+Manual Deploy
+yanny526 / SkyHustle
+main
+May 12, 2025 at 4:47 PM
+live
+d8a557a
+Add files via upload
+skyhustle
+Logs
+
+Logs
+
+All logs
+Search
+Search
+
+Live tail
+GMT+2
+Menu
+DEBUG:telegram.ext.dispatcher:Dispatcher started
+DEBUG:telegram.bot:True
+DEBUG:telegram.bot:Exiting: delete_webhook
+DEBUG:telegram.ext.updater:Bootstrap done
+DEBUG:telegram.ext.updater:Start network loop retry getting Updates
+DEBUG:telegram.bot:Entering: get_updates
+DEBUG:telegram.bot:No new updates found.
+DEBUG:telegram.bot:[]
+DEBUG:telegram.bot:Exiting: get_updates
+DEBUG:telegram.bot:Entering: get_updates
+DEBUG:telegram.bot:No new updates found.
+DEBUG:telegram.bot:[]
+DEBUG:telegram.bot:Exiting: get_updates
+DEBUG:telegram.bot:Entering: get_updates
+DEBUG:telegram.bot:No new updates found.
+DEBUG:telegram.bot:[]
+DEBUG:telegram.bot:Exiting: get_updates
+DEBUG:telegram.bot:Entering: get_updates
+DEBUG:telegram.bot:No new updates found.
+DEBUG:telegram.bot:[]
+DEBUG:telegram.bot:Exiting: get_updates
+DEBUG:telegram.bot:Entering: get_updates
+DEBUG:telegram.bot:No new updates found.
+DEBUG:telegram.bot:[]
+DEBUG:telegram.bot:Exiting: get_updates
+DEBUG:telegram.bot:Entering: get_updates
+DEBUG:telegram.bot:No new updates found.
+DEBUG:telegram.bot:[]
+DEBUG:telegram.bot:Exiting: get_updates
+DEBUG:telegram.bot:Entering: get_updates
+DEBUG:telegram.bot:No new updates found.
+DEBUG:telegram.bot:[]
+DEBUG:telegram.bot:Exiting: get_updates
+DEBUG:telegram.bot:Entering: get_updates
+DEBUG:telegram.bot:No new updates found.
+DEBUG:telegram.bot:[]
+DEBUG:telegram.bot:Exiting: get_updates
+DEBUG:telegram.bot:Entering: get_updates
+DEBUG:telegram.bot:No new updates found.
+DEBUG:telegram.bot:[]
+DEBUG:telegram.bot:Exiting: get_updates
+DEBUG:telegram.bot:Entering: get_updates
+DEBUG:telegram.bot:No new updates found.
+DEBUG:telegram.bot:[]
+DEBUG:telegram.bot:Exiting: get_updates
+DEBUG:telegram.bot:Entering: get_updates
+DEBUG:telegram.bot:No new updates found.
+DEBUG:telegram.bot:[]
+DEBUG:telegram.bot:Exiting: get_updates
+DEBUG:telegram.bot:Entering: get_updates
+DEBUG:telegram.bot:No new updates found.
+DEBUG:telegram.bot:[]
+DEBUG:telegram.bot:Exiting: get_updates
+DEBUG:telegram.bot:Entering: get_updates
+DEBUG:telegram.bot:No new updates found.
+DEBUG:telegram.bot:[]
+DEBUG:telegram.bot:Exiting: get_updates
+DEBUG:telegram.bot:Entering: get_updates
+DEBUG:telegram.bot:Getting updates: [884266122]
+DEBUG:telegram.bot:[<telegram.update.Update object at 0x7c35abc7a680>]
+DEBUG:telegram.bot:Exiting: get_updates
+DEBUG:telegram.bot:Entering: get_updates
+DEBUG:telegram.ext.dispatcher:Processing Update: {'update_id': 884266122, 'message': {'date': 1747061426, 'group_chat_created': False, 'new_chat_photo': [], 'caption_entities': [], 'channel_chat_created': False, 'delete_chat_photo': False, 'message_id': 4004, 'new_chat_members': [], 'supergroup_chat_created': False, 'chat': {'first_name': 'Viola', 'type': 'private', 'id': 6006091868}, 'photo': [], 'text': '/start', 'entities': [{'length': 6, 'offset': 0, 'type': 'bot_command'}], 'from': {'language_code': 'en', 'id': 6006091868, 'first_name': 'Viola', 'is_bot': False}}}
+/opt/render/project/src/.venv/lib/python3.11/site-packages/telegram/ext/dispatcher.py:557: RuntimeWarning: coroutine 'start' was never awaited
+  handler.handle_update(update, self, check, context)
+RuntimeWarning: Enable tracemalloc to get the object allocation traceback
+DEBUG:telegram.bot:No new updates found.
+DEBUG:telegram.bot:[]
+DEBUG:telegram.bot:Exiting: get_updates
+DEBUG:telegram.bot:Entering: get_updates
+Need better ways to work with logs? Try theRender CLIor set up a log stream integration 
+
+0 services selected:
+
+Move
+
+Generate Blueprint
+
