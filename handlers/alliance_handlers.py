@@ -1,4 +1,4 @@
-"""
+""",,,,,
 Alliance related command handlers for the SkyHustle Telegram bot.
 These handlers manage alliances and wars between alliances.
 """
