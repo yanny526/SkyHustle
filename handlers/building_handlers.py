@@ -4,15 +4,15 @@ These handlers manage construction and management of player buildings.
 """
 import logging
 import json
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, constants
-from telegram.ext import ContextTypes
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ParseMode
+from telegram.ext import CallbackContext
 from modules.player import get_player
 from modules.building import get_buildings, add_building_to_queue
 from utils.formatter import format_error, format_success, format_building_info
 
 logger = logging.getLogger(__name__)
 
-async def build(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def build(update: Update, context: CallbackContext):
     """Handler for /build command - allows player to construct buildings."""
     user = update.effective_user
     player = get_player(user.id)
@@ -54,7 +54,7 @@ async def build(update: Update, context: ContextTypes.DEFAULT_TYPE):
             format_error(result['message'])
         )
 
-async def show_building_options(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def show_building_options(update: Update, context: CallbackContext):
     """Shows available buildings as inline keyboard buttons."""
     buildings = get_buildings()
     
@@ -84,10 +84,10 @@ async def show_building_options(update: Update, context: ContextTypes.DEFAULT_TY
     await update.message.reply_text(
         message_text,
         reply_markup=reply_markup,
-        parse_mode=constants.ParseMode.MARKDOWN_V2
+        parse_mode=ParseMode.MARKDOWN_V2
     )
 
-async def handle_build_callback(update: Update, context: ContextTypes.DEFAULT_TYPE, building_id: str):
+async def handle_build_callback(update: Update, context: CallbackContext, building_id: str):
     """Handles selection of a building from the inline keyboard."""
     query = update.callback_query
     user_id = query.from_user.id
@@ -128,10 +128,10 @@ async def handle_build_callback(update: Update, context: ContextTypes.DEFAULT_TY
     await query.edit_message_text(
         building_info,
         reply_markup=reply_markup,
-        parse_mode=constants.ParseMode.MARKDOWN_V2
+        parse_mode=ParseMode.MARKDOWN_V2
     )
 
-async def defensive(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def defensive(update: Update, context: CallbackContext):
     """Handler for /defensive command - manages defensive structures."""
     user = update.effective_user
     player = get_player(user.id)

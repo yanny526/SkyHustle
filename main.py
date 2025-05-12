@@ -16,7 +16,8 @@ logger = logging.getLogger(__name__)
 
 # Only run the bot when executed directly (not imported)
 if __name__ == "__main__":
-    from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler
+    from telegram import Bot, Update
+    from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, Dispatcher
     from handlers.base_handlers import (
         start, status, help_command, setname, daily, weather, events, 
         achievements, save, load, leaderboard, notifications, callback_handler
@@ -32,40 +33,47 @@ if __name__ == "__main__":
         logger.error("BOT_TOKEN environment variable not found!")
         exit(1)
     
-    application = ApplicationBuilder().token(bot_token).build()
+    # Create the Updater and pass it the bot's token
+    updater = Updater(token=bot_token, use_context=True)
+    
+    # Get the dispatcher to register handlers
+    dispatcher = updater.dispatcher
     
     # Register command handlers
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("status", status))
-    application.add_handler(CommandHandler("build", build))
-    application.add_handler(CommandHandler("train", lambda update, context: 
+    dispatcher.add_handler(CommandHandler("start", start))
+    dispatcher.add_handler(CommandHandler("help", help_command))
+    dispatcher.add_handler(CommandHandler("status", status))
+    dispatcher.add_handler(CommandHandler("build", build))
+    dispatcher.add_handler(CommandHandler("train", lambda update, context: 
                                           update.message.reply_text("Not implemented yet")))
-    application.add_handler(CommandHandler("research", lambda update, context: 
+    dispatcher.add_handler(CommandHandler("research", lambda update, context: 
                                           update.message.reply_text("Not implemented yet")))
-    application.add_handler(CommandHandler("unit_evolution", unit_evolution))
-    application.add_handler(CommandHandler("defensive", defensive))
-    application.add_handler(CommandHandler("attack", attack))
-    application.add_handler(CommandHandler("scan", scan))
-    application.add_handler(CommandHandler("alliance", alliance))
-    application.add_handler(CommandHandler("war", war))
-    application.add_handler(CommandHandler("leaderboard", leaderboard))
-    application.add_handler(CommandHandler("daily", daily))
-    application.add_handler(CommandHandler("achievements", achievements))
-    application.add_handler(CommandHandler("events", events))
-    application.add_handler(CommandHandler("notifications", notifications))
-    application.add_handler(CommandHandler("tutorial", tutorial))
-    application.add_handler(CommandHandler("weather", weather))
-    application.add_handler(CommandHandler("save", save))
-    application.add_handler(CommandHandler("load", load))
-    application.add_handler(CommandHandler("setname", setname))
+    dispatcher.add_handler(CommandHandler("unit_evolution", unit_evolution))
+    dispatcher.add_handler(CommandHandler("defensive", defensive))
+    dispatcher.add_handler(CommandHandler("attack", attack))
+    dispatcher.add_handler(CommandHandler("scan", scan))
+    dispatcher.add_handler(CommandHandler("alliance", alliance))
+    dispatcher.add_handler(CommandHandler("war", war))
+    dispatcher.add_handler(CommandHandler("leaderboard", leaderboard))
+    dispatcher.add_handler(CommandHandler("daily", daily))
+    dispatcher.add_handler(CommandHandler("achievements", achievements))
+    dispatcher.add_handler(CommandHandler("events", events))
+    dispatcher.add_handler(CommandHandler("notifications", notifications))
+    dispatcher.add_handler(CommandHandler("tutorial", tutorial))
+    dispatcher.add_handler(CommandHandler("weather", weather))
+    dispatcher.add_handler(CommandHandler("save", save))
+    dispatcher.add_handler(CommandHandler("load", load))
+    dispatcher.add_handler(CommandHandler("setname", setname))
     
     # Register callback query handler for inline keyboard buttons
-    application.add_handler(CallbackQueryHandler(callback_handler))
+    dispatcher.add_handler(CallbackQueryHandler(callback_handler))
     
     # Start the Bot
     logger.info("Starting SkyHustle bot...")
-    application.run_polling()
+    updater.start_polling()
+    
+    # Run the bot until the process is stopped
+    updater.idle()
 
 # Start Flask app in a separate thread if needed
 # import threading

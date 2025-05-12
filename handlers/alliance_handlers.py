@@ -5,8 +5,8 @@ These handlers manage alliances and wars between alliances.
 import logging
 import json
 import random
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, constants
-from telegram.ext import ContextTypes
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ParseMode
+from telegram.ext import CallbackContext
 from modules.player import get_player
 from modules.alliance import (
     create_alliance, join_alliance, leave_alliance, 
@@ -16,7 +16,7 @@ from utils.formatter import format_error, format_success, format_alliance_info
 
 logger = logging.getLogger(__name__)
 
-async def alliance(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def alliance(update: Update, context: CallbackContext):
     """Handler for /alliance command - manages alliance operations."""
     user = update.effective_user
     player = get_player(user.id)
@@ -127,7 +127,7 @@ async def alliance(update: Update, context: ContextTypes.DEFAULT_TYPE):
             alliance_info = format_alliance_info(alliance_data)
             await update.message.reply_text(
                 alliance_info,
-                parse_mode=constants.ParseMode.MARKDOWN_V2
+                parse_mode=ParseMode.MARKDOWN_V2
             )
         else:
             await update.message.reply_text(
@@ -146,7 +146,7 @@ async def alliance(update: Update, context: ContextTypes.DEFAULT_TYPE):
             format_error(f"Unknown subcommand: {subcommand}. Available subcommands: create, join, leave, invite, info, disband")
         )
 
-async def show_alliance_status(update: Update, context: ContextTypes.DEFAULT_TYPE, player):
+async def show_alliance_status(update: Update, context: CallbackContext, player):
     """Shows current alliance status or alliance options."""
     alliance_data = get_alliance_by_player(player['player_id'])
     
@@ -178,7 +178,7 @@ async def show_alliance_status(update: Update, context: ContextTypes.DEFAULT_TYP
         await update.message.reply_text(
             alliance_info,
             reply_markup=reply_markup,
-            parse_mode=constants.ParseMode.MARKDOWN_V2
+            parse_mode=ParseMode.MARKDOWN_V2
         )
     else:
         # Player is not in an alliance
@@ -206,10 +206,10 @@ async def show_alliance_status(update: Update, context: ContextTypes.DEFAULT_TYP
         await update.message.reply_text(
             message,
             reply_markup=reply_markup,
-            parse_mode=constants.ParseMode.MARKDOWN_V2
+            parse_mode=ParseMode.MARKDOWN_V2
         )
 
-async def war(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def war(update: Update, context: CallbackContext):
     """Handler for /war command - manages alliance wars."""
     user = update.effective_user
     player = get_player(user.id)
@@ -263,7 +263,7 @@ async def war(update: Update, context: ContextTypes.DEFAULT_TYPE):
             format_error(f"Unknown subcommand: {subcommand}. Available subcommands: create, join, deploy, status, results")
         )
 
-async def show_war_status(update: Update, context: ContextTypes.DEFAULT_TYPE, player, alliance_data):
+async def show_war_status(update: Update, context: CallbackContext, player, alliance_data):
     """Shows current war status or war options."""
     # In a full implementation, this would check if the alliance is in an active war
     # and display war status or war creation options
@@ -292,5 +292,5 @@ async def show_war_status(update: Update, context: ContextTypes.DEFAULT_TYPE, pl
     await update.message.reply_text(
         message,
         reply_markup=reply_markup,
-        parse_mode=constants.ParseMode.MARKDOWN_V2
+        parse_mode=ParseMode.MARKDOWN_V2
     )

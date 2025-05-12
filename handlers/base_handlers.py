@@ -4,15 +4,15 @@ These handlers manage core game functionality and basic commands.
 """
 import logging
 import json
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, constants
-from telegram.ext import ContextTypes
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ParseMode
+from telegram.ext import CallbackContext
 from modules.player import get_player, create_player, update_player, claim_daily_reward
 from utils.formatter import format_status_message, format_error, format_success, format_info
 from utils.validators import validate_name
 
 logger = logging.getLogger(__name__)
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def start(update: Update, context: CallbackContext):
     """Handler for /start command - introduces the game and starts tutorial."""
     user = update.effective_user
     player = get_player(user.id)
@@ -39,7 +39,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             welcome_text,
             reply_markup=reply_markup,
-            parse_mode=constants.ParseMode.MARKDOWN_V2
+            parse_mode=ParseMode.MARKDOWN_V2
         )
     else:
         # Returning player
@@ -51,10 +51,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         await update.message.reply_text(
             welcome_back_text,
-            parse_mode=constants.ParseMode.MARKDOWN_V2
+            parse_mode=ParseMode.MARKDOWN_V2
         )
 
-async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def status(update: Update, context: CallbackContext):
     """Handler for /status command - shows player resources and status."""
     user = update.effective_user
     player = get_player(user.id)
@@ -68,10 +68,10 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     status_message = format_status_message(player)
     await update.message.reply_text(
         status_message,
-        parse_mode=constants.ParseMode.MARKDOWN_V2
+        parse_mode=ParseMode.MARKDOWN_V2
     )
 
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def help_command(update: Update, context: CallbackContext):
     """Handler for /help command - shows available commands."""
     help_text = (
         "*SkyHustle Commands:*\n\n"
@@ -91,10 +91,10 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(
         help_text,
-        parse_mode=constants.ParseMode.MARKDOWN_V2
+        parse_mode=ParseMode.MARKDOWN_V2
     )
 
-async def setname(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def setname(update: Update, context: CallbackContext):
     """Handler for /setname command - allows player to set their display name."""
     user = update.effective_user
     player = get_player(user.id)
@@ -135,7 +135,7 @@ async def setname(update: Update, context: ContextTypes.DEFAULT_TYPE):
             format_error("Failed to update your name. Please try again later.")
         )
 
-async def daily(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def daily(update: Update, context: CallbackContext):
     """Handler for /daily command - claims daily rewards."""
     user = update.effective_user
     player = get_player(user.id)
@@ -163,14 +163,14 @@ async def daily(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         await update.message.reply_text(
             reward_text,
-            parse_mode=constants.ParseMode.MARKDOWN_V2
+            parse_mode=ParseMode.MARKDOWN_V2
         )
     else:
         await update.message.reply_text(
             format_error(result['message'])
         )
 
-async def weather(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def weather(update: Update, context: CallbackContext):
     """Handler for /weather command - provides fun ambient weather messages."""
     import random
     
@@ -190,21 +190,21 @@ async def weather(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chosen_message = random.choice(weather_messages)
     await update.message.reply_text(format_info(chosen_message))
 
-async def events(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def events(update: Update, context: CallbackContext):
     """Handler for /events command - shows active events."""
     # In a full implementation, this would fetch actual events from the database
     await update.message.reply_text(
         format_info("No active events at this time. Check back later!")
     )
 
-async def achievements(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def achievements(update: Update, context: CallbackContext):
     """Handler for /achievements command - shows player achievements."""
     # In a full implementation, this would fetch actual achievements from the database
     await update.message.reply_text(
         format_info("Achievement system coming soon! Stay tuned.")
     )
 
-async def save(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def save(update: Update, context: CallbackContext):
     """Handler for /save command - force saves game state to Google Sheets."""
     user = update.effective_user
     # In a full implementation, this would trigger an immediate save to Google Sheets
@@ -212,7 +212,7 @@ async def save(update: Update, context: ContextTypes.DEFAULT_TYPE):
         format_success("Game state saved successfully.")
     )
 
-async def load(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def load(update: Update, context: CallbackContext):
     """Handler for /load command - force loads game state from Google Sheets."""
     user = update.effective_user
     # In a full implementation, this would trigger an immediate load from Google Sheets
@@ -220,7 +220,7 @@ async def load(update: Update, context: ContextTypes.DEFAULT_TYPE):
         format_success("Game state loaded successfully.")
     )
 
-async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def leaderboard(update: Update, context: CallbackContext):
     """Handler for /leaderboard command - shows rankings."""
     scope = "global"
     if context.args and len(context.args) > 0:
@@ -231,14 +231,14 @@ async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
         format_info(f"{scope.capitalize()} leaderboard coming soon!")
     )
 
-async def notifications(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def notifications(update: Update, context: CallbackContext):
     """Handler for /notifications command - manages notification settings."""
     # In a full implementation, this would allow configuring notification preferences
     await update.message.reply_text(
         format_info("Notification settings coming soon!")
     )
 
-async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def callback_handler(update: Update, context: CallbackContext):
     """Handler for inline keyboard button presses."""
     query = update.callback_query
     await query.answer()

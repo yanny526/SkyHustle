@@ -4,8 +4,8 @@ These handlers manage the tutorial flow for new players.
 """
 import logging
 import json
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, constants
-from telegram.ext import ContextTypes
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ParseMode
+from telegram.ext import CallbackContext
 from modules.player import get_player, update_player
 from utils.formatter import format_error, format_success, format_info
 
@@ -76,7 +76,7 @@ TUTORIAL_STEPS = [
     }
 ]
 
-async def tutorial(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def tutorial(update: Update, context: CallbackContext):
     """Handler for /tutorial command - starts or skips the tutorial."""
     user = update.effective_user
     player = get_player(user.id)
@@ -115,7 +115,7 @@ async def tutorial(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=reply_markup
     )
 
-async def start_tutorial(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def start_tutorial(update: Update, context: CallbackContext):
     """Starts the tutorial sequence."""
     if update.callback_query:
         # If called from a callback query
@@ -131,7 +131,7 @@ async def start_tutorial(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Set the player's tutorial state to the first step
     update_player(user_id, {"tutorial_step": "welcome"})
 
-async def process_tutorial_step(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def process_tutorial_step(update: Update, context: CallbackContext):
     """Processes a tutorial step based on player input."""
     user = update.effective_user
     player = get_player(user.id)

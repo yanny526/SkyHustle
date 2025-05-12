@@ -5,14 +5,14 @@ These handlers manage PvP attacks, scanning for targets, and unit evolution.
 import logging
 import json
 import random
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, constants
-from telegram.ext import ContextTypes
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ParseMode
+from telegram.ext import CallbackContext
 from modules.player import get_player, get_random_players
 from utils.formatter import format_error, format_success, format_info, format_player_info
 
 logger = logging.getLogger(__name__)
 
-async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def attack(update: Update, context: CallbackContext):
     """Handler for /attack command - attacks another player."""
     user = update.effective_user
     player = get_player(user.id)
@@ -81,10 +81,10 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(
         message,
-        parse_mode=constants.ParseMode.MARKDOWN_V2
+        parse_mode=ParseMode.MARKDOWN_V2
     )
 
-async def scan(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def scan(update: Update, context: CallbackContext):
     """Handler for /scan command - finds potential targets to attack."""
     user = update.effective_user
     player = get_player(user.id)
@@ -126,10 +126,10 @@ async def scan(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         message,
         reply_markup=reply_markup,
-        parse_mode=constants.ParseMode.MARKDOWN_V2
+        parse_mode=ParseMode.MARKDOWN_V2
     )
 
-async def unit_evolution(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def unit_evolution(update: Update, context: CallbackContext):
     """Handler for /unit_evolution command - evolves units to stronger versions."""
     user = update.effective_user
     player = get_player(user.id)
