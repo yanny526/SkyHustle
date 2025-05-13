@@ -138,11 +138,15 @@ def start_research(user_id: str, key: str) -> bool:
     header, *rows = players
     for idx, row in enumerate(rows, start=1):
         if row[0] == user_id:
-            credits = int(row[3]); minerals = int(row[4]); energy = int(row[5])
+            try:
+                credits = int(row[3]); minerals = int(row[4]); energy = int(row[5])
+            except Exception:
+                return False
             if (credits < info["cost_c"] or
                 minerals < info["cost_m"] or
                 energy < info["cost_e"]):
                 return False
+            # deduct costs
             row[3] = str(credits - info["cost_c"])
             row[4] = str(minerals - info["cost_m"])
             row[5] = str(energy - info["cost_e"])
@@ -218,7 +222,11 @@ def cancel_research(user_id: str, key: str) -> bool:
 
     header, *data = rows
     for idx, r in enumerate(data, start=1):
+        # be defensive: skip malformed rows
+        if not r or len(r) < 2:
+            continue
         if r[0] == user_id and r[1] == key:
             update_row(QUEUE_SHEET, idx, [""] * len(header))
             return True
+
     return False
