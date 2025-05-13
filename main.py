@@ -1,6 +1,4 @@
-# Creating the fully updated main.py with consolidated Chaos scheduling and logging
 
-updated_main = """
 import logging
 import os
 from logging.handlers import RotatingFileHandler
@@ -148,11 +146,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-"""
-
-# Write the updated main.py to disk for download
-with open('/mnt/data/main_updated.py', 'w') as f:
-    f.write(updated_main)
-
-# Display download link to the user
-"/mnt/data/main_updated.py"
