@@ -1,6 +1,4 @@
-# Writing the patched main.py with research completion job scheduling
-
-updated_main = """import logging
+import logging
 import os
 from logging.handlers import RotatingFileHandler
 
@@ -158,10 +156,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-"""
-
-# Save updated file
-with open('/mnt/data/main_updated_with_research.py', 'w') as f:
-    f.write(updated_main)
-
-"/mnt/data/main_updated_with_research.py"
