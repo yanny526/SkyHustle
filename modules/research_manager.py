@@ -203,3 +203,22 @@ def complete_research_job(context):
             append_row(COMPLETED_SHEET, [user_id, key, ts_iso])
             # blank out finished entry
             update_row(QUEUE_SHEET, idx, [""] * len(header))
+
+
+def cancel_research(user_id: str, key: str) -> bool:
+    """
+    Cancel a queued research project for the user.
+    Returns True if found & removed, False otherwise.
+    """
+    try:
+        rows = get_rows(QUEUE_SHEET)
+    except HttpError as e:
+        logger.error("cancel_research: failed to load '%s': %s", QUEUE_SHEET, e)
+        return False
+
+    header, *data = rows
+    for idx, r in enumerate(data, start=1):
+        if r[0] == user_id and r[1] == key:
+            update_row(QUEUE_SHEET, idx, [""] * len(header))
+            return True
+    return False
