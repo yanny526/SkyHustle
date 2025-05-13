@@ -205,28 +205,54 @@ def complete_research_job(context):
             user_id, key = r[0], r[1]
             ts_iso = datetime.utcnow().isoformat()
             append_row(COMPLETED_SHEET, [user_id, key, ts_iso])
-            # blank out finished entry
             update_row(QUEUE_SHEET, idx, [""] * len(header))
 
 
 def cancel_research(user_id: str, key: str) -> bool:
     """
     Cancel a queued research project for the user.
+    Refunds the resource costs, then removes the queue entry.
     Returns True if found & removed, False otherwise.
     """
+    # 1) Load the queue
     try:
-        rows = get_rows(QUEUE_SHEET)
+        queue_rows = get_rows(QUEUE_SHEET)
     except HttpError as e:
         logger.error("cancel_research: failed to load '%s': %s", QUEUE_SHEET, e)
         return False
 
-    header, *data = rows
-    for idx, r in enumerate(data, start=1):
-        # be defensive: skip malformed rows
-        if not r or len(r) < 2:
+    header_q, *queue_data = queue_rows
+
+    # 2) Refund resources first
+    defs = load_research_defs()
+    info = defs.get(key)
+    if info:
+        try:
+            players = get_rows(PLAYERS_SHEET)
+        except HttpError as e:
+            logger.error("cancel_research: failed to load '%s' for refund: %s", PLAYERS_SHEET, e)
+        else:
+            header_p, *players_data = players
+            for p_idx, prow in enumerate(players_data, start=1):
+                if prow[0] == user_id:
+                    try:
+                        c = int(prow[3]) + info["cost_c"]
+                        m = int(prow[4]) + info["cost_m"]
+                        e = int(prow[5]) + info["cost_e"]
+                    except Exception:
+                        break
+                    prow[3] = str(c)
+                    prow[4] = str(m)
+                    prow[5] = str(e)
+                    update_row(PLAYERS_SHEET, p_idx, prow)
+                    break
+
+    # 3) Remove the queue entry
+    for idx, row in enumerate(queue_data, start=1):
+        if not row or len(row) < 2:
             continue
-        if r[0] == user_id and r[1] == key:
-            update_row(QUEUE_SHEET, idx, [""] * len(header))
+        if row[0] == user_id and row[1] == key:
+            update_row(QUEUE_SHEET, idx, [""] * len(header_q))
             return True
 
     return False
