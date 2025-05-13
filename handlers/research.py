@@ -16,53 +16,47 @@ from utils.time_utils import format_hhmmss
 from utils.format_utils import section_header, code
 
 async def research(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    /research                 → list available techs
-    /research start <key>     → start a research project
-    /research queue           → view your queue (with cancel buttons)
-    /research cancel <key>    → cancel a queued research
-    """
     uid  = str(update.effective_user.id)
     args = context.args or []
 
-    # ─── Start ──────────────────────────────
+    # ─── Start ───────────────────────────────────────────────────────────────
     if args and args[0].lower() == "start":
         if len(args) < 2:
             return await update.message.reply_text(
-                f"Usage: {code('/research start <tech_key>')}",
-                parse_mode=ParseMode.MARKDOWN
+                f"Usage: {code('/research start <tech_key>')}", parse_mode=ParseMode.MARKDOWN
             )
-        ok = start_research(uid, args[1])
+        tech_key = args[1]
+        ok = start_research(uid, tech_key)
         return await update.message.reply_text(
             f"{'✅' if ok else '❌'} "
-            + (f"Research *{args[1]}* queued!" if ok else f"Could not start *{args[1]}*."),
+            + (f"Research *{tech_key}* queued!" if ok else f"Could not start *{tech_key}*."),
             parse_mode=ParseMode.MARKDOWN
         )
 
-    # ─── Cancel via text ────────────────────
+    # ─── Cancel (text command) ────────────────────────────────────────────────
     if args and args[0].lower() == "cancel":
         if len(args) < 2:
             return await update.message.reply_text(
-                f"Usage: {code('/research cancel <tech_key>')}",
-                parse_mode=ParseMode.MARKDOWN
+                f"Usage: {code('/research cancel <tech_key>')}", parse_mode=ParseMode.MARKDOWN
             )
-        ok = cancel_research(uid, args[1])
+        tech_key = args[1]
+        ok = cancel_research(uid, tech_key)
         return await update.message.reply_text(
             f"{'✅' if ok else '❌'} "
-            + (f"Cancelled *{args[1]}*." if ok else f"Failed to cancel *{args[1]}*."),
+            + (f"Cancelled *{tech_key}*." if ok else f"Failed to cancel *{tech_key}*."),
             parse_mode=ParseMode.MARKDOWN
         )
 
-    # ─── Queue w/ inline buttons ───────────
+    # ─── Queue (text command) ────────────────────────────────────────────────
     if args and args[0].lower() == "queue":
         queue = get_queue(uid)
         if not queue:
             return await update.message.reply_text("📭 Your research queue is empty.")
-        defs = load_research_defs()
-        now  = time.time()
-
-        lines = [section_header("⏳ Your Research Queue"), ""]
+        defs   = load_research_defs()
+        now    = time.time()
+        lines  = [section_header("⏳ Your Research Queue"), ""]
         buttons = []
+
         for item in queue:
             info      = defs.get(item["key"], {})
             name      = info.get("name", item["key"])
@@ -75,13 +69,14 @@ async def research(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
             ])
 
+        markup = InlineKeyboardMarkup(buttons)
         return await update.message.reply_text(
             "\n".join(lines),
             parse_mode=ParseMode.MARKDOWN,
-            reply_markup=InlineKeyboardMarkup(buttons)
+            reply_markup=markup
         )
 
-    # ─── List available ────────────────────
+    # ─── Default: list available techs ────────────────────────────────────────
     available = get_available_research(uid)
     if not available:
         return await update.message.reply_text(
@@ -92,11 +87,14 @@ async def research(update: Update, context: ContextTypes.DEFAULT_TYPE):
     defs  = load_research_defs()
     lines = [section_header("🔬 Available Research"), ""]
     for info in available:
+        key     = info["key"]
+        name    = info["name"]
+        tier    = info["tier"]
         cost    = f"{info['cost_c']}💳 {info['cost_m']}⛏️ {info['cost_e']}⚡"
         tstr    = format_hhmmss(info["time_sec"])
         prereqs = ", ".join(info["prereqs"]) or "None"
         lines.append(
-            f"*{info['name']}* (`{info['key']}`) — Tier {info['tier']}\n"
+            f"*{name}* (`{key}`) — Tier {tier}\n"
             f"Cost: {cost} | Time: {tstr}\n"
             f"Prereqs: {prereqs}\n"
         )
@@ -104,26 +102,53 @@ async def research(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lines.append("Or cancel a queued one with `/research cancel <tech_key>`")
 
     return await update.message.reply_text(
-        "\n".join(lines), parse_mode=ParseMode.MARKDOWN
+        "\n".join(lines),
+        parse_mode=ParseMode.MARKDOWN
     )
 
 async def research_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    Handle inline “Cancel” button presses for research.
-    """
     query = update.callback_query
-    await query.answer()  # acknowledge tap
+    await query.answer()  # ACK the tap
     _, tech_key = query.data.split(":", 1)
-    ok = cancel_research(str(update.effective_user.id), tech_key)
-    # pop up a small alert
+
+    ok = cancel_research(str(query.from_user.id), tech_key)
+
+    # show a small alert
     await query.answer(
         text=f"{'✅' if ok else '❌'} "
              + (f"Cancelled {tech_key}" if ok else f"Failed to cancel {tech_key}"),
         show_alert=True
     )
-    # re-render the queue in place
-    context.args = ["queue"]
-    await research(update, context)
+
+    # now re-build the queue display _in place_
+    uid   = str(query.from_user.id)
+    queue = get_queue(uid)
+    if not queue:
+        return await query.message.edit_text("📭 Your research queue is empty.")
+
+    defs    = load_research_defs()
+    now     = time.time()
+    lines   = [section_header("⏳ Your Research Queue"), ""]
+    buttons = []
+
+    for item in queue:
+        info      = defs.get(item["key"], {})
+        name      = info.get("name", item["key"])
+        remaining = max(0, int(item["end_ts"] - now))
+        lines.append(f"*{name}* — {format_hhmmss(remaining)} left")
+        buttons.append([
+            InlineKeyboardButton(
+                text=f"❌ Cancel {name}",
+                callback_data=f"research_cancel:{item['key']}"
+            )
+        ])
+
+    markup = InlineKeyboardMarkup(buttons)
+    await query.message.edit_text(
+        "\n".join(lines),
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=markup
+    )
 
 handler          = CommandHandler("research", research)
 callback_handler = CallbackQueryHandler(research_callback, pattern=r"^research_cancel:")
