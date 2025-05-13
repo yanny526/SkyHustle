@@ -1,4 +1,3 @@
-# modules/resource_manager.py
 
 import time
 from sheets_service import get_rows, update_row
@@ -26,12 +25,21 @@ def tick_resources(user_id: str) -> dict:
     else:
         raise ValueError(f"User {user_id} not found in Players sheet")
 
-    # Extract current values
-    last_seen = float(prow[6])
+    now = time.time()
+
+    # Handle missing or invalid last_seen (first tick)
+    raw_last = prow[6] if len(prow) > 6 else ''
+    try:
+        last_seen = float(raw_last)
+    except (ValueError, TypeError):
+        # Initialize last_seen to now without granting resources
+        prow[6] = str(int(now))
+        update_row('Players', prow_idx, prow)
+        return {'minerals': 0, 'energy': 0}
+
     minerals = int(prow[4])
     energy = int(prow[5])
 
-    now = time.time()
     elapsed = now - last_seen
     if elapsed < 60:
         return {'minerals': 0, 'energy': 0}
