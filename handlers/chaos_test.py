@@ -1,160 +1,112 @@
-# Updated main.py with rotating file handler and dynamic log levels
+# handlers/chaos_test.py
 
-updated_main_py = """
 import logging
-import os
-from logging.handlers import RotatingFileHandler
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.constants import ParseMode
+from telegram.ext import CommandHandler, CallbackQueryHandler, ContextTypes
 
-# ─── Logging Configuration ───────────────────────────────────────────────────
-# Dynamic log level from environment (default: INFO)
-LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO').upper()
-# Log file path and rotation settings
-LOG_FILE = os.getenv('LOG_FILE', 'bot.log')
-MAX_BYTES = int(os.getenv('LOG_MAX_BYTES', 5 * 1024 * 1024))  # default 5MB
-BACKUP_COUNT = int(os.getenv('LOG_BACKUP_COUNT', 3))
+from modules.chaos_engine import engine
+from sheets_service import get_rows
+from utils.format_utils import section_header, code
 
-# Configure root logger
-root_logger = logging.getLogger()
-root_logger.setLevel(LOG_LEVEL)
+logger = logging.getLogger(__name__)
 
-formatter = logging.Formatter("%(asctime)s — %(name)s — %(levelname)s — %(message)s")
+async def chaos_test(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /chaos_test – admin-only trigger for immediate Chaos Storm (or show help).
+    """
+    uid  = update.effective_user.id
+    args = context.args or []
 
-# Console handler
-console_handler = logging.StreamHandler()
-console_handler.setLevel(LOG_LEVEL)
-console_handler.setFormatter(formatter)
-root_logger.addHandler(console_handler)
-
-# Rotating file handler
-file_handler = RotatingFileHandler(LOG_FILE, maxBytes=MAX_BYTES, backupCount=BACKUP_COUNT)
-file_handler.setLevel(LOG_LEVEL)
-file_handler.setFormatter(formatter)
-root_logger.addHandler(file_handler)
-
-
-from config import BOT_TOKEN
-from sheets_service import init as sheets_init
-
-from telegram import BotCommand
-from telegram.ext import Application, CommandHandler, MessageHandler, filters
-
-# Core command handlers
-from handlers.start import handler as start_handler
-from handlers.setname import handler as setname_handler
-from handlers.status import handler as status_handler, callback_handler as status_callback
-from handlers.build import handler as build_handler
-from handlers.queue import handler as queue_handler
-from handlers.train import handler as train_handler
-from handlers.attack import handler as attack_handler
-from handlers.reports import handler as reports_handler, callback_handler as reports_callback
-from handlers.leaderboard import handler as leaderboard_handler, callback_handler as leaderboard_callback
-from handlers.help import handler as help_handler
-
-# Army commands & callbacks
-from handlers.army import (
-    handler           as army_handler,
-    callback_handler  as army_callback,
-    attack_callback   as army_attack_callback,
-    build_callback    as army_build_callback,
-)
-
-# Other game features
-from handlers.achievements import handler as achievements_handler
-from handlers.announce import handler as announce_handler
-from handlers.challenges import daily, weekly
-from handlers.whisper import handler as whisper_handler
-from handlers.inbox import handler as inbox_handler
-
-# Chaos system (refactored)
-from handlers.chaos import handler as chaos_handler
-from handlers.chaos_test import handler as chaos_test_handler
-from handlers.chaos_pre_notice import register_pre_notice_job
-from handlers.chaos_event import register_event_job
-
-
-def main():
-    # 1) Initialize Sheets & headers
-    sheets_init()
-
-    # 2) Build bot
-    app = Application.builder().token(BOT_TOKEN).build()
-
-    # 3) Register handlers
-    app.add_handler(start_handler)
-    app.add_handler(setname_handler)
-    app.add_handler(status_handler)
-    app.add_handler(status_callback)
-    app.add_handler(build_handler)
-    app.add_handler(queue_handler)
-    app.add_handler(train_handler)
-    app.add_handler(attack_handler)
-    app.add_handler(reports_handler)
-    app.add_handler(reports_callback)
-    app.add_handler(leaderboard_handler)
-    app.add_handler(leaderboard_callback)
-    app.add_handler(help_handler)
-
-    # Army and its callbacks
-    app.add_handler(army_handler)
-    app.add_handler(army_callback)
-    app.add_handler(army_attack_callback)
-    app.add_handler(army_build_callback)
-
-    # Other core commands
-    app.add_handler(achievements_handler)
-    app.add_handler(announce_handler)
-    app.add_handler(CommandHandler("daily", daily))
-    app.add_handler(CommandHandler("weekly", weekly))
-    app.add_handler(whisper_handler)
-    app.add_handler(inbox_handler)
-
-    # Chaos commands
-    app.add_handler(chaos_handler)
-    app.add_handler(chaos_test_handler)
-
-    # 4) Slash command registration
-    async def set_bot_commands(app):
-        commands = [
-            BotCommand("status",       "📊 View your base status"),
-            BotCommand("army",         "⚔️ View your army units"),
-            BotCommand("queue",        "⏳ View pending upgrades"),
-            BotCommand("leaderboard",  "🏆 See top commanders"),
-            BotCommand("daily",        "📅 View daily challenges"),
-            BotCommand("weekly",       "📆 View weekly challenges"),
-            BotCommand("achievements", "🏅 View your achievements"),
-            BotCommand("announce",     "📣 [Admin] Broadcast an announcement"),
-            BotCommand("chaos",        "🌪️ Preview Random Chaos Storms"),
-            BotCommand("chaos_test",   "🧪 [Admin] Test Chaos Storm"),
-            BotCommand("reports",      "🗒️ View pending operations"),
-            BotCommand("whisper",      "🤫 Send a private message"),
-            BotCommand("inbox",        "📬 View your private messages"),
-            BotCommand("help",         "🆘 Show help & all commands"),
+    # Help Screen
+    if args and args[0].lower() == "help":
+        lines = [
+            section_header("🚨 Chaos Test Help 🚨", pad_char="=", pad_count=3),
+            "",
+            "Admins can trigger a random Chaos Storm immediately for testing.",
+            "",
+            section_header("⚙️ Usage", pad_char="-", pad_count=3),
+            code('/chaos_test'),
+            "→ Launches a random storm and broadcasts it to all players.",
+            "",
+            "Use `/chaos` to view the official storm catalog and status."
         ]
-        await app.bot.set_my_commands(commands)
+        kb = InlineKeyboardMarkup.from_row([
+            InlineKeyboardButton("🔄 Back to Help", callback_data="chaos_test_help")
+        ])
+        if update.message:
+            return await update.message.reply_text(
+                "\n".join(lines),
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=kb
+            )
+        else:
+            await update.callback_query.answer()
+            return await update.callback_query.edit_message_text(
+                "\n".join(lines),
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=kb
+            )
 
-    app.post_init = set_bot_commands
+    # Permission Check
+    try:
+        admins = [int(r[0]) for r in get_rows("Administrators")[1:] if r and r[0].isdigit()]
+    except Exception as e:
+        logger.error("ChaosTest: failed to fetch admins: %s", e)
+        admins = []
 
-    # 5) Unknown-command fallback
-    async def unknown(update, context):
-        await update.message.reply_text("❓ Unknown command. Use /help.")
-    app.add_handler(MessageHandler(filters.COMMAND, unknown))
+    if uid not in admins:
+        text = section_header("🚫 Unauthorized", pad_char="=", pad_count=3) + "\n\n" \
+               "You are not authorized to use this command."
+        return await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
-    # 6) Schedule Chaos pre-notice checker
-    register_pre_notice_job(app)
+    # Trigger & Broadcast Storm (bypass cooldown)
+    storm = engine.get_random_storm()
+    engine.apply_storm(storm)
+    engine.record_storm(storm["id"])
 
-    # 7) Schedule weekly Chaos Storm
-    register_event_job(app)
+    header = section_header("🚨🔥 ADMIN-TRIGGERED CHAOS STORM 🔥🚨", pad_char="=", pad_count=3)
+    name   = f"{storm['emoji']} *{storm['name'].upper()}* {storm['emoji']}"
+    body   = storm["story"]
+    footer = "🛡️ Stand ready! This storm was unleashed by command."
 
-    # 8) Start polling
-    app.run_polling()
+    full_text = "\n".join([header, "", name, "", body, "", footer])
 
+    kb = InlineKeyboardMarkup.from_row([
+        InlineKeyboardButton("📊 View Base Status", callback_data="status"),
+        InlineKeyboardButton("🆘 Help Menu", callback_data="chaos_test_help")
+    ])
 
-if __name__ == "__main__":
-    main()
-"""
+    try:
+        players = get_rows("Players")[1:]
+    except Exception as e:
+        logger.error("ChaosTest: failed to fetch players for broadcast: %s", e)
+        players = []
 
-# Write the updated file
-with open('/mnt/data/updated_main.py', 'w') as f:
-    f.write(updated_main_py)
+    for row in players:
+        try:
+            pid = int(row[0])
+            await context.bot.send_message(
+                chat_id=pid,
+                text=full_text,
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=kb
+            )
+        except Exception as e:
+            logger.warning("ChaosTest: failed to send storm to %s: %s", row, e)
 
-"/mnt/data/updated_main.py"
+    # Confirmation to Admin
+    confirm = section_header("✅ Chaos Test Complete", pad_char="=", pad_count=3) \
+              + "\n\nA random storm was broadcast to all players."
+    return await update.message.reply_text(confirm, parse_mode=ParseMode.MARKDOWN)
+
+async def chaos_test_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    data = update.callback_query.data
+    if data == "chaos_test":
+        return await chaos_test(update, context)
+    if data == "chaos_test_help":
+        context.args = ["help"]
+        return await chaos_test(update, context)
+
+handler = CommandHandler("chaos_test", chaos_test)
+callback_handler = CallbackQueryHandler(chaos_test_button, pattern="^(chaos_test|chaos_test_help)$")
