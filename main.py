@@ -39,6 +39,7 @@ from handlers.train import handler as train_handler
 from handlers.attack import handler as attack_handler
 from handlers.reports import handler as reports_handler, callback_handler as reports_callback
 from handlers.leaderboard import handler as leaderboard_handler, callback_handler as leaderboard_callback
+from handlers.research import handler as research_handler, callback_handler as research_callback
 from handlers.help import handler as help_handler
 
 # Army commands & callbacks
@@ -108,6 +109,7 @@ def main():
 
     # Research commands
     app.add_handler(research_handler)
+    app.add_handler(research_callback)
 
     # 4) Slash command registration
     async def set_bot_commands(app):
