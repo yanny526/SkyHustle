@@ -96,7 +96,7 @@ def main():
     app.add_handler(leaderboard_callback)
 
     # Research
-    app.add_handler(research_handler)      # /research text
+    app.add_handler(research_handler)      # /research text command
     app.add_handler(research_callback)     # inline “Cancel” buttons
 
     app.add_handler(help_handler)
