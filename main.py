@@ -1,5 +1,6 @@
+# Writing the patched main.py with research completion job scheduling
 
-import logging
+updated_main = """import logging
 import os
 from logging.handlers import RotatingFileHandler
 
@@ -67,6 +68,9 @@ from handlers.chaos import handler as chaos_handler
 from handlers.chaos_test import handler as chaos_test_handler
 from handlers.chaos_pre_notice import register_pre_notice_job
 from handlers.chaos_event import register_event_job
+
+# Research system
+from modules.research_manager import complete_research_job
 
 def main():
     # 1) Initialize Sheets & headers
@@ -141,8 +145,23 @@ def main():
     # 7) Schedule weekly Chaos Storm
     register_event_job(app)
 
-    # 8) Start polling
+    # 8) Schedule research completion job (runs every minute)
+    app.job_queue.run_repeating(
+        complete_research_job,
+        interval=60,
+        first=0,
+        name="research_completion"
+    )
+
+    # 9) Start polling
     app.run_polling()
 
 if __name__ == "__main__":
     main()
+"""
+
+# Save updated file
+with open('/mnt/data/main_updated_with_research.py', 'w') as f:
+    f.write(updated_main)
+
+"/mnt/data/main_updated_with_research.py"
