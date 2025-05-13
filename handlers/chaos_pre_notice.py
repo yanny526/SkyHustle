@@ -23,12 +23,17 @@ async def chaos_pre_notice_job(context: ContextTypes.DEFAULT_TYPE):
         return
 
     for row in rows[1:]:
+        # Ensure there's a timezone value in column 12 (index 11)
+        if len(row) <= 11 or not row[11]:
+            logger.warning("ChaosPreNotice: missing timezone in row, skipping: %s", row)
+            continue
+
         try:
             chat_id = int(row[0])
-            tz_str = row[11]  # timezone column (0-indexed)
+            tz_str = row[11]
             local_time = now_utc.astimezone(ZoneInfo(tz_str))
         except Exception as e:
-            logger.warning("ChaosPreNotice: skipping bad row %s: %s", row, e)
+            logger.warning("ChaosPreNotice: invalid timezone or chat_id, skipping row %s: %s", row, e)
             continue
 
         # 1 minute before Monday 09:00 local
