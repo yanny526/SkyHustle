@@ -1,7 +1,9 @@
+
 # handlers/status.py
 
 from datetime import datetime
 import html
+import logging
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
@@ -16,7 +18,7 @@ from modules.building_manager import (
     get_building_health,
 )
 from modules.unit_manager import UNITS
-from sheets_service import get_rows
+from sheets_service import get_rows, update_row
 from utils.format_utils import (
     format_bar,
     get_building_emoji,
@@ -27,12 +29,56 @@ from utils.format_utils import (
 # import queue so we can call it directly
 from handlers.queue import queue
 
+logger = logging.getLogger(__name__)
+
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = str(update.effective_user.id)
     now = datetime.utcnow()
 
     # ─── Retrieve Player Data ────────────────────────────────────────────
     players = get_rows("Players")
+    header = players[0] if players else []
+    # Determine progress index for tutorial
+    prog_idx = header.index("progress") if "progress" in header else None
+
+    player_row = None
+    row_index = None
+    for idx, row in enumerate(players[1:], start=1):
+        if row[0] == uid:
+            player_row = row.copy()
+            row_index = idx
+            break
+
+    if not player_row:
+        return await update.message.reply_text("❗ Please run /start first.")
+
+    # Handle tutorial completion step
+    if prog_idx is not None and len(player_row) > prog_idx and player_row[prog_idx] == "4":
+        # Advance to done (step 5)
+        player_row[prog_idx] = "5"
+        try:
+            update_row("Players", row_index, player_row)
+        except Exception as e:
+            logger.error("TutorialComplete: failed to update progress: %s", e)
+
+        # Send tutorial completion message
+        complete_lines = [
+            section_header("🎉 Tutorial Complete! 🎉", pad_char="=", pad_count=3),
+            "",
+            "Congratulations, Commander! You’ve mastered the basics.",
+            "Use `/help` to explore all features and start conquering.",
+        ]
+        text = "
+".join(complete_lines)
+        # Reply appropriately
+        if update.message:
+            await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+        else:
+            await update.callback_query.answer()
+            await update.callback_query.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+
+    # ─── Unpack data for full status ────────────────────────────────────────
+    # Commander name, resources, last_seen
     for row in players[1:]:
         if row[0] == uid:
             commander  = html.escape(row[1] or "Unknown")
@@ -42,8 +88,6 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
             last_raw   = row[6] if len(row) > 6 else None
             last_seen  = int(last_raw) if last_raw and last_raw.isdigit() else None
             break
-    else:
-        return await update.message.reply_text("❗ Please run /start first.")
 
     # ─── Production & Infrastructure ────────────────────────────────────
     binfo   = get_building_info(uid)
