@@ -1,6 +1,4 @@
-# Patched main.py with Research handler registration
 
-patched_main = """
 import logging
 import os
 from logging.handlers import RotatingFileHandler
@@ -158,9 +156,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-"""
-
-with open('/mnt/data/main_patched.py', 'w') as f:
-    f.write(patched_main)
-
-"/mnt/data/main_patched.py"
