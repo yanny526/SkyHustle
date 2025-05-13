@@ -1,7 +1,8 @@
+
 # handlers/build.py
 
 import time
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.ext import CommandHandler, ContextTypes
 
@@ -89,11 +90,24 @@ async def build(update: Update, context: ContextTypes.DEFAULT_TYPE):
     costC, costM, costE = get_build_costs(btype, next_lvl)
     duration = get_build_time(btype, next_lvl)
 
-    # ─── Check Resources ───────────────────────────────────────────────────────
+    # ─── Check Resources & Capture Tutorial Progress ───────────────────────────
     players = get_rows("Players")
+    header = players[0]
+    progress_idx = header.index("progress") if "progress" in header else None
+    old_progress = None
+
     for pi, prow in enumerate(players[1:], start=1):
         if prow[0] == uid:
-            credits, minerals, energy = map(int, (prow[3], prow[4], prow[5]))
+            try:
+                credits, minerals, energy = map(int, (prow[3], prow[4], prow[5]))
+            except Exception:
+                return await update.message.reply_text(
+                    "❗ Run /start first.",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+            # record old tutorial progress
+            if progress_idx is not None and len(prow) > progress_idx:
+                old_progress = prow[progress_idx]
             break
     else:
         return await update.message.reply_text(
@@ -108,13 +122,11 @@ async def build(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     # ─── Deduct & Schedule Upgrade ─────────────────────────────────────────────
-    # Deduct
     players[pi][3] = str(credits - costC)
     players[pi][4] = str(minerals - costM)
     players[pi][5] = str(energy - costE)
     update_row("Players", pi, players[pi])
 
-    # Schedule
     end_ts = time.time() + duration
     existing = next(
         ((bi, brow) for bi, brow in enumerate(buildings[1:], start=1)
@@ -123,13 +135,38 @@ async def build(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     if existing:
         bi, brow = existing
-        brow = brow.copy()
-        while len(brow) < 4:
-            brow.append("")
-        brow[3] = str(end_ts)
-        update_row("Buildings", bi, brow)
+        new_row = brow.copy()
+        while len(new_row) < 4:
+            new_row.append("")
+        new_row[3] = str(end_ts)
+        update_row("Buildings", bi, new_row)
     else:
         append_row("Buildings", [uid, btype, str(current_lvl), str(end_ts)])
+
+    # ─── Tutorial Progression Step 2 ➔ 3 ───────────────────────────────────────
+    if btype == "Power Plant" and old_progress == "2":
+        # advance tutorial progress to step 3
+        if progress_idx is not None:
+            players[pi][progress_idx] = "3"
+            update_row("Players", pi, players[pi])
+
+        lines = [
+            section_header("✅ Power Plant Constructed!", pad_char="=", pad_count=3),
+            "",
+            f"{emoji} *{btype}* now at Level *{next_lvl}*",
+            "",
+            section_header("🧾 Tutorial Step 3", pad_char="-", pad_count=3),
+            "`/train soldier` — Prepare your first unit for battle.",
+        ]
+        kb = ReplyKeyboardMarkup(
+            [[KeyboardButton("/train soldier")], [KeyboardButton("/status")]],
+            resize_keyboard=True
+        )
+        return await update.message.reply_text(
+            "\n".join(lines),
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=kb
+        )
 
     # ─── Confirmation UI ───────────────────────────────────────────────────────
     lines = [
