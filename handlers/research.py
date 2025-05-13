@@ -100,6 +100,7 @@ async def research(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     lines.append("Start one with `/research start <tech_key>`")
     lines.append("Or cancel a queued one with `/research cancel <tech_key>`")
+    lines.append("Or check queued researches with `/research queue <tech_key>`")
 
     return await update.message.reply_text(
         "\n".join(lines),
