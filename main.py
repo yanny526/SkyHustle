@@ -1,28 +1,25 @@
+# Patched main.py with Research handler registration
+
+patched_main = """
 import logging
 import os
 from logging.handlers import RotatingFileHandler
 
 # ─── Logging Configuration ───────────────────────────────────────────────────
-# Dynamic log level from environment (default: INFO)
 LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO').upper()
-# Log file path and rotation settings
 LOG_FILE = os.getenv('LOG_FILE', 'bot.log')
-MAX_BYTES = int(os.getenv('LOG_MAX_BYTES', 5 * 1024 * 1024))  # default 5MB
+MAX_BYTES = int(os.getenv('LOG_MAX_BYTES', 5 * 1024 * 1024))
 BACKUP_COUNT = int(os.getenv('LOG_BACKUP_COUNT', 3))
 
-# Configure root logger
 root_logger = logging.getLogger()
 root_logger.setLevel(LOG_LEVEL)
-
 formatter = logging.Formatter("%(asctime)s — %(name)s — %(levelname)s — %(message)s")
 
-# Console handler
 console_handler = logging.StreamHandler()
 console_handler.setLevel(LOG_LEVEL)
 console_handler.setFormatter(formatter)
 root_logger.addHandler(console_handler)
 
-# Rotating file handler
 file_handler = RotatingFileHandler(LOG_FILE, maxBytes=MAX_BYTES, backupCount=BACKUP_COUNT)
 file_handler.setLevel(LOG_LEVEL)
 file_handler.setFormatter(formatter)
@@ -68,10 +65,11 @@ from handlers.chaos_pre_notice import register_pre_notice_job
 from handlers.chaos_event import register_event_job
 
 # Research system
+from handlers.research import handler as research_handler
 from modules.research_manager import complete_research_job
 
 def main():
-    # 1) Initialize Sheets & headers
+    # 1) Initialize Sheets
     sheets_init()
 
     # 2) Build bot
@@ -110,6 +108,9 @@ def main():
     app.add_handler(chaos_handler)
     app.add_handler(chaos_test_handler)
 
+    # Research commands
+    app.add_handler(research_handler)
+
     # 4) Slash command registration
     async def set_bot_commands(app):
         commands = [
@@ -123,6 +124,7 @@ def main():
             BotCommand("announce",     "📣 [Admin] Broadcast an announcement"),
             BotCommand("chaos",        "🌪️ Preview Random Chaos Storms"),
             BotCommand("chaos_test",   "🧪 [Admin] Test Chaos Storm"),
+            BotCommand("research",     "🔬 Browse and queue research projects"),
             BotCommand("reports",      "🗒️ View pending operations"),
             BotCommand("whisper",      "🤫 Send a private message"),
             BotCommand("inbox",        "📬 View your private messages"),
@@ -143,7 +145,7 @@ def main():
     # 7) Schedule weekly Chaos Storm
     register_event_job(app)
 
-    # 8) Schedule research completion job (runs every minute)
+    # 8) Schedule research completion job
     app.job_queue.run_repeating(
         complete_research_job,
         interval=60,
@@ -156,3 +158,9 @@ def main():
 
 if __name__ == "__main__":
     main()
+"""
+
+with open('/mnt/data/main_patched.py', 'w') as f:
+    f.write(patched_main)
+
+"/mnt/data/main_patched.py"
