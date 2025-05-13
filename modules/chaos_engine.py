@@ -14,7 +14,7 @@ class ChaosEngine:
     LOG_HEADER = ["storm_id", "timestamp"]
     PLAYER_SHEET = "Players"
 
-    # Define your storms in one place
+    # All storm definitions in one place
     STORMS = [
         {
             "id": "ember_rain",
@@ -122,8 +122,7 @@ class ChaosEngine:
             logger.error("ChaosEngine: cannot read Players sheet: %s", e)
             return
 
-        header, *players = rows
-        for idx, row in enumerate(players, start=1):
+        for idx, row in enumerate(rows[1:], start=1):
             try:
                 credits = int(row[3])
                 minerals = int(row[4])
@@ -157,5 +156,5 @@ class ChaosEngine:
         return storm
 
 
-# Singleton instance you can import elsewhere
+# Singleton instance for import elsewhere
 engine = ChaosEngine()
