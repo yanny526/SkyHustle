@@ -1,13 +1,43 @@
-# main.py
+# Creating the fully updated main.py with consolidated Chaos scheduling and logging
+
+updated_main = """
+import logging
+import os
+from logging.handlers import RotatingFileHandler
+
+# ─── Logging Configuration ───────────────────────────────────────────────────
+# Dynamic log level from environment (default: INFO)
+LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO').upper()
+# Log file path and rotation settings
+LOG_FILE = os.getenv('LOG_FILE', 'bot.log')
+MAX_BYTES = int(os.getenv('LOG_MAX_BYTES', 5 * 1024 * 1024))  # default 5MB
+BACKUP_COUNT = int(os.getenv('LOG_BACKUP_COUNT', 3))
+
+# Configure root logger
+root_logger = logging.getLogger()
+root_logger.setLevel(LOG_LEVEL)
+
+formatter = logging.Formatter("%(asctime)s — %(name)s — %(levelname)s — %(message)s")
+
+# Console handler
+console_handler = logging.StreamHandler()
+console_handler.setLevel(LOG_LEVEL)
+console_handler.setFormatter(formatter)
+root_logger.addHandler(console_handler)
+
+# Rotating file handler
+file_handler = RotatingFileHandler(LOG_FILE, maxBytes=MAX_BYTES, backupCount=BACKUP_COUNT)
+file_handler.setLevel(LOG_LEVEL)
+file_handler.setFormatter(formatter)
+root_logger.addHandler(file_handler)
 
 from config import BOT_TOKEN
 from sheets_service import init as sheets_init
 
 from telegram import BotCommand
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
-from datetime import time as dtime
 
-# Handlers
+# Core command handlers
 from handlers.start import handler as start_handler
 from handlers.setname import handler as setname_handler
 from handlers.status import handler as status_handler, callback_handler as status_callback
@@ -19,7 +49,7 @@ from handlers.reports import handler as reports_handler, callback_handler as rep
 from handlers.leaderboard import handler as leaderboard_handler, callback_handler as leaderboard_callback
 from handlers.help import handler as help_handler
 
-# ←── Updated imports here to pull in all army callbacks
+# Army commands & callbacks
 from handlers.army import (
     handler           as army_handler,
     callback_handler  as army_callback,
@@ -27,18 +57,18 @@ from handlers.army import (
     build_callback    as army_build_callback,
 )
 
+# Other game features
 from handlers.achievements import handler as achievements_handler
 from handlers.announce import handler as announce_handler
 from handlers.challenges import daily, weekly
 from handlers.whisper import handler as whisper_handler
 from handlers.inbox import handler as inbox_handler
 
-# Chaos system
+# Chaos system (refactored)
 from handlers.chaos import handler as chaos_handler
 from handlers.chaos_test import handler as chaos_test_handler
-from handlers.chaos_event import chaos_event_job
-from handlers.chaos_pre_notice import chaos_pre_notice_job
-
+from handlers.chaos_pre_notice import register_pre_notice_job
+from handlers.chaos_event import register_event_job
 
 def main():
     # 1) Initialize Sheets & headers
@@ -56,18 +86,19 @@ def main():
     app.add_handler(queue_handler)
     app.add_handler(train_handler)
     app.add_handler(attack_handler)
-    app.add_handler(reports_handler)     # /reports for pending
-    app.add_handler(reports_callback)    # 📜 View Pending button
+    app.add_handler(reports_handler)
+    app.add_handler(reports_callback)
     app.add_handler(leaderboard_handler)
     app.add_handler(leaderboard_callback)
     app.add_handler(help_handler)
 
-    # ←── Register army and its three callbacks
+    # Army and its callbacks
     app.add_handler(army_handler)
     app.add_handler(army_callback)
     app.add_handler(army_attack_callback)
     app.add_handler(army_build_callback)
 
+    # Other core commands
     app.add_handler(achievements_handler)
     app.add_handler(announce_handler)
     app.add_handler(CommandHandler("daily", daily))
@@ -76,10 +107,10 @@ def main():
     app.add_handler(inbox_handler)
 
     # Chaos commands
-    app.add_handler(chaos_handler)       # /chaos preview
-    app.add_handler(chaos_test_handler)  # /chaos_test (admin)
+    app.add_handler(chaos_handler)
+    app.add_handler(chaos_test_handler)
 
-    # 4) Slash commands
+    # 4) Slash command registration
     async def set_bot_commands(app):
         commands = [
             BotCommand("status",       "📊 View your base status"),
@@ -106,25 +137,22 @@ def main():
         await update.message.reply_text("❓ Unknown command. Use /help.")
     app.add_handler(MessageHandler(filters.COMMAND, unknown))
 
-    # 6) Schedule chaos pre-notice checker every minute
-    app.job_queue.run_repeating(
-        chaos_pre_notice_job,
-        interval=60,
-        first=0,
-        name="chaos_pre_notice_checker"
-    )
+    # 6) Schedule Chaos pre-notice checker
+    register_pre_notice_job(app)
 
-    # 7) Schedule weekly Chaos Storm (Mon @ 09:00 UTC)
-    app.job_queue.run_daily(
-        chaos_event_job,
-        days=(0,),  # Monday
-        time=dtime(hour=9, minute=0),
-        name="weekly_chaos_storm"
-    )
+    # 7) Schedule weekly Chaos Storm
+    register_event_job(app)
 
     # 8) Start polling
     app.run_polling()
 
-
 if __name__ == "__main__":
     main()
+"""
+
+# Write the updated main.py to disk for download
+with open('/mnt/data/main_updated.py', 'w') as f:
+    f.write(updated_main)
+
+# Display download link to the user
+"/mnt/data/main_updated.py"
