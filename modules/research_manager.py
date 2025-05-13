@@ -34,23 +34,19 @@ def load_research_defs():
             continue
 
         info = dict(zip(header, row))
-        # parse prerequisites
         info["prereqs"] = [p.strip() for p in info.get("prereqs", "").split(",") if p.strip()]
 
-        # parse tier
         try:
             info["tier"] = int(info.get("tier", "1"))
         except ValueError:
             info["tier"] = 1
 
-        # parse cost/time fields
         for fld in ("cost_c", "cost_m", "cost_e", "time_sec", "token_cost", "slots_required"):
             try:
                 info[fld] = int(info.get(fld, "0"))
             except ValueError:
                 info[fld] = 0
 
-        # handle limited-time tech
         info["is_limited"] = str(info.get("is_limited", "")).upper() == "TRUE"
         if info["is_limited"]:
             try:
@@ -67,57 +63,40 @@ def load_research_defs():
 
 def get_available_research(user_id: str) -> list[dict]:
     """
-    Return a list of research definitions the user can start,
-    based on resources, prerequisites, and (optional) time window.
+    Return a list of research definitions the user has unlocked
+    by prerequisites and time window, regardless of current resources.
     """
     defs = load_research_defs()
     if not defs:
         return []
 
-    try:
-        players = get_rows(PLAYERS_SHEET)
-    except HttpError as e:
-        logger.error("get_available_research: failed to load '%s' sheet: %s", PLAYERS_SHEET, e)
-        return []
-
-    header, *rows = players
-    user_row = next((r for r in rows if r[0] == user_id), None)
-    if not user_row:
-        return []
-
-    try:
-        credits = int(user_row[3])
-        minerals = int(user_row[4])
-        energy = int(user_row[5])
-    except Exception:
-        credits = minerals = energy = 0
-
+    # load what they've already completed
     try:
         completed = [r[1] for r in get_rows(COMPLETED_SHEET)[1:]]
-    except HttpError:
+    except Exception:
         completed = []
 
-    available = []
     now = datetime.utcnow()
+    available = []
     for info in defs.values():
         key = info["key"]
+        # skip already completed
         if key in completed:
             continue
-        # limited-time check
+        # skip outside limited-time window
         if info["is_limited"] and (
            (info.get("start_ts") and now < info["start_ts"]) or
            (info.get("end_ts") and now > info["end_ts"])
         ):
             continue
-        # prerequisites
+        # skip if prerequisites not done
         if any(pr not in completed for pr in info["prereqs"]):
             continue
-        # resources
-        if credits < info["cost_c"] or minerals < info["cost_m"] or energy < info["cost_e"]:
-            continue
+
+        # now unlocked, regardless of resources
         available.append(info)
 
-    return available
+    return sorted(available, key=lambda t: (t["tier"], t["key"]))
 
 
 def start_research(user_id: str, key: str) -> bool:
@@ -146,7 +125,6 @@ def start_research(user_id: str, key: str) -> bool:
                 minerals < info["cost_m"] or
                 energy < info["cost_e"]):
                 return False
-            # deduct costs
             row[3] = str(credits - info["cost_c"])
             row[4] = str(minerals - info["cost_m"])
             row[5] = str(energy - info["cost_e"])
@@ -155,9 +133,9 @@ def start_research(user_id: str, key: str) -> bool:
     else:
         return False
 
-    now = time.time()
-    end_ts = now + info["time_sec"]
-    append_row(QUEUE_SHEET, [user_id, key, str(now), str(end_ts)])
+    now_ts = time.time()
+    end_ts = now_ts + info["time_sec"]
+    append_row(QUEUE_SHEET, [user_id, key, str(now_ts), str(end_ts)])
     return True
 
 
@@ -176,17 +154,16 @@ def get_queue(user_id: str) -> list[dict]:
         if not r or r[0] != user_id:
             continue
         queue.append({
-            "key": r[1],
+            "key":      r[1],
             "start_ts": float(r[2]),
-            "end_ts": float(r[3]),
+            "end_ts":   float(r[3]),
         })
     return queue
 
 
 def complete_research_job(context):
     """
-    Job that runs periodically to move completed projects
-    from queue to completed sheet.
+    Job that moves completed projects from queue to completed sheet.
     """
     now = time.time()
     try:
@@ -198,23 +175,19 @@ def complete_research_job(context):
     header, *data = rows
     for idx, r in enumerate(data, start=1):
         try:
-            end_ts = float(r[3])
+            if float(r[3]) <= now:
+                user_id, key = r[0], r[1]
+                append_row(COMPLETED_SHEET, [user_id, key, datetime.utcnow().isoformat()])
+                update_row(QUEUE_SHEET, idx, [""] * len(header))
         except Exception:
             continue
-        if end_ts <= now:
-            user_id, key = r[0], r[1]
-            ts_iso = datetime.utcnow().isoformat()
-            append_row(COMPLETED_SHEET, [user_id, key, ts_iso])
-            update_row(QUEUE_SHEET, idx, [""] * len(header))
 
 
 def cancel_research(user_id: str, key: str) -> bool:
     """
-    Cancel a queued research project for the user.
-    Refunds the resource costs, then removes the queue entry.
-    Returns True if found & removed, False otherwise.
+    Cancel a queued research project, refunding costs, then removing it.
     """
-    # 1) Load the queue
+    # load queue
     try:
         queue_rows = get_rows(QUEUE_SHEET)
     except HttpError as e:
@@ -223,7 +196,7 @@ def cancel_research(user_id: str, key: str) -> bool:
 
     header_q, *queue_data = queue_rows
 
-    # 2) Refund resources first
+    # refund
     defs = load_research_defs()
     info = defs.get(key)
     if info:
@@ -241,18 +214,13 @@ def cancel_research(user_id: str, key: str) -> bool:
                         e = int(prow[5]) + info["cost_e"]
                     except Exception:
                         break
-                    prow[3] = str(c)
-                    prow[4] = str(m)
-                    prow[5] = str(e)
+                    prow[3], prow[4], prow[5] = str(c), str(m), str(e)
                     update_row(PLAYERS_SHEET, p_idx, prow)
                     break
 
-    # 3) Remove the queue entry
+    # remove queue entry
     for idx, row in enumerate(queue_data, start=1):
-        if not row or len(row) < 2:
-            continue
-        if row[0] == user_id and row[1] == key:
+        if row and len(row) >= 2 and row[0] == user_id and row[1] == key:
             update_row(QUEUE_SHEET, idx, [""] * len(header_q))
             return True
-
     return False
