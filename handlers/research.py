@@ -1,8 +1,7 @@
 # handlers/research.py
 
-from datetime import datetime
 import time
-
+from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.ext import CommandHandler, CallbackQueryHandler, ContextTypes
@@ -19,15 +18,15 @@ from utils.format_utils import section_header, code
 
 async def research(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    /research                 → list available techs
+    /research                 → list available techs with Start/Info buttons
     /research start <key>     → start a research project
-    /research queue           → view your queue (with cancel buttons)
+    /research queue           → view your queue
     /research cancel <key>    → cancel a queued research
     """
     uid  = str(update.effective_user.id)
     args = context.args or []
 
-    # ─── Start a new research ───────────────────────────────────────────────
+    # ─── /research start <key> ───────────────────────────────────────────────
     if args and args[0].lower() == "start":
         if len(args) < 2:
             return await update.message.reply_text(
@@ -42,7 +41,7 @@ async def research(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode=ParseMode.MARKDOWN
         )
 
-    # ─── Cancel a queued research ───────────────────────────────────────────
+    # ─── /research cancel <key> ──────────────────────────────────────────────
     if args and args[0].lower() == "cancel":
         if len(args) < 2:
             return await update.message.reply_text(
@@ -57,7 +56,7 @@ async def research(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode=ParseMode.MARKDOWN
         )
 
-    # ─── Show queue with “Cancel” buttons ──────────────────────────────────
+    # ─── /research queue ────────────────────────────────────────────────────
     if args and args[0].lower() == "queue":
         queue = get_queue(uid)
         if not queue:
@@ -67,7 +66,6 @@ async def research(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         lines = [section_header("⏳ Your Research Queue"), ""]
         buttons = []
-
         for item in queue:
             info      = defs.get(item["key"], {})
             name      = info.get("name", item["key"])
@@ -87,73 +85,123 @@ async def research(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=markup
         )
 
-    # ─── Default: list all available techs ─────────────────────────────────
+    # ─── Default /research → list all available techs with buttons ──────────
     available = get_available_research(uid)
     defs      = load_research_defs()
+    now       = time.time()
 
-    # Even if no resources, show unlocked techs so players can plan ahead
-    if not available:
+    if not defs:
         return await update.message.reply_text(
-            "🔍 No techs currently startable. Check /research queue or complete prerequisites.",
+            "🔍 Unable to load tech definitions right now.",
             parse_mode=ParseMode.MARKDOWN
         )
 
-    lines = [section_header("🔬 Available Research"), ""]
-    for info in available:
-        key     = info["key"]
-        name    = info["name"]
-        tier    = info["tier"]
-        cost    = f"{info['cost_c']}💳 {info['cost_m']}⛏️ {info['cost_e']}⚡"
-        tstr    = format_hhmmss(info["time_sec"])
+    # Build the list header
+    if not available:
+        header = section_header("🔒 Research Locked / Coming Soon")
+    else:
+        header = section_header("🔬 Available Research")
+    lines = [header, ""]
 
-        # map raw prereq-keys to human names
-        if info["prereqs"]:
-            prereq_names = [
-                defs[p]["name"]
-                for p in info["prereqs"]
-                if p in defs
-            ]
-            prereq_str = ", ".join(prereq_names) or "None"
-        else:
-            prereq_str = "None"
+    # Build buttons: two per row (Start / Info)
+    buttons = []
+    for info in defs.values():
+        key  = info["key"]
+        name = info.get("name", key)
+        tier = info.get("tier", 1)
+        time_sec = info.get("time_sec", 0)
+
+        # Always show item, but style locked ones differently
+        locked = key not in {i["key"] for i in available}
+        emoji = "🔒" if locked else "🔬"
+        cost    = f"{info['cost_c']}💳 {info['cost_m']}⛏️ {info['cost_e']}⚡"
+        tstr    = format_hhmmss(time_sec)
+        prereqs = ", ".join(info["prereqs"]) if info["prereqs"] else "None"
 
         lines.append(
-            f"*{name}* (`{key}`) — Tier {tier}\n"
+            f"{emoji} *{name}* (`{key}`) — Tier {tier}\n"
             f"Cost: {cost} | Time: {tstr}\n"
-            f"Prereqs: {prereq_str}\n"
+            f"Prereqs: {prereqs}\n"
         )
 
-    lines.append("Start one with `/research start <tech_key>`")
-    lines.append("Or cancel a queued one with `/research cancel <tech_key>`")
+        # Buttons row
+        btns = []
+        # Start button (disabled if locked)
+        btns.append(
+            InlineKeyboardButton(
+                text="🔬 Start",
+                callback_data=f"research_start:{key}",
+                # you can append `,disabled=True` if you want to show disabled state in UI libraries that support it
+            )
+        )
+        # Info button
+        btns.append(
+            InlineKeyboardButton(
+                text="ℹ️ Info",
+                callback_data=f"research_info:{key}"
+            )
+        )
+        buttons.append(btns)
 
+    markup = InlineKeyboardMarkup(buttons)
     return await update.message.reply_text(
         "\n".join(lines),
-        parse_mode=ParseMode.MARKDOWN
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=markup
     )
 
 async def research_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    Handle inline “Cancel” button presses for research.
+    Handle inline buttons:
+     - research_start:<key>
+     - research_info:<key>
+     - research_cancel:<key>
     """
     query = update.callback_query
-    await query.answer()  # acknowledge button tap
-    _, tech_key = query.data.split(":", 1)
+    await query.answer()  # dismiss loading
+    data = query.data  # e.g. "research_start:ai_boost"
 
-    ok = cancel_research(str(update.effective_user.id), tech_key)
-    # give user feedback
-    await query.answer(
-        text=f"{'✅' if ok else '❌'} "
-             + (f"Cancelled *{tech_key}*." if ok else f"Failed to cancel *{tech_key}*."),
-        show_alert=True
-    )
+    cmd, key = data.split(":", 1)
+    uid = str(update.effective_user.id)
 
-    # refresh the queue list in-place
-    context.args = ["queue"]
-    # since this was triggered from a callback, there's no `message` on update,
-    # we use `edit_message_text` instead of `reply_text`:
-    lines = await research(update, context)  # this returns a new Message, but for simplicity:
-    # NB: in python-telegram-bot v20 the `research` coroutine writes back to chat directly,
-    # so you don't need to do anything else here.
+    if cmd == "research_start":
+        ok = start_research(uid, key)
+        await query.answer(
+            text=f"{'✅' if ok else '❌'} "
+                 + (f"Queued {key}" if ok else f"Cannot queue {key}"),
+            show_alert=True
+        )
 
+    elif cmd == "research_cancel":
+        ok = cancel_research(uid, key)
+        await query.answer(
+            text=f"{'✅' if ok else '❌'} "
+                 + (f"Cancelled {key}" if ok else f"Cannot cancel {key}"),
+            show_alert=True
+        )
+
+    elif cmd == "research_info":
+        defs = load_research_defs()
+        info = defs.get(key)
+        if not info:
+            await query.answer(text="❌ Unknown tech", show_alert=True)
+        else:
+            prereqs = ", ".join(info["prereqs"]) if info["prereqs"] else "None"
+            msg = (
+                f"*{info['name']}* (`{key}`)\n"
+                f"Tier: {info['tier']}\n"
+                f"Cost: {info['cost_c']}💳 {info['cost_m']}⛏️ {info['cost_e']}⚡\n"
+                f"Time: {format_hhmmss(info['time_sec'])}\n"
+                f"Prereqs: {prereqs}"
+            )
+            await query.answer(text=msg, show_alert=True)
+
+    # After handling, refresh the list in-place:
+    # simulate a fresh `/research` on this very message
+    context.args = []  # go back to default list view
+    # edit original message
+    await research(update, context)
+
+# Register both handlers
 handler          = CommandHandler("research", research)
-callback_handler = CallbackQueryHandler(research_callback, pattern=r"^research_cancel:")
+callback_handler = CallbackQueryHandler(research_callback, pattern=r"^research_")
