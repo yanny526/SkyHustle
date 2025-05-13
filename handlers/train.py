@@ -1,6 +1,7 @@
+
 # handlers/train.py
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.ext import CommandHandler, ContextTypes
 from sheets_service import get_rows, update_row, append_row
@@ -88,23 +89,43 @@ async def train(update: Update, context: ContextTypes.DEFAULT_TYPE):
     totM = cost['m'] * cnt
     totE = cost['e'] * cnt
 
-    # fetch player row
+    # fetch player row and capture tutorial progress
     players = get_rows('Players')
+    if not players:
+        return
+    header = players[0]
+    # find indices
+    progress_idx = header.index('progress') if 'progress' in header else None
+    credits_idx = header.index('credits')
+    # fetch current prow and index
+    prow = None
+    prow_idx = None
     for pi, row in enumerate(players[1:], start=1):
         if row[0] == uid:
-            prow, prow_idx = row.copy(), pi
+            prow = row.copy()
+            prow_idx = pi
             break
-    else:
+    if prow is None:
         return await update.message.reply_text("❗ Run /start first.", parse_mode=ParseMode.MARKDOWN)
+    # record old progress
+    old_progress = prow[progress_idx] if progress_idx is not None and len(prow) > progress_idx else None
 
-    creds, minr, engy = map(int, (prow[3], prow[4], prow[5]))
-    if creds < totC or minr < totM or engy < totE:
+    # resource check
+    try:
+        creds = int(prow[credits_idx])
+        minerals = int(prow[header.index('minerals')])
+        energy = int(prow[header.index('energy')])
+    except Exception:
+        return await update.message.reply_text("❗ Run /start first.", parse_mode=ParseMode.MARKDOWN)
+    if creds < totC or minerals < totM or energy < totE:
         return await update.message.reply_text(
             f"❌ Need {totC}💳 {totM}⛏️ {totE}⚡.", parse_mode=ParseMode.MARKDOWN
         )
 
-    # deduct resources
-    prow[3], prow[4], prow[5] = str(creds - totC), str(minr - totM), str(engy - totE)
+    # deduct resources & update row
+    prow[credits_idx] = str(creds - totC)
+    prow[header.index('minerals')] = str(minerals - totM)
+    prow[header.index('energy')] = str(energy - totE)
     update_row('Players', prow_idx, prow)
 
     # update Army sheet
@@ -134,23 +155,28 @@ async def train(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
 
-    # 3) Mission update if applicable
-    header = players[0]
-    while len(prow) < len(header):
-        prow.append("")
-    if prow[7] == 'step2':
-        prow[3] = str(int(prow[3]) + 200)  # +200 credits
-        prow[7] = 'step3'
+    # 3) Tutorial progression: Step 3 → 4
+    if old_progress == "3":
+        # reward 200 credits and advance to step 4 (view status)
+        prow[credits_idx] = str(int(prow[credits_idx]) + 200)
+        if progress_idx is not None:
+            prow[progress_idx] = "4"
         update_row('Players', prow_idx, prow)
+
         lines = [
-            section_header("🎉 Mission Update!"),
+            section_header("🎉 Tutorial Complete Step!"),
             "",
             "✅ You’ve trained your first units!",
             "💳 +200 Credits awarded!",
             "",
-            "Next: Check your base with `/status` to continue."
+            section_header("🧾 Tutorial Step 4", pad_char="-", pad_count=3),
+            "`/status` — View your base status to proceed.",
         ]
-        await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
+        kb = ReplyKeyboardMarkup(
+            [[KeyboardButton("/status")]],
+            resize_keyboard=True
+        )
+        return await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
 
     # 4) Track daily challenge
     for ch in load_challenges('daily'):
