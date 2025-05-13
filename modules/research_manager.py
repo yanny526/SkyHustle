@@ -103,13 +103,13 @@ def get_available_research(user_id: str) -> list[dict]:
         key = info["key"]
         if key in completed:
             continue
-        # limited check
+        # limited-time check
         if info["is_limited"] and (
            (info.get("start_ts") and now < info["start_ts"]) or
            (info.get("end_ts") and now > info["end_ts"])
         ):
             continue
-        # prereqs
+        # prerequisites
         if any(pr not in completed for pr in info["prereqs"]):
             continue
         # resources
@@ -181,7 +181,8 @@ def get_queue(user_id: str) -> list[dict]:
 
 def complete_research_job(context):
     """
-    Job that runs periodically to move completed projects from queue to completed sheet.
+    Job that runs periodically to move completed projects
+    from queue to completed sheet.
     """
     now = time.time()
     try:
