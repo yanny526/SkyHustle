@@ -1,12 +1,36 @@
-# main.py
+# Updated main.py with rotating file handler and dynamic log levels
 
+updated_main_py = """
 import logging
+import os
+from logging.handlers import RotatingFileHandler
 
-# Basic logging setup
-logging.basicConfig(
-    format="%(asctime)s — %(name)s — %(levelname)s — %(message)s",
-    level=logging.INFO
-)
+# ─── Logging Configuration ───────────────────────────────────────────────────
+# Dynamic log level from environment (default: INFO)
+LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO').upper()
+# Log file path and rotation settings
+LOG_FILE = os.getenv('LOG_FILE', 'bot.log')
+MAX_BYTES = int(os.getenv('LOG_MAX_BYTES', 5 * 1024 * 1024))  # default 5MB
+BACKUP_COUNT = int(os.getenv('LOG_BACKUP_COUNT', 3))
+
+# Configure root logger
+root_logger = logging.getLogger()
+root_logger.setLevel(LOG_LEVEL)
+
+formatter = logging.Formatter("%(asctime)s — %(name)s — %(levelname)s — %(message)s")
+
+# Console handler
+console_handler = logging.StreamHandler()
+console_handler.setLevel(LOG_LEVEL)
+console_handler.setFormatter(formatter)
+root_logger.addHandler(console_handler)
+
+# Rotating file handler
+file_handler = RotatingFileHandler(LOG_FILE, maxBytes=MAX_BYTES, backupCount=BACKUP_COUNT)
+file_handler.setLevel(LOG_LEVEL)
+file_handler.setFormatter(formatter)
+root_logger.addHandler(file_handler)
+
 
 from config import BOT_TOKEN
 from sheets_service import init as sheets_init
@@ -46,6 +70,7 @@ from handlers.chaos import handler as chaos_handler
 from handlers.chaos_test import handler as chaos_test_handler
 from handlers.chaos_pre_notice import register_pre_notice_job
 from handlers.chaos_event import register_event_job
+
 
 def main():
     # 1) Initialize Sheets & headers
@@ -123,5 +148,13 @@ def main():
     # 8) Start polling
     app.run_polling()
 
+
 if __name__ == "__main__":
     main()
+"""
+
+# Write the updated file
+with open('/mnt/data/updated_main.py', 'w') as f:
+    f.write(updated_main_py)
+
+"/mnt/data/updated_main.py"
