@@ -1,3 +1,4 @@
+
 import logging
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -23,18 +24,20 @@ async def chaos_pre_notice_job(context: ContextTypes.DEFAULT_TYPE):
         return
 
     for row in rows[1:]:
-        # Ensure there's a timezone value in column 12 (index 11)
-        if len(row) <= 11 or not row[11]:
-            logger.warning("ChaosPreNotice: missing timezone in row, skipping: %s", row)
-            continue
-
+        # Parse chat_id
         try:
             chat_id = int(row[0])
-            tz_str = row[11]
+        except Exception:
+            logger.warning("ChaosPreNotice: invalid chat_id, skipping row: %s", row)
+            continue
+
+        # Default timezone to UTC if missing or invalid
+        tz_str = row[11] if len(row) > 11 and row[11] else "UTC"
+        try:
             local_time = now_utc.astimezone(ZoneInfo(tz_str))
         except Exception as e:
-            logger.warning("ChaosPreNotice: invalid timezone or chat_id, skipping row %s: %s", row, e)
-            continue
+            logger.warning("ChaosPreNotice: invalid timezone '%s', falling back to UTC: %s", tz_str, e)
+            local_time = now_utc
 
         # 1 minute before Monday 09:00 local
         if (
