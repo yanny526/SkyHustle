@@ -4,7 +4,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.ext import CommandHandler, CallbackQueryHandler, ContextTypes
 
-from modules.chaos_storms_manager import STORMS, can_trigger, trigger_storm
+from modules.chaos_engine import engine
 from utils.format_utils import section_header
 
 async def chaos(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -18,14 +18,14 @@ async def chaos(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
 
     # List all storms (name + teaser)
-    for s in STORMS:
+    for s in engine.STORMS:
         teaser = s["story"].splitlines()[0]
         lines.append(f"{s['emoji']} *{s['name']}* — {teaser}")
     lines.append("")
 
     # Trigger a storm if it's off cooldown
-    if can_trigger():
-        storm = trigger_storm()
+    if engine.can_trigger():
+        storm = engine.trigger_storm()
         lines.append(section_header("🌪️ Chaos Storm Struck!", pad_char="-", pad_count=3))
         lines.append(f"{storm['emoji']} *{storm['name']}*")
         for paragraph in storm["story"].splitlines():
