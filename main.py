@@ -66,10 +66,9 @@ from handlers.chaos_test       import handler as chaos_test_handler
 from handlers.chaos_pre_notice import register_pre_notice_job
 from handlers.chaos_event      import register_event_job
 
-# ─── Building completion job ────────────────────────────────────────────────
-from modules.building_manager import complete_build_job
-# ─── Research completion job ────────────────────────────────────────────────
-from modules.research_manager import complete_research_job
+# ─── Building & Research completion jobs ────────────────────────────────────
+from modules.building_manager  import complete_build_job, load_pending_builds
+from modules.research_manager  import complete_research_job
 
 def main():
     # 1) Init Google Sheets
@@ -148,7 +147,10 @@ def main():
         await update.message.reply_text("❓ Unknown command. Use /help.")
     app.add_handler(MessageHandler(filters.COMMAND, unknown))
 
-    # 6) Schedule background jobs
+    # 6) On startup: reload any pending builds for crash resilience
+    load_pending_builds(app)
+
+    # 7) Schedule background jobs
     register_pre_notice_job(app)
     register_event_job(app)
     app.job_queue.run_repeating(
@@ -164,7 +166,7 @@ def main():
         name="build_completion"
     )
 
-    # 7) Start polling
+    # 8) Start polling
     app.run_polling()
 
 if __name__ == "__main__":
