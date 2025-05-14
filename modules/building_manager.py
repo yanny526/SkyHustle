@@ -21,13 +21,13 @@ PRODUCTION_PER_LEVEL = {
     # add other resource buildings as needed
 }
 
-# ─── Core Build Definitions ──────────────────────────────────────────────────
+# ─── Build Definitions Loader ─────────────────────────────────────────────────
 
 def get_build_defs():
     """
     Load building definitions from the Buildings sheet.
-    Auto-detects the key column header, normalizes it to 'key', and returns
-    dict of key->info.
+    Ensures every entry has 'key' and 'name'.
+    Returns dict key->info.
     """
     try:
         rows = get_rows(BUILD_SHEET)
@@ -39,24 +39,39 @@ def get_build_defs():
         return {}
 
     header = rows[0]
-    key_col = header[0]        # assume first column is the unique key header
+    # locate the key and name columns, fallback to first two columns
+    try:
+        key_idx = header.index("key")
+    except ValueError:
+        key_idx = 0
+    try:
+        name_idx = header.index("name")
+    except ValueError:
+        name_idx = 1 if len(header) > 1 else key_idx
+
     defs = {}
     for row in rows[1:]:
-        if not row or not row[0]:
+        if len(row) <= key_idx or not row[key_idx]:
             continue
+        key = row[key_idx]
+        name = row[name_idx] if len(row) > name_idx and row[name_idx] else key
+
         info = dict(zip(header, row))
-        # normalize key under 'key'
-        key = info.get(key_col)
-        if not key:
-            continue
-        info["key"] = key
+        info["key"]  = key
+        info["name"] = name
+
         # parse numeric fields
         for fld in ("tier","cost_c","cost_m","cost_e","time_sec","slots_required"):
             try:
                 info[fld] = int(info.get(fld, "0"))
             except:
                 info[fld] = 0
-        info["prereqs"] = [p.strip() for p in info.get("prereqs","").split(",") if p.strip()]
+
+        # prerequisites list
+        info["prereqs"] = [
+            p.strip() for p in info.get("prereqs","").split(",") if p.strip()
+        ]
+
         defs[key] = info
 
     return defs
@@ -74,13 +89,14 @@ def get_available_builds(user_id: str) -> list[dict]:
         logger.error("get_available_builds: cannot read %s: %s", PLAYERS_SHEET, e)
         return []
     header,*rows = players
-    row = next((r for r in rows if r[0]==user_id), None)
+    row = next((r for r in rows if r[0] == user_id), None)
     if not row:
         return []
+
     try:
-        credits,minerals,energy = map(int,(row[3],row[4],row[5]))
+        credits, minerals, energy = map(int, (row[3], row[4], row[5]))
     except:
-        credits=minerals=energy=0
+        credits = minerals = energy = 0
 
     try:
         done = [r[1] for r in get_rows(BUILD_DONE_SHEET)[1:]]
@@ -94,12 +110,13 @@ def get_available_builds(user_id: str) -> list[dict]:
         info2["done"]       = key in done
         info2["locked"]     = any(pr not in done for pr in info["prereqs"])
         info2["affordable"] = (
-            credits>=info["cost_c"]
-            and minerals>=info["cost_m"]
-            and energy>=info["cost_e"]
+            credits >= info["cost_c"]
+            and minerals >= info["cost_m"]
+            and energy >= info["cost_e"]
         )
         out.append(info2)
-    return sorted(out, key=lambda x:(x["tier"], x["key"]))
+
+    return sorted(out, key=lambda x: (x["tier"], x["key"]))
 
 def start_build(user_id: str, key: str) -> bool:
     defs = get_build_defs()
@@ -112,15 +129,16 @@ def start_build(user_id: str, key: str) -> bool:
     except HttpError:
         return False
     header,*rows = players
-    for idx,row in enumerate(rows, start=1):
-        if row[0]==user_id:
-            c,m,e = map(int,(row[3],row[4],row[5]))
-            if c<info["cost_c"] or m<info["cost_m"] or e<info["cost_e"]:
+
+    for idx, row in enumerate(rows, start=1):
+        if row[0] == user_id:
+            c, m, e = map(int, (row[3], row[4], row[5]))
+            if c < info["cost_c"] or m < info["cost_m"] or e < info["cost_e"]:
                 return False
-            row[3],row[4],row[5] = (
-                str(c-info["cost_c"]),
-                str(m-info["cost_m"]),
-                str(e-info["cost_e"])
+            row[3], row[4], row[5] = (
+                str(c - info["cost_c"]),
+                str(m - info["cost_m"]),
+                str(e - info["cost_e"])
             )
             update_row(PLAYERS_SHEET, idx, row)
             break
@@ -128,7 +146,10 @@ def start_build(user_id: str, key: str) -> bool:
         return False
 
     now = time.time()
-    append_row(BUILD_QUEUE_SHEET, [user_id, key, str(now), str(now + info["time_sec"])])
+    append_row(
+        BUILD_QUEUE_SHEET,
+        [user_id, key, str(now), str(now + info["time_sec"])]
+    )
     return True
 
 def get_build_queue(user_id: str) -> list[dict]:
@@ -137,10 +158,15 @@ def get_build_queue(user_id: str) -> list[dict]:
     except HttpError:
         return []
     header,*data = rows
+
     out = []
     for r in data:
-        if len(r)>=4 and r[0]==user_id:
-            out.append(dict(key=r[1], start_ts=float(r[2]), end_ts=float(r[3])))
+        if len(r) >= 4 and r[0] == user_id:
+            out.append({
+                "key":     r[1],
+                "start_ts": float(r[2]),
+                "end_ts":  float(r[3])
+            })
     return out
 
 def cancel_build(user_id: str, key: str) -> bool:
@@ -150,13 +176,14 @@ def cancel_build(user_id: str, key: str) -> bool:
         logger.error("cancel_build: cannot read %s: %s", BUILD_QUEUE_SHEET, e)
         return False
     header,*data = rows
-    for idx,r in enumerate(data, start=1):
-        if len(r)>=2 and r[0]==user_id and r[1]==key:
-            update_row(BUILD_QUEUE_SHEET, idx, [""]*len(header))
+
+    for idx, r in enumerate(data, start=1):
+        if len(r) >= 2 and r[0] == user_id and r[1] == key:
+            update_row(BUILD_QUEUE_SHEET, idx, [""] * len(header))
             return True
     return False
 
-# ─── Batch Completion Job (now async) ────────────────────────────────────────
+# ─── Batch Completion Job (async) ────────────────────────────────────────────
 
 async def complete_build_job(context):
     """
@@ -168,8 +195,9 @@ async def complete_build_job(context):
     except HttpError as e:
         logger.error("complete_build_job: cannot read %s: %s", BUILD_QUEUE_SHEET, e)
         return
+
     header,*data = rows
-    for idx,r in enumerate(data, start=1):
+    for idx, r in enumerate(data, start=1):
         try:
             end_ts = float(r[3])
         except:
@@ -178,7 +206,7 @@ async def complete_build_job(context):
             user_id, key = r[0], r[1]
             iso = datetime.utcnow().isoformat()
             append_row(BUILD_DONE_SHEET, [user_id, key, iso])
-            update_row(BUILD_QUEUE_SHEET, idx, [""]*len(header))
+            update_row(BUILD_QUEUE_SHEET, idx, [""] * len(header))
 
 # ─── Single-build completion & Crash-resilience ────────────────────────────
 
@@ -193,8 +221,8 @@ def _complete_single_build(context):
         rows = get_rows(BUILD_QUEUE_SHEET)
         header,*data = rows
         for idx, r in enumerate(data, start=1):
-            if len(r)>=2 and r[0]==user_id and r[1]==key:
-                update_row(BUILD_QUEUE_SHEET, idx, [""]*len(header))
+            if len(r) >= 2 and r[0] == user_id and r[1] == key:
+                update_row(BUILD_QUEUE_SHEET, idx, [""] * len(header))
                 break
 
         context.bot.send_message(
@@ -215,7 +243,7 @@ def load_pending_builds(app):
 
     header,*data = rows
     for r in data:
-        if len(r)<4:
+        if len(r) < 4:
             continue
         user_id, key = r[0], r[1]
         try:
@@ -232,23 +260,25 @@ def load_pending_builds(app):
 
 def get_building_info(user_id: str) -> dict:
     rows = get_rows(PLAYERS_SHEET)
-    if not rows or len(rows)<2:
+    if not rows or len(rows) < 2:
         return {}
     header = rows[0]
     for row in rows[1:]:
-        if row[0]==user_id:
+        if row[0] == user_id:
             info = {}
             for bld in BUILDING_MAX_LEVEL:
                 if bld in header:
                     idx = header.index(bld)
-                    try: info[bld] = int(row[idx] or 0)
-                    except: info[bld] = 0
+                    try:
+                        info[bld] = int(row[idx] or 0)
+                    except:
+                        info[bld] = 0
             return info
     return {}
 
 def get_production_rates(build_info: dict) -> dict:
-    rates = {"credits":0,"minerals":0,"energy":0}
-    for bld,lvl in build_info.items():
+    rates = {"credits": 0, "minerals": 0, "energy": 0}
+    for bld, lvl in build_info.items():
         prod = PRODUCTION_PER_LEVEL.get(bld)
         if prod:
             resource, per = prod
@@ -258,7 +288,7 @@ def get_production_rates(build_info: dict) -> dict:
 def get_building_health(user_id: str) -> dict:
     info = get_building_info(user_id)
     health = {}
-    for bld,lvl in info.items():
+    for bld, lvl in info.items():
         max_hp = lvl * 100
         health[bld] = {"current": max_hp, "max": max_hp}
     return health
