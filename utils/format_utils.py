@@ -61,6 +61,29 @@ def get_build_costs(building: str, level: int) -> tuple[int, int, int]:
 
 def section_header(title: str, pad_char: str = '-', pad_count: int = 5) -> str:
     """
-    Render a section header, e.g. '----- Title -----'
+    Render a section header, e.g. '----- Title -----' (Markdown)
     """
     return f"{pad_char * pad_count} {title} {pad_char * pad_count}"
+
+
+# ─── New HTML-safe helpers ───────────────────────────────────────────────────
+
+def section_header_html(title: str, pad_char: str = '-', pad_count: int = 5) -> str:
+    """
+    Render a section header in HTML mode, e.g. '<b>----- Title -----</b>'
+    """
+    header = f"{pad_char * pad_count} {title} {pad_char * pad_count}"
+    # Escape any HTML-sensitive chars in title itself
+    safe = header.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    return f"<b>{safe}</b>"
+
+def code_html(text: str) -> str:
+    """
+    Wrap inline code in <code>…</code> for HTML parsing, with escaping.
+    """
+    safe = (
+        text.replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+    )
+    return f"<code>{safe}</code>"
