@@ -2,156 +2,166 @@ import logging
 import time
 from datetime import datetime
 from googleapiclient.errors import HttpError
-
-from sheets_service import get_rows, update_row, append_row, ensure_sheet
+from sheets_service import get_rows, append_row, update_row
 
 logger = logging.getLogger(__name__)
 
 # Sheet names
-BUILDINGS_SHEET      = "Buildings"        # columns: uid, building_name, level, end_ts
-BUILD_HEALTH_SHEET   = "BuildingHealth"   # unchanged
-COMPLETED_BUILD_SHEET= "CompletedBuilds"  # new sheet to record history
+BUILD_SHEET       = "Buildings"
+BUILD_QUEUE_SHEET = "BuildQueue"
+BUILD_DONE_SHEET  = "CompletedBuilds"
+PLAYERS_SHEET     = "Players"
 
-# Per‐level production unchanged
-PRODUCTION_PER_LEVEL = {
-    'Bank':         ('credits', 20),
-    'Mine':         ('minerals', 10),
-    'Power Plant':  ('energy',   5),
-}
-
-
-def get_building_info(user_id: str) -> dict:
+def get_build_defs():
     """
-    Returns { building_name -> level } for this user.
+    Load building definitions from the Buildings sheet.
+    Returns dict of key->info.
     """
-    rows = get_rows(BUILDINGS_SHEET)
-    info = {}
+    try:
+        rows = get_rows(BUILD_SHEET)
+    except HttpError as e:
+        logger.error("get_build_defs: cannot read %s: %s", BUILD_SHEET, e)
+        return {}
+
+    if len(rows) < 2:
+        return {}
+
+    header = rows[0]
+    defs = {}
     for row in rows[1:]:
-        if row[0] == user_id:
-            name, lvl = row[1], int(row[2] or 0)
-            info[name] = lvl
-    return info
+        if not row or not row[0]:
+            continue
+        info = dict(zip(header, row))
+        # parse numeric fields
+        for fld in ("tier","cost_c","cost_m","cost_e","time_sec","slots_required"):
+            try: info[fld] = int(info.get(fld,"0"))
+            except: info[fld] = 0
+        # prerequisites list
+        info["prereqs"] = [p.strip() for p in info.get("prereqs","").split(",") if p.strip()]
+        defs[info["key"]] = info
+    return defs
 
-
-def get_production_rates(building_info: dict) -> dict:
+def get_available_builds(user_id: str) -> list[dict]:
     """
-    Given building_info (name→level), returns production per minute.
+    Return full list of builds, marking locked/unlocked
+    so player always sees their roadmap.
     """
-    rates = {'credits': 0, 'minerals': 0, 'energy': 0}
-    for bname, lvl in building_info.items():
-        if bname in PRODUCTION_PER_LEVEL:
-            resource, per_lvl = PRODUCTION_PER_LEVEL[bname]
-            rates[resource] += per_lvl * lvl
-    return rates
+    defs = get_build_defs()
+    if not defs:
+        return []
 
+    # load player row
+    try:
+        players = get_rows(PLAYERS_SHEET)
+    except HttpError as e:
+        logger.error("get_available_builds: cannot read %s: %s", PLAYERS_SHEET, e)
+        return []
+    header,*rows = players
+    row = next((r for r in rows if r[0]==user_id), None)
+    if not row:
+        return []
+    try:
+        credits,minerals,energy = map(int,(row[3],row[4],row[5]))
+    except:
+        credits=minerals=energy=0
 
-def get_building_health(user_id: str) -> dict:
+    # completed builds
+    try:
+        done = [r[1] for r in get_rows(BUILD_DONE_SHEET)[1:]]
+    except HttpError:
+        done = []
+
+    out = []
+    for info in defs.values():
+        info2 = info.copy()
+        key = info["key"]
+        info2["done"] = key in done
+        # locked if prereqs missing
+        info2["locked"] = any(pr not in done for pr in info["prereqs"])
+        # affordable?
+        info2["affordable"] = (credits>=info["cost_c"] and minerals>=info["cost_m"] and energy>=info["cost_e"])
+        out.append(info2)
+    return sorted(out, key=lambda x:(x["tier"],x["key"]))
+
+def start_build(user_id: str, key: str) -> bool:
     """
-    Returns { building_name: {'current','max'} }.
+    Charge resources & queue an upgrade.
     """
-    ensure_sheet(BUILD_HEALTH_SHEET, ['uid','building_name','current_hp','max_hp'])
-    rows = get_rows(BUILD_HEALTH_SHEET)
-    health = {}
-    for row in rows[1:]:
-        if len(row)>=4 and row[0]==user_id:
-            try:
-                current_hp = int(row[2]); max_hp = int(row[3])
-            except ValueError:
-                continue
-            health[row[1]] = {'current': current_hp, 'max': max_hp}
-    return health
+    defs = get_build_defs()
+    info = defs.get(key)
+    if not info:
+        return False
 
+    try:
+        players = get_rows(PLAYERS_SHEET)
+    except HttpError:
+        return False
+    header,*rows = players
+    for idx,row in enumerate(rows, start=1):
+        if row[0]==user_id:
+            c,m,e = map(int,(row[3],row[4],row[5]))
+            if c<info["cost_c"] or m<info["cost_m"] or e<info["cost_e"]:
+                return False
+            # deduct and save
+            row[3],row[4],row[5] = str(c-info["cost_c"]),str(m-info["cost_m"]),str(e-info["cost_e"])
+            update_row(PLAYERS_SHEET, idx, row)
+            break
+    else:
+        return False
 
-# ─── BUILD QUEUE APIs ─────────────────────────────────────────────────────────
-
+    now = time.time()
+    append_row(BUILD_QUEUE_SHEET, [user_id, key, str(now), str(now+info["time_sec"])])
+    return True
 
 def get_build_queue(user_id: str) -> list[dict]:
     """
-    Return pending upgrades for this user:
-      [{ building: str, level: int, remaining_sec: int }, ...]
+    List pending builds for user.
     """
     try:
-        rows = get_rows(BUILDINGS_SHEET)
-    except HttpError as e:
-        logger.error("get_build_queue: failed to load '%s': %s", BUILDINGS_SHEET, e)
+        rows = get_rows(BUILD_QUEUE_SHEET)
+    except HttpError:
         return []
-
-    header, *data = rows
-    now = time.time()
-    queue = []
+    header,*data = rows
+    out = []
     for r in data:
-        if len(r)<4 or r[0]!=user_id or not r[3]:
-            continue
-        try:
-            end_ts = float(r[3])
-        except ValueError:
-            continue
-        if end_ts > now:
-            queue.append({
-                'building': r[1],
-                'level': int(r[2] or 0)+1,
-                'remaining_sec': int(end_ts - now),
-            })
-    return queue
+        if len(r)>=4 and r[0]==user_id:
+            out.append(dict(key=r[1], start_ts=float(r[2]), end_ts=float(r[3])))
+    return out
 
-
-def cancel_build(user_id: str, building: str) -> bool:
+def cancel_build(user_id: str, key: str) -> bool:
     """
-    Cancel a queued upgrade. Returns True if found & cleared.
+    Remove a pending build from queue.
     """
     try:
-        rows = get_rows(BUILDINGS_SHEET)
+        rows = get_rows(BUILD_QUEUE_SHEET)
     except HttpError as e:
-        logger.error("cancel_build: failed to load '%s': %s", BUILDINGS_SHEET, e)
+        logger.error("cancel_build: cannot read %s: %s", BUILD_QUEUE_SHEET, e)
         return False
-
-    header, *data = rows
-    for idx, r in enumerate(data, start=1):
-        if len(r)>=4 and r[0]==user_id and r[1]==building and r[3]:
-            # clear the end_ts field
-            new = r.copy()
-            new[3] = ""
-            update_row(BUILDINGS_SHEET, idx, new)
+    header,*data = rows
+    for idx,r in enumerate(data, start=1):
+        if len(r)>=2 and r[0]==user_id and r[1]==key:
+            update_row(BUILD_QUEUE_SHEET, idx, [""]*len(header))
             return True
     return False
 
-
 def complete_build_job(context):
     """
-    Periodic job: for each row whose end_ts <= now, increment its level,
-    record in COMPLETED_BUILD_SHEET, and clear end_ts.
+    Runs every minute to clear finished builds.
     """
     now = time.time()
-
-    # Ensure history sheet exists
-    ensure_sheet(COMPLETED_BUILD_SHEET, ['uid','building_name','old_level','new_level','completed_at'])
-
     try:
-        rows = get_rows(BUILDINGS_SHEET)
+        rows = get_rows(BUILD_QUEUE_SHEET)
     except HttpError as e:
-        logger.error("complete_build_job: failed to load '%s': %s", BUILDINGS_SHEET, e)
+        logger.error("complete_build_job: cannot read %s: %s", BUILD_QUEUE_SHEET, e)
         return
-
-    header, *data = rows
-    for idx, r in enumerate(data, start=1):
-        if len(r) < 4 or not r[3]:
-            continue
+    header,*data = rows
+    for idx,r in enumerate(data, start=1):
         try:
             end_ts = float(r[3])
-        except ValueError:
+        except:
             continue
         if end_ts <= now:
-            uid, bname = r[0], r[1]
-            try:
-                old_level = int(r[2] or 0)
-            except ValueError:
-                old_level = 0
-            new_level = old_level + 1
-
-            # 1) Record history
-            ts_iso = datetime.utcnow().isoformat()
-            append_row(COMPLETED_BUILD_SHEET, [uid, bname, str(old_level), str(new_level), ts_iso])
-
-            # 2) Update building row: set new level, clear end_ts
-            new_row = [uid, bname, str(new_level), ""]
-            update_row(BUILDINGS_SHEET, idx, new_row)
+            user_id,key = r[0],r[1]
+            iso = datetime.utcnow().isoformat()
+            append_row(BUILD_DONE_SHEET, [user_id, key, iso])
+            update_row(BUILD_QUEUE_SHEET, idx, [""]*len(header))
