@@ -13,6 +13,7 @@ from sheets_service import get_rows, update_row, append_row
 from utils.decorators import game_command
 from modules.unit_manager import UNITS
 from modules.challenge_manager import load_challenges, update_player_progress
+from modules.combat_manager import calculate_power, attack_player
 
 # where we track troops in flight
 DEPLOY_SHEET  = "DeployedArmy"
@@ -84,91 +85,31 @@ async def combat_resolution_job(context: ContextTypes.DEFAULT_TYPE):
     defender_id    = data["defender_id"]
     defender_name  = data["defender_name"]
     attacker_name  = data["attacker_name"]
-    atk_i, def_i   = data["atk_i"], data["def_i"]
-    comp           = data["composition"]
-    ts             = data["timestamp"]
     job_name       = context.job.name
 
-    # 1) Pull back the in‑flight detachment
+    # Pull back any in-flight troops (so they're not lost)
     _ensure_deploy_sheet()
     deploy_rows = get_rows(DEPLOY_SHEET)
-    recovered = {}
     for idx, row in enumerate(deploy_rows[1:], start=1):
         if row[0] != job_name:
             continue
-        key, qty = row[2], int(row[3])
-        if qty > 0:
-            recovered[key] = recovered.get(key, 0) + qty
-            row[3] = "0"
-            update_row(DEPLOY_SHEET, idx, row)
+        # zero out in-flight
+        row[3] = "0"
+        update_row(DEPLOY_SHEET, idx, row)
 
-    # 2) Compute attacker detachment power
-    atk_power = sum(v * UNITS[k][3] for k, v in comp.items()) * random.uniform(0.9, 1.1)
+    # Delegate the core combat resolution
+    outcome = attack_player(uid, defender_id)
+    result  = outcome['result']
+    spoils  = outcome['spoils']
 
-    # 3) Compute defender’s full garrison power
-    def_rows = get_rows("Army")
-    full_def = {r[1]: int(r[2]) for r in def_rows[1:] if r[0] == defender_id}
-    def_power = sum(v * UNITS[k][3] for k, v in full_def.items()) * random.uniform(0.9, 1.1)
-
-    # 4) Resolve win/loss & spoils
-    players       = get_rows("Players")
-    attacker_row  = players[atk_i]
-    defender_row  = players[def_i]
-    if atk_power > def_power:
-        result = "win"
-        spoils = max(1, int(defender_row[3]) // 10)
-        msg_header = f"🏆 *{attacker_name}* defeated *{defender_name}*!\n💰 Loot: Stole {spoils} credits."
-        attacker_row[3] = str(int(attacker_row[3]) + spoils)
-        defender_row[3] = str(int(defender_row[3]) - spoils)
+    # Build & send summary message
+    if result == "win":
+        header = f"🏆 *{attacker_name}* defeated *{defender_name}*!\n💰 Loot: Stole {spoils} credits."
     else:
-        result = "loss"
-        spoils = max(1, int(attacker_row[3]) // 20)
-        msg_header = f"💥 *{attacker_name}* was defeated by *{defender_name}*!\n💸 Lost {spoils} credits."
-        attacker_row[3] = str(int(attacker_row[3]) - spoils)
-        defender_row[3] = str(int(defender_row[3]) + spoils)
+        header = f"💥 *{attacker_name}* was defeated by *{defender_name}*!\n💸 Lost {spoils} credits."
 
-    # 5) Casualty / survivor calculation
-    def survival(sent, own_p, opp_p):
-        if own_p + opp_p == 0:
-            return sent
-        rate = own_p / (own_p + opp_p)
-        return max(0, int(sent * rate))
-
-    surv, cas = {}, {}
-    for key, sent in comp.items():
-        lost      = sent - survival(sent, atk_power, def_power)
-        surv[key] = sent - lost
-        cas[key]  = lost
-
-    # 6) Return survivors to your garrison
-    army_rows = get_rows("Army")
-    for key, qty in surv.items():
-        if qty <= 0:
-            continue
-        for i, r in enumerate(army_rows[1:], start=1):
-            if r[0] == uid and r[1] == key:
-                r[2] = str(int(r[2]) + qty)
-                update_row("Army", i, r)
-                break
-        else:
-            append_row("Army", [uid, key, str(qty)])
-
-    # 7) Persist players & log
-    update_row("Players", atk_i, attacker_row)
-    update_row("Players", def_i, defender_row)
-    append_row("CombatLog", [uid, str(defender_id), ts, result, str(spoils)])
-
-    # 8) Build & send detailed battle report
     code = job_name.split("_")[-1]
-    lines = [msg_header, f"🏷️ Battle Code: `{code}`", ""]
-    lines.append("⚔️ *Your Detachment:*")
-    for k, sent in comp.items():
-        lines.append(f" • {UNITS[k][1]}×{sent} → Survivors {surv[k]}, Lost {cas[k]}")
-    lines.append("")
-    lines.append("🛡️ *Garrison Held:*")
-    for k, cnt in full_def.items():
-        lines.append(f" • {UNITS[k][1]}×{cnt}")
-    text = "\n".join(lines)
+    text = f"{header}\n🏷️ Battle Code: `{code}`"
 
     await context.bot.send_message(
         chat_id=int(uid),
@@ -176,7 +117,7 @@ async def combat_resolution_job(context: ContextTypes.DEFAULT_TYPE):
         parse_mode=ParseMode.MARKDOWN
     )
 
-    # 9) Mark the pending attack as done
+    # Mark the pending action as done
     _ensure_pending_sheet()
     rows = get_rows(PEND_SHEET)
     for idx, row in enumerate(rows[1:], start=1):
@@ -218,8 +159,6 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode=ParseMode.MARKDOWN,
             reply_markup=kb
         )
-
-    chat_id = update.effective_chat.id
 
     # 1) Cancellation?
     if "-c" in args:
@@ -406,11 +345,7 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "uid": uid,
                 "defender_id": defender[0],
                 "attacker_name": attacker[1],
-                "defender_name": defender[1],
-                "atk_i": atk_i,
-                "def_i": def_i,
-                "timestamp": job_ts,
-                "composition": comp
+                "defender_name": defender[1]
             }
         )
 
@@ -428,9 +363,9 @@ async def attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lines = ["⚔️ *Orders received!*",
              f"Target: *{defender[1]}*"]
     if scout_count:
-        lines.append("• 🔎 Scouts arriving in 5 m")
+        lines.append("• 🔎 Scouts arriving in 5 m")
     if job_name:
-        lines.append("• 🏹 Attack arriving in 30 m")
+        lines.append("• 🏹 Attack arriving in 30 m")
     if parts:
         lines.append("\n• " + "  ".join(parts))
     if job_name:
