@@ -17,12 +17,12 @@ from utils.format_utils import section_header, code
 
 async def build(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    /build                    → list all buildings (locked/affordable/done)
-    /build start <key>        → queue an upgrade
+    /build                    → list all buildings
+    /build start <key>        → queue an upgrade (sends ETA & schedules notification)
     /build queue              → view pending upgrades
     /build cancel <key>       → cancel a queued upgrade
     """
-    uid = str(update.effective_user.id)
+    uid  = str(update.effective_user.id)
     args = context.args or []
 
     # ── start a build and schedule its completion ──────────────────────────────
@@ -34,41 +34,35 @@ async def build(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
 
         key = args[1]
-        ok = start_build(uid, key)
+        ok  = start_build(uid, key)
         if not ok:
             return await update.message.reply_text(
                 f"❌ Cannot queue `{key}`.",
                 parse_mode=ParseMode.MARKDOWN
             )
 
-        # Fetch build time and next level
-        defs = get_build_defs()
-        info = defs.get(key, {})
+        # load defs & compute ETA
+        defs  = get_build_defs()
+        info  = defs.get(key, {})
         delay = info.get("time_sec", 0)
-        to_level = (get_available_builds(uid)[0]["level"] if defs else 1) + 1
+        to_lvl = info and format_hhmmss(delay)
 
-        # Send initial progress message
-        init_text = (
-            f"🌱 Building *{info.get('name', key)}* → Lvl {to_level} "
-            f"(ETA {format_hhmmss(delay)})"
-        )
+        # send initial building message with ETA
+        name = info.get("name", key)
+        eta  = format_hhmmss(delay)
         msg = await update.message.reply_text(
-            init_text,
+            f"🌱 Building *{name}* → Lvl {get_available_builds(uid)[-1]['level']+1} (ETA {eta})",
             parse_mode=ParseMode.MARKDOWN
         )
 
-        # Schedule completion callback, passing chat/message IDs
+        # schedule the one-off completion
         context.job_queue.run_once(
             _complete_single_build,
             delay,
-            data={
-                "user_id": uid,
-                "key": key,
-                "chat_id": msg.chat_id,
-                "message_id": msg.message_id,
-            },
+            data={"user_id": uid, "key": key},
             name=f"build_{uid}_{key}"
         )
+
         return
 
     # ── cancel a queued build ─────────────────────────────────────────────────
@@ -79,11 +73,14 @@ async def build(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode=ParseMode.MARKDOWN
             )
         key = args[1]
-        ok = cancel_build(uid, key)
+        ok  = cancel_build(uid, key)
+        # remove scheduled job
         for job in context.job_queue.get_jobs_by_name(f"build_{uid}_{key}"):
             job.schedule_removal()
+
         return await update.message.reply_text(
-            ("✅" if ok else "❌") + (f" Cancelled `{key}`." if ok else f" Failed to cancel `{key}`."),
+            ("✅" if ok else "❌")
+            + (f" Cancelled `{key}`." if ok else f" Failed to cancel `{key}`."),
             parse_mode=ParseMode.MARKDOWN
         )
 
@@ -92,9 +89,9 @@ async def build(update: Update, context: ContextTypes.DEFAULT_TYPE):
         q = get_build_queue(uid)
         if not q:
             return await update.message.reply_text("📭 Your build queue is empty.")
-        defs = {b["key"]: b for b in get_available_builds(uid)}
-        now = time.time()
-        lines = [section_header("⏳ Your Build Queue"), ""]
+        defs   = {b["key"]: b for b in get_available_builds(uid)}
+        now    = time.time()
+        lines  = [section_header("⏳ Your Build Queue"), ""]
         buttons = []
         for item in q:
             info = defs.get(item["key"], {})
@@ -106,16 +103,13 @@ async def build(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ])
         markup = InlineKeyboardMarkup(buttons)
         return await update.message.reply_text(
-            "\n".join(lines),
-            parse_mode=ParseMode.MARKDOWN,
-            reply_markup=markup
+            "\n".join(lines), parse_mode=ParseMode.MARKDOWN, reply_markup=markup
         )
 
     # ── default: list all builds ───────────────────────────────────────────────
     allb = get_available_builds(uid)
     lines = [section_header("🏗️ Available Buildings"), ""]
     for b in allb:
-        key, name, tier = b["key"], b["name"], b["tier"]
         status = (
             "✅ Done" if b["done"]
             else "🔒 Locked" if b["locked"]
@@ -124,26 +118,29 @@ async def build(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         costs = f"{b['cost_c']}💳 {b['cost_m']}⛏️ {b['cost_e']}⚡"
         lines.append(
-            f"*{name}* (`{key}`) — Tier {tier} — _{status}_\n"
+            f"*{b['name']}* (`{b['key']}`) — Tier {b['tier']} — _{status}_\n"
             f"Cost: {costs} | Time: {format_hhmmss(b['time_sec'])}\n"
         )
-    lines.append("Queue one with `/build start <key>`")
-    lines.append("Or cancel with `/build cancel <key>`")
-    return await update.message.reply_text(
-        "\n".join(lines), parse_mode=ParseMode.MARKDOWN
-    )
+    lines.extend([
+        "Queue one with `/build start <key>`",
+        "Or cancel with `/build cancel <key>`"
+    ])
+    return await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
 
 async def build_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    q = update.callback_query
+    q   = update.callback_query
+    uid = str(update.effective_user.id)
     await q.answer()
     _, key = q.data.split(":", 1)
-    ok = cancel_build(str(update.effective_user.id), key)
-    for job in context.job_queue.get_jobs_by_name(f"build_{update.effective_user.id}_{key}"):
+    ok = cancel_build(uid, key)
+    # also remove the scheduled job
+    for job in context.job_queue.get_jobs_by_name(f"build_{uid}_{key}"):
         job.schedule_removal()
     await q.answer(
-        text=("✅" if ok else "❌") + " Cancelled" if ok else "Failed", 
+        text=("✅" if ok else "❌") + (" Cancelled" if ok else " Failed"),
         show_alert=True
     )
+    # refresh queue view
     context.args = ["queue"]
     await build(update, context)
 
