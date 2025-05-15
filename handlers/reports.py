@@ -1,92 +1,102 @@
 # handlers/reports.py
 
+import time
+import logging
 from datetime import datetime, timezone
-import json
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import (
+    Update,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+)
 from telegram.constants import ParseMode
-from telegram.error import BadRequest
-from telegram.ext import CommandHandler, CallbackQueryHandler, ContextTypes
+from telegram.ext import (
+    CommandHandler,
+    CallbackQueryHandler,
+    ContextTypes,
+)
 
-from sheets_service import get_rows
-from modules.unit_manager import UNITS
-from utils.format_utils import section_header, code as md_code
+from sheets_service import get_rows, update_row
 
+from utils.time_utils import format_hhmmss
+
+logger = logging.getLogger(__name__)
+
+# Sheet & header cols in PendingActions:
+# 0 job_name, 1 code, 2 uid, 3 defender_id, 4 defender_name,
+# 5 composition, 6 scout_count, 7 run_time, 8 type, 9 status
 PEND_SHEET = "PendingActions"
 
 async def reports(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    /reports – list your pending scouts & attacks.
-    """
-    chat_id = str(update.effective_chat.id)
-    now     = datetime.now(timezone.utc)
+    uid = str(update.effective_user.id)
+    rows = get_rows(PEND_SHEET)
+    if not rows or len(rows) < 2:
+        return await update.message.reply_text("📭 You have no pending operations.")
 
-    # Collect pending operations
-    ops = []
-    for row in get_rows(PEND_SHEET)[1:]:
-        # Ensure we have 10 columns
-        job_name, uid, defender_id, defender_name, comp_json, scouts, run_at, typ, status, code_str = (
-            row + [""] * 10
-        )[:10]
-        if uid != chat_id or status != "pending":
+    header, *data = rows
+    now = time.time()
+
+    lines = ["📜 *Pending Operations*", ""]
+    buttons = []
+
+    for row in data:
+        if len(row) < 10:
+            continue
+        job_name, code, puid, _, defender_name, _, _, run_ts_str, typ, status = row
+
+        # only your pending jobs
+        if puid != uid or status.lower() != "pending":
             continue
 
-        # Parse ETA
+        # parse remaining time
+        rem = ""
         try:
-            run_dt = datetime.fromisoformat(run_at)
-        except:
-            continue
-        delta = run_dt - now
-        secs  = int(delta.total_seconds())
-        if secs <= 0:
-            continue
-        m, s = divmod(secs, 60)
+            # run_ts_str is ISO like "2025-05-15T14:30:00"
+            end_dt = datetime.fromisoformat(run_ts_str)
+            end_ts = end_dt.replace(tzinfo=timezone.utc).timestamp()
+            secs_left = max(0, int(end_ts - now))
+            rem = format_hhmmss(secs_left)
+        except Exception as e:
+            logger.debug("Couldn't parse run_time %r: %s", run_ts_str, e)
+            rem = run_ts_str
 
-        if typ == "scout":
-            ops.append(f"🔎 Scout on *{defender_name}* arriving in {m}m{s:02d}s  {md_code(code_str)}  (×{scouts})")
-        else:
-            comp = json.loads(comp_json) if comp_json else {}
-            comp_str = " ".join(f"{UNITS[k][1]}×{v}" for k, v in comp.items()) or "All troops"
-            ops.append(f"🏹 Attack on *{defender_name}* ({comp_str}) arriving in {m}m{s:02d}s  {md_code(code_str)}")
-
-    # Build response
-    if not ops:
-        text = "\n".join([
-            section_header("🗒️ Pending Operations"),
-            "",
-            "✅ You have no pending operations.",
-            "",
-            "Send an attack with `/attack <Commander> ...`"
-        ])
-    else:
-        lines = [section_header("🗒️ Pending Operations"), ""]
-        for line in ops:
-            lines.append(f"• {line}")
-        lines.extend([
-            "",
-            f"❗ Cancel with `/attack -c <code>`"
-        ])
-        text = "\n".join(lines)
-
-    # Inline refresh button
-    kb = InlineKeyboardMarkup.from_button(
-        InlineKeyboardButton("🔄 Refresh", callback_data="reports")
-    )
-
-    if update.message:
-        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
-    else:
-        await update.callback_query.answer()
-        try:
-            await update.callback_query.edit_message_text(
-                text, parse_mode=ParseMode.MARKDOWN, reply_markup=kb
+        # build line and a “cancel” button
+        label = "🔎 Scout" if typ == "scout" else "🏹 Attack"
+        lines.append(f"• {label} → {defender_name} in {rem} – Code: `{code}`")
+        buttons.append([
+            InlineKeyboardButton(
+                f"❌ Cancel {label.split()[1]} {code}",
+                callback_data=f"reports_cancel:{code}"
             )
-        except BadRequest as e:
-            if "Message is not modified" not in str(e):
-                raise
+        ])
 
-async def reports_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    return await reports(update, context)
+    if len(lines) == 2:
+        # we added only header + blank
+        await update.message.reply_text("📭 You have no pending operations.", parse_mode=ParseMode.MARKDOWN)
+    else:
+        markup = InlineKeyboardMarkup(buttons)
+        await update.message.reply_text("\n".join(lines),
+                                        parse_mode=ParseMode.MARKDOWN,
+                                        reply_markup=markup)
 
-handler          = CommandHandler("reports", reports)
-callback_handler = CallbackQueryHandler(reports_button, pattern="^reports$")
+async def reports_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle inline-button “Cancel CODE” in the pending list."""
+    q = update.callback_query
+    await q.answer()
+    _, code = q.data.split(":", 1)
+
+    rows = get_rows(PEND_SHEET)
+    header, *data = rows
+    for idx, row in enumerate(data, start=1):
+        if len(row) >= 10 and row[1] == code and row[9].lower() == "pending":
+            # mark cancelled
+            row[9] = "cancelled"
+            update_row(PEND_SHEET, idx, row)
+            # notify
+            await q.edit_message_text(f"🚫 Operation `{code}` cancelled.", parse_mode=ParseMode.MARKDOWN)
+            return
+
+    await q.answer(text="❗ Couldn't find that pending operation.", show_alert=True)
+
+handler       = CommandHandler("reports", reports)
+callback_handler = CallbackQueryHandler(reports_cancel, pattern=r"^reports_cancel:")
