@@ -3,7 +3,8 @@ import time
 from datetime import datetime
 from googleapiclient.errors import HttpError
 from sheets_service import get_rows, append_row, update_row
-from config import BUILDING_MAX_LEVEL
+from telegram.constants import ParseMode
+from utils.time_utils import format_hhmmss
 
 logger = logging.getLogger(__name__)
 
@@ -18,13 +19,11 @@ PRODUCTION_PER_LEVEL = {
     "Bank":       ("credits",   10),
     "Mine":       ("minerals",   5),
     "PowerPlant": ("energy",     3),
-    # add others here…
 }
 
-# ─── Helpers ─────────────────────────────────────────────────────────────────
+# ─── Internal Helpers ─────────────────────────────────────────────────────────
 
 def _get_completed_rows() -> list[list[str]]:
-    """All data rows from CompletedBuilds (skip header)."""
     try:
         return get_rows(BUILD_DONE_SHEET)[1:]
     except HttpError as e:
@@ -32,21 +31,15 @@ def _get_completed_rows() -> list[list[str]]:
         return []
 
 def get_current_level(user_id: str, key: str) -> int:
-    """
-    Current level = count of CompletedBuilds rows for (user_id, key),
-    matched case-insensitively.
-    """
     key_l = key.lower()
     return sum(
-        1
-        for r in _get_completed_rows()
+        1 for r in _get_completed_rows()
         if r[0] == user_id and r[1].lower() == key_l
     )
 
 # ─── Definitions Loader ───────────────────────────────────────────────────────
 
 def get_build_defs() -> dict[str, dict]:
-    """Load master defs from BUILDING_DEFS_SHEET."""
     try:
         rows = get_rows(BUILDING_DEFS_SHEET)
     except HttpError as e:
@@ -55,30 +48,29 @@ def get_build_defs() -> dict[str, dict]:
     if len(rows) < 2:
         return {}
 
-    header = rows[0]
-    key_i, name_i = header.index("key"), header.index("name")
-    defs = {}
+    header    = rows[0]
+    key_i     = header.index("key")
+    name_i    = header.index("name")
+    definitions = {}
 
     for row in rows[1:]:
         if len(row) <= key_i or not row[key_i]:
             continue
-        info    = dict(zip(header, row))
-        key     = row[key_i]
-        info["key"]  = key
-        info["name"] = row[name_i] or key
-        for fld in ("tier", "cost_c", "cost_m", "cost_e", "time_sec", "slots_required"):
+        info = dict(zip(header, row))
+        k    = row[key_i]
+        info["key"]  = k
+        info["name"] = row[name_i] or k
+        for fld in ("tier","cost_c","cost_m","cost_e","time_sec","slots_required"):
             try:
                 info[fld] = int(info.get(fld, 0))
             except:
                 info[fld] = 0
-        info["prereqs"] = [
-            p.strip() for p in info.get("prereqs", "").split(",") if p.strip()
-        ]
-        defs[key] = info
+        info["prereqs"] = [p.strip() for p in info.get("prereqs","").split(",") if p.strip()]
+        definitions[k] = info
 
-    return defs
+    return definitions
 
-# ─── Available / Start / Queue / Cancel ──────────────────────────────────────
+# ─── Available Builds ────────────────────────────────────────────────────────
 
 def get_available_builds(user_id: str) -> list[dict]:
     defs = get_build_defs()
@@ -96,8 +88,8 @@ def get_available_builds(user_id: str) -> list[dict]:
     out = []
 
     for info in defs.values():
-        key = info["key"]
-        lvl = get_current_level(user_id, key)
+        key   = info["key"]
+        lvl   = get_current_level(user_id, key)
         entry = info.copy()
         entry["level"]      = lvl
         entry["done"]       = key.lower() in done_keys
@@ -111,18 +103,15 @@ def get_available_builds(user_id: str) -> list[dict]:
 
     return sorted(out, key=lambda x: (x["tier"], x["key"]))
 
+# ─── Start / Queue / Cancel ─────────────────────────────────────────────────
 
 def start_build(user_id: str, key: str) -> bool:
-    """
-    Deduct resources & append to BuildQueue:
-      [user_id, key, to_level, start_ts, end_ts]
-    """
     defs = get_build_defs()
     info = defs.get(key)
     if not info:
         return False
 
-    # 1) Deduct in Players
+    # deduct resources
     try:
         rows = get_rows(PLAYERS_SHEET)
     except HttpError:
@@ -143,7 +132,7 @@ def start_build(user_id: str, key: str) -> bool:
     else:
         return False
 
-    # 2) Compute next level & queue times
+    # queue it
     to_level = get_current_level(user_id, key) + 1
     now      = time.time()
     end_ts   = now + info["time_sec"]
@@ -153,7 +142,6 @@ def start_build(user_id: str, key: str) -> bool:
         [user_id, key, str(to_level), str(now), str(end_ts)]
     )
     return True
-
 
 def get_build_queue(user_id: str) -> list[dict]:
     try:
@@ -173,7 +161,6 @@ def get_build_queue(user_id: str) -> list[dict]:
             })
     return out
 
-
 def cancel_build(user_id: str, key: str) -> bool:
     try:
         rows = get_rows(BUILD_QUEUE_SHEET)
@@ -190,10 +177,6 @@ def cancel_build(user_id: str, key: str) -> bool:
 # ─── Batch Completion Job ────────────────────────────────────────────────────
 
 async def complete_build_job(context):
-    """
-    Runs every minute to sweep finished builds,
-    record them in CompletedBuilds, clear the queue, and notify the user.
-    """
     now = time.time()
     try:
         rows = get_rows(BUILD_QUEUE_SHEET)
@@ -215,20 +198,21 @@ async def complete_build_job(context):
             append_row(BUILD_DONE_SHEET, [user_id, key, str(lvl), iso])
             update_row(BUILD_QUEUE_SHEET, idx, [""] * len(header))
 
+            # final notification
             await context.bot.send_message(
                 chat_id=user_id,
                 text=f"🏗️ Build *{key}* complete! Now at level {lvl}.",
-                parse_mode="Markdown"
+                parse_mode=ParseMode.MARKDOWN
             )
 
-# ─── One-off Completion (if you schedule it) ─────────────────────────────────
+# ─── One-off Completion ──────────────────────────────────────────────────────
 
 def _complete_single_build(context):
     job     = context.job
     user_id = job.data["user_id"]
     key     = job.data["key"]
     try:
-        # fetch & clear the matching queue row to get its to_level
+        # clear queue row & get to_level
         rows = get_rows(BUILD_QUEUE_SHEET)
         header, *data = rows
         to_level = None
@@ -246,27 +230,67 @@ def _complete_single_build(context):
         context.bot.send_message(
             chat_id=user_id,
             text=f"🏗️ Build *{key}* complete! Now at level {to_level}.",
-            parse_mode="Markdown"
+            parse_mode=ParseMode.MARKDOWN
         )
-
     except Exception as e:
         logger.error("Error in _complete_single_build for %s/%s: %s", user_id, key, e)
 
+# ─── Inline Progress Updater ─────────────────────────────────────────────────
+
+async def update_build_progress(context):
+    """Edit the original build message to show live progress bar."""
+    data       = context.job.data
+    chat_id    = data["chat_id"]
+    message_id = data["message_id"]
+    start_ts   = data["start_ts"]
+    end_ts     = data["end_ts"]
+    name       = data.get("name", data["key"])
+
+    now = time.time()
+    if now >= end_ts:
+        # done—stop updating
+        context.job.schedule_removal()
+        return
+
+    pct = (now - start_ts) / (end_ts - start_ts)
+    pct = max(0.0, min(pct, 1.0))
+    total = 10
+    filled = int(pct * total)
+    empty  = total - filled
+    bar    = "█" * filled + "▁" * empty
+    percent = int(pct * 100)
+    left    = format_hhmmss(int(end_ts - now))
+
+    text = f"🏗️ Building *{name}* |{bar}| {percent}% — {left} left"
+    try:
+        await context.bot.edit_message_text(
+            chat_id=chat_id,
+            message_id=message_id,
+            text=text,
+            parse_mode=ParseMode.MARKDOWN
+        )
+    except Exception as e:
+        logger.error("Failed to update build progress for %s: %s", data["key"], e)
+
 def load_pending_builds(app):
+    """
+    On startup, reload any in-flight builds and schedule completion.
+    (Progress bars won’t resume after a crash unless you persist message_ids.)
+    """
     now = time.time()
     try:
         rows = get_rows(BUILD_QUEUE_SHEET)
     except HttpError as e:
         logger.error("load_pending_builds: cannot read %s: %s", BUILD_QUEUE_SHEET, e)
         return
-    header, *data = rows
 
+    header, *data = rows
     for r in data:
         if len(r) < 5:
             continue
-        user_id, key, lvl_str, _, end_ts = r
+        user_id, key, lvl_str, start_s, end_s = r
         try:
-            end = float(end_ts)
+            end = float(end_s)
         except:
             continue
         delay = end - now
@@ -276,27 +300,3 @@ def load_pending_builds(app):
         else:
             app.job_queue.run_once(_complete_single_build, delay,
                                    data={"user_id": user_id, "key": key})
-
-# ─── Status Helpers ─────────────────────────────────────────────────────────
-
-def get_building_info(user_id: str) -> dict[str, int]:
-    """
-    Returns { key: current_level } for every building key.
-    """
-    return {
-        key: get_current_level(user_id, key)
-        for key in get_build_defs().keys()
-    }
-
-def get_production_rates(build_info: dict) -> dict[str, int]:
-    rates = {"credits": 0, "minerals": 0, "energy": 0}
-    for bld, lvl in build_info.items():
-        prod = PRODUCTION_PER_LEVEL.get(bld)
-        if prod:
-            res, per = prod
-            rates[res] += per * lvl
-    return rates
-
-def get_building_health(user_id: str) -> dict[str, dict]:
-    info = get_building_info(user_id)
-    return { bld: {"current": lvl * 100, "max": lvl * 100} for bld, lvl in info.items() }
