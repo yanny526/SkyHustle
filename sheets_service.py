@@ -1,181 +1,166 @@
 # sheets_service.py
 
-import os
 import time
-import threading
+import os
 import logging
-from typing import List
-
+from config import SERVICE_ACCOUNT_INFO, SHEET_ID
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-# ─── Configuration ───────────────────────────────────────────────────────────
-LOG = logging.getLogger(__name__)
-LOG_LEVEL = os.getenv("SHEETS_LOG_LEVEL", "INFO").upper()
-LOG.setLevel(LOG_LEVEL)
+logger = logging.getLogger(__name__)
 
-SCOPES         = ["https://www.googleapis.com/auth/spreadsheets"]
-SPREADSHEET_ID = os.getenv("SHEETS_SPREADSHEET_ID")
-CREDS_JSON     = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")  # path to service account JSON
-CACHE_TTL      = int(os.getenv("SHEETS_CACHE_TTL_SEC", 30))   # seconds to cache reads
+# ─── Google Sheets API setup ─────────────────────────────────────────────────
 
-# ─── Required tabs and their headers ──────────────────────────────────────────
-REQUIRED_SHEETS = {
-    'Players':     ['user_id', 'commander_name', 'telegram_username', 'credits', 'minerals', 'energy', 'last_seen'],
-    'Buildings':   ['user_id', 'building_type', 'level', 'upgrade_end_ts'],
-    'Army':        ['user_id', 'unit_type', 'count'],
-    'CombatLog':   ['attacker_id', 'defender_id', 'timestamp', 'result', 'spoils_credits'],
-    'Leaderboard': ['user_id', 'total_power', 'rank'],
-    'Upgrades':    ['user_id', 'building_type', 'start_ts', 'end_ts', 'target_level'],
+SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
+_creds   = Credentials.from_service_account_info(SERVICE_ACCOUNT_INFO, scopes=SCOPES)
+_service = build('sheets', 'v4', credentials=_creds)
+
+# ─── Core tabs your game needs (for init check) ───────────────────────────────
+REQUIRED_SHEETS = [
+    'Players',
+    'BuildingDefs',
+    'BuildQueue',
+    'CompletedBuilds',
+    'Army',
+    'CombatLog',
+    'Leaderboard',
+    'Upgrades',
+    # add any other tabs you refer to…
+]
+
+# ─── Default header row for each tab ───────────────────────────────────────────
+_HEADERS: dict[str, list[str]] = {
+    'Players':        ['user_id','commander_name','telegram_username','credits','minerals','energy','last_seen','progress'],
+    'BuildingDefs':   ['key','name','tier','cost_c','cost_m','cost_e','time_sec','slots_required','prereqs'],
+    'BuildQueue':     ['user_id','building','to_level','start_ts','end_ts'],
+    'CompletedBuilds':['user_id','building','level','completed_ts'],
+    'Army':           ['user_id','unit_type','count'],
+    'CombatLog':      ['attacker_id','defender_id','timestamp','result','spoils_credits'],
+    'Leaderboard':    ['user_id','total_power','rank'],
+    'Upgrades':       ['user_id','building_type','start_ts','end_ts','target_level'],
 }
 
-# ─── Internal state ───────────────────────────────────────────────────────────
-_service     = None
-_service_lock = threading.Lock()
-
-_row_cache   = {}   # sheet_name -> (timestamp, rows)
-_cache_lock  = threading.Lock()
-
-# ─── Sheets API client setup ──────────────────────────────────────────────────
-def _get_service():
-    global _service
-    with _service_lock:
-        if _service is None:
-            creds = Credentials.from_service_account_file(CREDS_JSON, scopes=SCOPES)
-            _service = build("sheets", "v4", credentials=creds, cache_discovery=False)
-        return _service
-
-# ─── Initialization: create tabs & headers ────────────────────────────────────
 def init():
-    """Ensure all REQUIRED_SHEETS exist and have correct header rows."""
-    svc = _get_service()
+    """
+    Ensure all REQUIRED_SHEETS exist and have the correct header row.
+    Call once at startup (your main.py → sheets_init()).
+    """
+    # 1) Create any missing sheets
     try:
-        meta = svc.spreadsheets().get(spreadsheetId=SPREADSHEET_ID, fields="sheets.properties.title").execute()
-        existing = {s["properties"]["title"] for s in meta.get("sheets", [])}
-        requests = []
-        for title in REQUIRED_SHEETS:
-            if title not in existing:
-                LOG.info("Creating missing sheet tab: %s", title)
-                requests.append({"addSheet": {"properties": {"title": title}}})
-        if requests:
-            svc.spreadsheets().batchUpdate(
-                spreadsheetId=SPREADSHEET_ID,
-                body={"requests": requests}
-            ).execute()
-
-        # enforce headers
-        for title, header in REQUIRED_SHEETS.items():
-            _ensure_header_row(svc, title, header)
+        resp = _service.spreadsheets()\
+            .get(spreadsheetId=SHEET_ID, fields='sheets.properties.title')\
+            .execute()
+        existing = {s['properties']['title'] for s in resp.get('sheets', [])}
     except HttpError as e:
-        LOG.error("Failed to initialize sheets: %s", e)
-        raise
+        logger.error("sheets_service.init: cannot fetch spreadsheet: %s", e)
+        return
 
-def _ensure_header_row(svc, sheet_name: str, header: List[str]):
-    """Overwrite first row if it doesn’t match the expected header."""
-    rng = f"{sheet_name}!1:1"
+    requests = []
+    for title in REQUIRED_SHEETS:
+        if title not in existing:
+            requests.append({'addSheet':{'properties':{'title':title}}})
+    if requests:
+        try:
+            _service.spreadsheets()\
+                .batchUpdate(spreadsheetId=SHEET_ID, body={'requests':requests})\
+                .execute()
+        except HttpError as e:
+            logger.error("sheets_service.init: cannot create sheets: %s", e)
+            return
+
+    # 2) Ensure correct headers
+    for sheet, header in _HEADERS.items():
+        _ensure_header_row(sheet, header)
+
+def _ensure_header_row(sheet_name: str, header: list[str]):
+    """If row 1 doesn’t match, overwrite it."""
     try:
-        resp = svc.spreadsheets().values().get(spreadsheetId=SPREADSHEET_ID, range=rng).execute()
-        existing = resp.get("values", [])
+        result = _service.spreadsheets().values()\
+            .get(spreadsheetId=SHEET_ID, range=f"{sheet_name}!1:1")\
+            .execute()
+        existing = result.get('values', [])
         if not existing or existing[0] != header:
-            LOG.info("Setting header for %s → %s", sheet_name, header)
-            svc.spreadsheets().values().update(
-                spreadsheetId=SPREADSHEET_ID,
-                range=rng,
-                valueInputOption="RAW",
-                body={"values": [header]},
+            _service.spreadsheets().values()\
+                .update(
+                    spreadsheetId=SHEET_ID,
+                    range=f"{sheet_name}!1:1",
+                    valueInputOption='RAW',
+                    body={'values':[header]}
+                ).execute()
+    except HttpError as e:
+        logger.error("sheets_service._ensure_header_row(%s): %s", sheet_name, e)
+
+def get_rows(sheet_name: str) -> list[list[str]]:
+    """
+    Return all rows (including header) from the given sheet.
+    """
+    try:
+        # guard eventual consistency
+        time.sleep(0.5)
+        resp = _service.spreadsheets().values()\
+            .get(spreadsheetId=SHEET_ID, range=f"{sheet_name}!A1:Z")\
+            .execute()
+        return resp.get('values', [])
+    except HttpError as e:
+        logger.error("sheets_service.get_rows(%s): %s", sheet_name, e)
+        return []
+
+def update_row(sheet_name: str, row_index: int, values: list[str]):
+    """
+    Overwrite row at zero-based `row_index` (A=0) in `sheet_name` with `values`.
+    """
+    try:
+        a1 = f"{sheet_name}!A{row_index+1}:Z{row_index+1}"
+        _service.spreadsheets().values()\
+            .update(
+                spreadsheetId=SHEET_ID,
+                range=a1,
+                valueInputOption='RAW',
+                body={'values':[values]}
             ).execute()
     except HttpError as e:
-        LOG.error("Error ensuring header for %s: %s", sheet_name, e)
-        raise
+        logger.error("sheets_service.update_row(%s,%d): %s", sheet_name, row_index, e)
 
-# ─── Core I/O with caching ─────────────────────────────────────────────────────
-def get_rows(sheet_name: str) -> List[List[str]]:
+def append_row(sheet_name: str, values: list[str]):
     """
-    Return all rows (including header) from `sheet_name`, caching for CACHE_TTL seconds.
+    Append a single row of `values` to the bottom of `sheet_name`.
     """
-    now = time.time()
-    with _cache_lock:
-        ts_rows = _row_cache.get(sheet_name)
-        if ts_rows and now - ts_rows[0] < CACHE_TTL:
-            return ts_rows[1]
-
-    # cache miss or expired
-    svc = _get_service()
-    rng = f"{sheet_name}!A1:Z"
     try:
-        resp = svc.spreadsheets().values().get(
-            spreadsheetId=SPREADSHEET_ID,
-            range=rng
-        ).execute()
-        rows = resp.get("values", [])
+        _service.spreadsheets().values()\
+            .append(
+                spreadsheetId=SHEET_ID,
+                range=f"{sheet_name}!A1:Z",
+                valueInputOption='RAW',
+                insertDataOption='INSERT_ROWS',
+                body={'values':[values]}
+            ).execute()
     except HttpError as e:
-        LOG.error("Error reading sheet %s: %s", sheet_name, e)
-        rows = []
-
-    with _cache_lock:
-        _row_cache[sheet_name] = (now, rows)
-    return rows
-
-def append_row(sheet_name: str, values: List[str]):
-    """
-    Append a single row to `sheet_name`, and invalidate its cache.
-    """
-    svc = _get_service()
-    rng = f"{sheet_name}!A1:Z"
-    try:
-        svc.spreadsheets().values().append(
-            spreadsheetId=SPREADSHEET_ID,
-            range=rng,
-            valueInputOption="RAW",
-            insertDataOption="INSERT_ROWS",
-            body={"values": [values]},
-        ).execute()
-    except HttpError as e:
-        LOG.error("Error appending row to %s: %s", sheet_name, e)
-        raise
-    finally:
-        _invalidate_cache(sheet_name)
-
-def update_row(sheet_name: str, row_index: int, values: List[str]):
-    """
-    Overwrite the row at zero-based `row_index` (including header) in `sheet_name`.
-    """
-    svc = _get_service()
-    # +1 because A1 notation is 1-based
-    a1 = f"{sheet_name}!A{row_index+1}:Z{row_index+1}"
-    try:
-        svc.spreadsheets().values().update(
-            spreadsheetId=SPREADSHEET_ID,
-            range=a1,
-            valueInputOption="RAW",
-            body={"values": [values]},
-        ).execute()
-    except HttpError as e:
-        LOG.error("Error updating row %d in %s: %s", row_index, sheet_name, e)
-        raise
-    finally:
-        _invalidate_cache(sheet_name)
+        logger.error("sheets_service.append_row(%s): %s", sheet_name, e)
 
 def clear_sheet(sheet_name: str):
-    """
-    Delete all data below the header in `sheet_name`.
-    """
-    svc = _get_service()
-    rng = f"{sheet_name}!A2:Z"
+    """Delete all data below the header in `sheet_name`."""
     try:
-        svc.spreadsheets().values().clear(
-            spreadsheetId=SPREADSHEET_ID,
-            range=rng
-        ).execute()
+        _service.spreadsheets().values()\
+            .clear(spreadsheetId=SHEET_ID, range=f"{sheet_name}!A2:Z")\
+            .execute()
     except HttpError as e:
-        LOG.error("Error clearing sheet %s: %s", sheet_name, e)
-        raise
-    finally:
-        _invalidate_cache(sheet_name)
+        logger.error("sheets_service.clear_sheet(%s): %s", sheet_name, e)
 
-def _invalidate_cache(sheet_name: str):
-    """Internal: drop any cached rows for this sheet."""
-    with _cache_lock:
-        _row_cache.pop(sheet_name, None)
-
+def ensure_sheet(tab_name: str, header: list[str]):
+    """
+    Auto-create a single tab with the given header if it does not exist.
+    """
+    try:
+        meta   = _service.spreadsheets().get(
+            spreadsheetId=SHEET_ID, fields="sheets.properties.title"
+        ).execute()
+        titles = [s["properties"]["title"] for s in meta.get("sheets",[])]
+        if tab_name not in titles:
+            _service.spreadsheets().batchUpdate(
+                spreadsheetId=SHEET_ID,
+                body={"requests":[{"addSheet":{"properties":{"title":tab_name}}}]}
+            ).execute()
+            append_row(tab_name, header)
+    except HttpError as e:
+        logger.error("sheets_service.ensure_sheet(%s): %s", tab_name, e)
