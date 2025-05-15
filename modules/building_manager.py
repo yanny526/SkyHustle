@@ -33,9 +33,15 @@ def _get_completed_rows() -> list[list[str]]:
 
 def get_current_level(user_id: str, key: str) -> int:
     """
-    Current level = count of CompletedBuilds rows for (user_id, key).
+    Current level = count of CompletedBuilds rows for (user_id, key),
+    matched case-insensitively.
     """
-    return sum(1 for r in _get_completed_rows() if r[0] == user_id and r[1] == key)
+    key_l = key.lower()
+    return sum(
+        1
+        for r in _get_completed_rows()
+        if r[0] == user_id and r[1].lower() == key_l
+    )
 
 # ─── Definitions Loader ───────────────────────────────────────────────────────
 
@@ -56,8 +62,8 @@ def get_build_defs() -> dict[str, dict]:
     for row in rows[1:]:
         if len(row) <= key_i or not row[key_i]:
             continue
-        info = dict(zip(header, row))
-        key = row[key_i]
+        info    = dict(zip(header, row))
+        key     = row[key_i]
         info["key"]  = key
         info["name"] = row[name_i] or key
         for fld in ("tier", "cost_c", "cost_m", "cost_e", "time_sec", "slots_required"):
@@ -86,7 +92,7 @@ def get_available_builds(user_id: str) -> list[dict]:
     except:
         credits = minerals = energy = 0
 
-    done_keys = {r[1] for r in _get_completed_rows()}
+    done_keys = {r[1].lower() for r in _get_completed_rows()}
     out = []
 
     for info in defs.values():
@@ -94,8 +100,8 @@ def get_available_builds(user_id: str) -> list[dict]:
         lvl = get_current_level(user_id, key)
         entry = info.copy()
         entry["level"]      = lvl
-        entry["done"]       = key in done_keys
-        entry["locked"]     = any(pr not in done_keys for pr in entry["prereqs"])
+        entry["done"]       = key.lower() in done_keys
+        entry["locked"]     = any(pr.lower() not in done_keys for pr in entry["prereqs"])
         entry["affordable"] = (
             credits >= entry["cost_c"]
             and minerals >= entry["cost_m"]
@@ -185,8 +191,8 @@ def cancel_build(user_id: str, key: str) -> bool:
 
 async def complete_build_job(context):
     """
-    Runs every minute to sweep finished builds.
-    Sends a Telegram notification for each completion.
+    Runs every minute to sweep finished builds,
+    record them in CompletedBuilds, clear the queue, and notify the user.
     """
     now = time.time()
     try:
@@ -205,28 +211,24 @@ async def complete_build_job(context):
             user_id, key, lvl_str = r[0], r[1], r[2]
             lvl = int(lvl_str)
             iso = datetime.utcnow().isoformat()
-            # 1) record completion
+
             append_row(BUILD_DONE_SHEET, [user_id, key, str(lvl), iso])
-            # 2) clear queue row
             update_row(BUILD_QUEUE_SHEET, idx, [""] * len(header))
-            # 3) notify user
+
             await context.bot.send_message(
                 chat_id=user_id,
                 text=f"🏗️ Build *{key}* complete! Now at level {lvl}.",
                 parse_mode="Markdown"
             )
 
-# ─── One-off Completion (if used) ────────────────────────────────────────────
+# ─── One-off Completion (if you schedule it) ─────────────────────────────────
 
 def _complete_single_build(context):
-    """
-    If you schedule a one-off job, this handles exactly that single build.
-    """
     job     = context.job
     user_id = job.data["user_id"]
     key     = job.data["key"]
     try:
-        # fetch and clear the matching queue row
+        # fetch & clear the matching queue row to get its to_level
         rows = get_rows(BUILD_QUEUE_SHEET)
         header, *data = rows
         to_level = None
@@ -235,7 +237,6 @@ def _complete_single_build(context):
                 to_level = int(r[2])
                 update_row(BUILD_QUEUE_SHEET, idx, [""] * len(header))
                 break
-        # fallback if somehow missing:
         if to_level is None:
             to_level = get_current_level(user_id, key)
 
@@ -251,11 +252,7 @@ def _complete_single_build(context):
     except Exception as e:
         logger.error("Error in _complete_single_build for %s/%s: %s", user_id, key, e)
 
-
 def load_pending_builds(app):
-    """
-    On restart, re-schedule any in-flight builds.
-    """
     now = time.time()
     try:
         rows = get_rows(BUILD_QUEUE_SHEET)
@@ -302,7 +299,4 @@ def get_production_rates(build_info: dict) -> dict[str, int]:
 
 def get_building_health(user_id: str) -> dict[str, dict]:
     info = get_building_info(user_id)
-    return {
-        bld: {"current": lvl * 100, "max": lvl * 100}
-        for bld, lvl in info.items()
-    }
+    return { bld: {"current": lvl * 100, "max": lvl * 100} for bld, lvl in info.items() }
