@@ -34,7 +34,7 @@ def attack_player(attacker_id: str, defender_id: str) -> dict:
     """
     # Load and locate player rows
     players = get_rows('Players')
-    attacker, defender = None, None
+    attacker = defender = None
     atk_idx = def_idx = None
     for idx, row in enumerate(players[1:], start=1):
         if row[0] == attacker_id:
