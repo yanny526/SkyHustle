@@ -6,7 +6,7 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN")
 
 application = Application.builder().token(BOT_TOKEN).build()
 
-# Register all handlers
+# Register handlers
 application.add_handler(get_conversation_handler())
 
 print("✅ SkyHustle bot is live...")
