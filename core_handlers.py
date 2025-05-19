@@ -13,33 +13,39 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     return CHOOSING_NAME
 
 async def receive_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    name = update.message.text.strip()
+    try:
+        name = update.message.text.strip()
+        print("📨 Received name input:", name)
 
-    if " " in name or len(name) < 3 or len(name) > 20:
-        await update.message.reply_text("❌ Invalid name. Use 3–20 characters, no spaces. Try again.")
-        return CHOOSING_NAME
+        if " " in name or len(name) < 3 or len(name) > 20:
+            await update.message.reply_text("❌ Invalid name. Use 3–20 characters, no spaces. Try again.")
+            return CHOOSING_NAME
 
-    existing, _ = get_user_by_name(name)
-    if existing:
-        await update.message.reply_text("🚫 That name is already taken. Please choose a different one.")
-        return CHOOSING_NAME
+        existing, _ = get_user_by_name(name)
+        if existing:
+            await update.message.reply_text("🚫 That name is already taken. Please choose a different one.")
+            return CHOOSING_NAME
 
-    success = add_new_user(name, update.effective_user.id)
-    if success:
-        context.user_data["game_name"] = name
-        res = get_user_resources(name)
-        await update.message.reply_text(
-            f"✅ Commander *{name}* registered!\n\n"
-            f"🏗️ Base Level: 0\n"
-            f"🪵 Wood: {res['wood']} | 🪨 Stone: {res['stone']}\n"
-            f"💰 Gold: {res['gold']} | 🍖 Food: {res['food']}\n"
-            f"🎖️ Power: 0\n\n"
-            "Use /status or /build to continue.",
-            parse_mode="Markdown"
-        )
+        success = add_new_user(name, update.effective_user.id)
+        if success:
+            context.user_data["game_name"] = name
+            res = get_user_resources(name)
+            await update.message.reply_text(
+                f"✅ Commander *{name}* registered!\n\n"
+                f"🏗️ Base Level: 0\n"
+                f"🪵 Wood: {res['wood']} | 🪨 Stone: {res['stone']}\n"
+                f"💰 Gold: {res['gold']} | 🍖 Food: {res['food']}\n"
+                f"🎖️ Power: 0\n\n"
+                "Use /status or /build to continue.",
+                parse_mode="Markdown"
+            )
+        else:
+            await update.message.reply_text("⚠️ Something went wrong while saving your commander. Please try again.")
         return ConversationHandler.END
-    else:
-        await update.message.reply_text("❌ Failed to create your account. Please try again.")
+
+    except Exception as e:
+        print("❌ ERROR in receive_name:", e)
+        await update.message.reply_text("⚠️ An internal error occurred. Please try again later.")
         return ConversationHandler.END
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
