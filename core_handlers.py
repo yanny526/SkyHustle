@@ -1,4 +1,3 @@
-
 from telegram import Update
 from telegram.ext import CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler
 from google_sheets import add_new_user, get_user_by_name, get_user_resources
@@ -7,9 +6,7 @@ CHOOSING_NAME = 1
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text(
-        "👋 Welcome to *SkyHustle*!
-
-"
+        "👋 Welcome to *SkyHustle*!\n\n"
         "Please reply with your desired commander name (3–20 characters, no spaces).",
         parse_mode="Markdown"
     )
@@ -32,18 +29,11 @@ async def receive_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         context.user_data["game_name"] = name
         res = get_user_resources(name)
         await update.message.reply_text(
-            f"✅ Commander *{name}* registered!
-
-"
-            f"🏗️ Base Level: 0
-"
-            f"🪵 Wood: {res['wood']} | 🪨 Stone: {res['stone']}
-"
-            f"💰 Gold: {res['gold']} | 🍖 Food: {res['food']}
-"
-            f"🎖️ Power: 0
-
-"
+            f"✅ Commander *{name}* registered!\n\n"
+            f"🏗️ Base Level: 0\n"
+            f"🪵 Wood: {res['wood']} | 🪨 Stone: {res['stone']}\n"
+            f"💰 Gold: {res['gold']} | 🍖 Food: {res['food']}\n"
+            f"🎖️ Power: 0\n\n"
             "Use /status or /build to continue.",
             parse_mode="Markdown"
         )
