@@ -15,21 +15,26 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 async def receive_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     try:
         name = update.message.text.strip()
-        print("📨 Received name input:", name)
+        print("✅ REACHED receive_name():", name)
 
         if " " in name or len(name) < 3 or len(name) > 20:
             await update.message.reply_text("❌ Invalid name. Use 3–20 characters, no spaces. Try again.")
             return CHOOSING_NAME
 
-        existing, _ = get_user_by_name(name)
+        existing, row = get_user_by_name(name)
+        print("🔍 get_user_by_name result:", existing, row)
+
         if existing:
             await update.message.reply_text("🚫 That name is already taken. Please choose a different one.")
             return CHOOSING_NAME
 
         success = add_new_user(name, update.effective_user.id)
+        print("🧾 add_new_user returned:", success)
+
         if success:
             context.user_data["game_name"] = name
             res = get_user_resources(name)
+            print("📦 Resources fetched:", res)
             await update.message.reply_text(
                 f"✅ Commander *{name}* registered!\n\n"
                 f"🏗️ Base Level: 0\n"
@@ -44,7 +49,7 @@ async def receive_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         return ConversationHandler.END
 
     except Exception as e:
-        print("❌ ERROR in receive_name:", e)
+        print("❌ FULL ERROR in receive_name():", repr(e))
         await update.message.reply_text("⚠️ An internal error occurred. Please try again later.")
         return ConversationHandler.END
 
