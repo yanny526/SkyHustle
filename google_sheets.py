@@ -1,92 +1,67 @@
-import os
-import base64
-import gspread
-from google.oauth2.service_account import Credentials
+from telegram import Update
+from telegram.ext import CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler
+from google_sheets import add_new_user, get_user_by_name, get_user_resources
 
-# Load credentials from environment
-BASE64_CREDS = os.environ.get("BASE64_CREDS")
-SHEET_ID = os.environ.get("SHEET_ID")
+CHOOSING_NAME = 1
 
-# Authenticate with Google Sheets
-def get_gspread_client():
-    creds_json = base64.b64decode(BASE64_CREDS).decode("utf-8")
-    creds_dict = eval(creds_json)
-    scopes = ["https://www.googleapis.com/auth/spreadsheets"]
-    credentials = Credentials.from_service_account_info(creds_dict, scopes=scopes)
-    return gspread.authorize(credentials)
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.message.reply_text(
+        "👋 Welcome to *SkyHustle*!\n\n"
+        "Please reply with your desired commander name (3–20 characters, no spaces).",
+        parse_mode="Markdown"
+    )
+    return CHOOSING_NAME
 
-# Load or create the SkyHustleData sheet
-def get_sheet():
-    client = get_gspread_client()
-    spreadsheet = client.open_by_key(SHEET_ID)
-    sheet_title = "SkyHustleData"
-
+async def receive_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     try:
-        sheet = spreadsheet.worksheet(sheet_title)
-        print("✅ Found existing sheet:", sheet_title)
-    except gspread.exceptions.WorksheetNotFound:
-        print("📄 Sheet not found. Creating new one:", sheet_title)
-        sheet = spreadsheet.add_worksheet(title=sheet_title, rows="1000", cols="20")
+        name = update.message.text.strip()
+        print("✅ REACHED receive_name():", name)
 
-    ensure_headers(sheet)
-    return sheet
+        if " " in name or len(name) < 3 or len(name) > 20:
+            await update.message.reply_text("❌ Invalid name. Use 3–20 characters, no spaces. Try again.")
+            return CHOOSING_NAME
 
-# Ensure the first row contains the correct headers
-def ensure_headers(sheet):
-    headers = sheet.row_values(1)
-    expected = [
-        "game_name", "user_id", "wood", "stone", "gold", "food", "premium",
-        "power", "base_lvl", "mine_lvl", "lumber_lvl", "barracks_lvl", "warehouse_lvl",
-        "hospital_lvl", "jail_lvl", "research_lvl"
-    ]
-    if headers != expected:
-        print("🔧 Setting up headers...")
-        if len(headers) > 0:
-            sheet.delete_rows(1)
-        sheet.insert_row(expected, index=1)
+        existing, row = get_user_by_name(name)
+        print("🔍 get_user_by_name result:", existing, row)
 
-# Fetch a user's data by game name
-def get_user_by_name(game_name):
-    sheet = get_sheet()
-    records = sheet.get_all_records()
-    for i, row in enumerate(records, start=2):
-        if row["game_name"].lower() == game_name.lower():
-            return row, i
-    return None, None
+        if existing:
+            await update.message.reply_text("🚫 That name is already taken. Please choose a different one.")
+            return CHOOSING_NAME
 
-# Add a new user to the sheet
-def add_new_user(game_name, user_id):
-    sheet = get_sheet()
-    existing, _ = get_user_by_name(game_name)
-    if existing:
-        return False
-    default_row = [
-        game_name, str(user_id), 100, 100, 100, 100, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0
-    ]
-    sheet.append_row(default_row)
-    return True
+        success = add_new_user(name, update.effective_user.id)
+        print("🧾 add_new_user returned:", success)
 
-# Update a specific field for a user
-def update_user_field(game_name, field, new_value):
-    sheet = get_sheet()
-    row_data, row_index = get_user_by_name(game_name)
-    if not row_data:
-        return False
-    headers = sheet.row_values(1)
-    col_index = headers.index(field) + 1
-    sheet.update_cell(row_index, col_index, new_value)
-    return True
+        if success:
+            context.user_data["game_name"] = name
+            res = get_user_resources(name)
+            print("📦 Resources fetched:", res)
+            await update.message.reply_text(
+                f"✅ Commander *{name}* registered!\n\n"
+                f"🏗️ Base Level: 0\n"
+                f"🪵 Wood: {res['wood']} | 🪨 Stone: {res['stone']}\n"
+                f"💰 Gold: {res['gold']} | 🍖 Food: {res['food']}\n"
+                f"🎖️ Power: 0\n\n"
+                "Use /status or /build to continue.",
+                parse_mode="Markdown"
+            )
+        else:
+            await update.message.reply_text("⚠️ Something went wrong while saving your commander. Please try again.")
+        return ConversationHandler.END
 
-# Get current resource stats for a user
-def get_user_resources(game_name):
-    row, _ = get_user_by_name(game_name)
-    if not row:
-        return None
-    return {
-        "wood": row["wood"],
-        "stone": row["stone"],
-        "gold": row["gold"],
-        "food": row["food"],
-        "premium": row["premium"]
-    }
+    except Exception as e:
+        print("❌ FULL ERROR in receive_name():", repr(e))
+        await update.message.reply_text("⚠️ An internal error occurred. Please try again later.")
+        return ConversationHandler.END
+
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.message.reply_text("🚫 Cancelled.")
+    return ConversationHandler.END
+
+def get_conversation_handler():
+    return ConversationHandler(
+        entry_points=[CommandHandler("start", start)],
+        states={
+            CHOOSING_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, receive_name)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
