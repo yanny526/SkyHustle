@@ -1,92 +1,114 @@
-import os
-import base64
 import gspread
-from google.oauth2.service_account import Credentials
+from oauth2client.service_account import ServiceAccountCredentials
 
-# Load credentials from environment
-BASE64_CREDS = os.environ.get("BASE64_CREDS")
-SHEET_ID = os.environ.get("SHEET_ID")
+class GoogleSheets:
+    """
+    Handles all interactions with Google Sheets.
+    """
+    def __init__(self, config):
+        self.config = config
+        self.gc = self._authenticate()
+        self.sheet = self._get_spreadsheet()
 
-# Authenticate with Google Sheets
-def get_gspread_client():
-    creds_json = base64.b64decode(BASE64_CREDS).decode("utf-8")
-    creds_dict = eval(creds_json)
-    scopes = ["https://www.googleapis.com/auth/spreadsheets"]
-    credentials = Credentials.from_service_account_info(creds_dict, scopes=scopes)
-    return gspread.authorize(credentials)
+    def _authenticate(self):
+        """Authenticates with Google Sheets."""
+        decoded_creds = self.config.get_decoded_creds()
+        self.config.write_creds_to_file(decoded_creds)
+        credentials = ServiceAccountCredentials.from_json_keyfile_name(
+            self.config.CREDS_FILE, self.config.SCOPES)
+        return gspread.service_account(filename=self.config.CREDS_FILE)
 
-# Load or create the SkyHustleData sheet
-def get_sheet():
-    client = get_gspread_client()
-    spreadsheet = client.open_by_key(SHEET_ID)
-    sheet_title = "SkyHustleData"
+    def _get_spreadsheet(self):
+        """Opens the Google Sheet."""
+        try:
+            return self.gc.open_by_key(self.config.SHEET_ID)
+        except gspread.SpreadsheetNotFound:
+            raise ValueError(f"Spreadsheet with ID '{self.config.SHEET_ID}' not found.")
 
-    try:
-        sheet = spreadsheet.worksheet(sheet_title)
-        print("✅ Found existing sheet:", sheet_title)
-    except gspread.exceptions.WorksheetNotFound:
-        print("📄 Sheet not found. Creating new one:", sheet_title)
-        sheet = spreadsheet.add_worksheet(title=sheet_title, rows="1000", cols="20")
+    def create_worksheet(self, title):
+        """Creates a new worksheet or returns an existing one."""
+        try:
+            worksheet = self.sheet.add_worksheet(
+                title=title, rows=self.config.DEFAULT_ROWS, cols=self.config.DEFAULT_COLS)
+            print(f"Worksheet '{title}' created.")
+            return worksheet
+        except gspread.exceptions.APIError as e:
+            if "duplicate name" in e.response.text:
+                worksheet = self.sheet.worksheet(title)
+                print(f"Worksheet '{title}' already exists. Using existing one.")
+                return worksheet
+            else:
+                raise
 
-    ensure_headers(sheet)
-    return sheet
+    def initialize_resource_sheet(self):
+        """Initializes the 'Resources' worksheet."""
+        resources_sheet = self.create_worksheet(self.config.RESOURCES_SHEET_NAME)
+        resources_data = [
+            ["PlayerID", "Wood", "Stone", "Gold", "Food", "Premium",
+             "Lumberhouse Level", "Mine Level", "Warehouse Level",
+             "Lumberhouse Production", "Mine Stone Production",
+             "Mine Gold Production", "Warehouse Capacity"]
+        ]
+        resources_sheet.update('A1', resources_data)
+        return resources_sheet
 
-# Ensure correct headers exist
-def ensure_headers(sheet):
-    headers = sheet.row_values(1)
-    expected = [
-        "game_name", "user_id", "wood", "stone", "gold", "food", "premium",
-        "power", "base_lvl", "mine_lvl", "lumber_lvl", "barracks_lvl", "warehouse_lvl",
-        "hospital_lvl", "jail_lvl", "research_lvl"
-    ]
-    if headers != expected:
-        print("🔧 Setting up headers...")
-        if headers:
-            sheet.delete_rows(1)
-        sheet.insert_row(expected, index=1)
+    def get_player_resources(self, resources_sheet, player_id):
+        """Retrieves a player's resources from the 'Resources' worksheet."""
+        try:
+            cell = resources_sheet.find(str(player_id), in_column=1)
+            if cell:
+                row = cell.row
+                resources = resources_sheet.row_values(row)
+                if len(resources) >= 13:
+                    return {
+                        "PlayerID": int(resources[0]),
+                        "Wood": int(resources[1]),
+                        "Stone": int(resources[2]),
+                        "Gold": int(resources[3]),
+                        "Food": int(resources[4]),
+                        "Premium": int(resources[5]),
+                        "Lumberhouse Level": int(resources[6]),
+                        "Mine Level": int(resources[7]),
+                        "Warehouse Level": int(resources[8]),
+                        "Lumberhouse Production": float(resources[9]),
+                        "Mine Stone Production": float(resources[10]),
+                        "Mine Gold Production": float(resources[11]),
+                        "Warehouse Capacity": int(resources[12]),
+                    }
+                else:
+                    print(f"Warning: Incomplete data for PlayerID {player_id}. Expected 13 values, got {len(resources)}.")
+                    return None
+            else:
+                return None
+        except gspread.exceptions.CellNotFound:
+            return None
 
-# Fetch user by game name
-def get_user_by_name(game_name):
-    sheet = get_sheet()
-    records = sheet.get_all_records()
-    for i, row in enumerate(records, start=2):
-        if row["game_name"].lower() == game_name.lower():
-            return row, i
-    return None, None
+    def create_player_resources(self, resources_sheet, player_id):
+        """Creates a new entry for a player in the 'Resources' worksheet."""
+        default_resources = [player_id, 1000, 500, 200, 2000, 0, 1, 1, 1, 10, 5, 5, 1000]
+        resources_sheet.append_row(default_resources)
+        print(f"Resources created for PlayerID {player_id}.")
+        return default_resources
 
-# Add new user to the sheet
-def add_new_user(game_name, user_id):
-    sheet = get_sheet()
-    existing, _ = get_user_by_name(game_name)
-    if existing:
-        return False
-    default_row = [
-        game_name, str(user_id), 100, 100, 100, 100, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0
-    ]
-    sheet.append_row(default_row)
-    return True
-
-# Update a specific field for a user
-def update_user_field(game_name, field, new_value):
-    sheet = get_sheet()
-    row_data, row_index = get_user_by_name(game_name)
-    if not row_data:
-        return False
-    headers = sheet.row_values(1)
-    col_index = headers.index(field) + 1
-    sheet.update_cell(row_index, col_index, new_value)
-    return True
-
-# Get user resource info
-def get_user_resources(game_name):
-    row, _ = get_user_by_name(game_name)
-    if not row:
-        return None
-    return {
-        "wood": row["wood"],
-        "stone": row["stone"],
-        "gold": row["gold"],
-        "food": row["food"],
-        "premium": row["premium"]
-    }
+    def update_player_resources(self, resources_sheet, player_id, resources):
+        """Updates a player's resources in the 'Resources' worksheet."""
+        try:
+            cell = resources_sheet.find(str(player_id), in_column=1)
+            if cell:
+                row = cell.row
+                update_values = [
+                    resources["Wood"], resources["Stone"], resources["Gold"],
+                    resources["Food"], resources["Premium"],
+                    resources["Lumberhouse Level"], resources["Mine Level"],
+                    resources["Warehouse Level"],
+                    resources["Lumberhouse Production"],
+                    resources["Mine Stone Production"],
+                    resources["Mine Gold Production"],
+                    resources["Warehouse Capacity"]
+                ]
+                resources_sheet.update(f'B{row}:M{row}', [update_values])
+                print(f"Resources updated for PlayerID {player_id}.")
+            else:
+                print(f"PlayerID {player_id} not found in 'Resources' sheet.")
+        except gspread.exceptions.CellNotFound:
+            print(f"PlayerID {player_id} not found in 'Resources' sheet.")
