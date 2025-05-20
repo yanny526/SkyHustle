@@ -1,5 +1,5 @@
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+from google.oauth2.service_account import Credentials
 
 class GoogleSheets:
     """
@@ -14,8 +14,8 @@ class GoogleSheets:
         """Authenticates with Google Sheets."""
         decoded_creds = self.config.get_decoded_creds()
         self.config.write_creds_to_file(decoded_creds)
-        credentials = ServiceAccountCredentials.from_json_keyfile_name(
-            self.config.CREDS_FILE, self.config.SCOPES)
+        credentials = Credentials.from_service_account_info(
+            decoded_creds, scopes=self.config.SCOPES)
         return gspread.service_account(filename=self.config.CREDS_FILE)
 
     def _get_spreadsheet(self):
