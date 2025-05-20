@@ -8,7 +8,6 @@ import logging
 from dotenv import load_dotenv
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters
 from handlers.game_handler import GameHandler
-from config.game_config import BOT_TOKEN
 from config.alliance_config import ALLIANCE_SETTINGS
 from modules.player_manager import PlayerManager
 from modules.bag_manager import BagManager

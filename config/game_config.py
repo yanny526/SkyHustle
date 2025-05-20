@@ -552,4 +552,11 @@ MARKET_EVENTS = {
             'trade_volume': 2.0       # Double trade volume required
         }
     }
+}
+
+GAME_SETTINGS = {
+    'starting_gold': 100,
+    'starting_wood': 200,
+    'starting_stone': 100,
+    'starting_food': 300
 } 
