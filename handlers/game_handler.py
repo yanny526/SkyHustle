@@ -10,6 +10,8 @@ from typing import Dict, Optional, Any
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from telegram.error import TelegramError
+
+# Import all managers
 from modules.player_manager import PlayerManager
 from modules.tutorial_manager import TutorialManager
 from modules.resource_manager import ResourceManager
@@ -24,6 +26,15 @@ from modules.achievement_manager import AchievementManager
 from modules.daily_rewards_manager import DailyRewardsManager
 from modules.social_manager import SocialManager
 from modules.progression_manager import ProgressionManager
+
+# Import all configurations
+from config.game_config import (
+    RESOURCES, BUILDINGS, UNITS, RESEARCH, QUESTS, ACHIEVEMENTS,
+    DAILY_REWARDS, EVENTS, COMBAT, ALLIANCE_SETTINGS, QUEST_SETTINGS,
+    QUEST_TYPES, QUEST_REWARDS, MARKET_SETTINGS, MARKET_EVENTS,
+    GAME_SETTINGS, RESEARCH_TYPES, RESEARCH_REWARDS, BUILDING_UPGRADES,
+    UNIT_UPGRADES, LEAGUE_REWARDS, ALLIANCE_PERKS, ALLIANCE_RANKS
+)
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -534,32 +545,76 @@ class GameHandler:
             logger.error(f"Error in handle_train: {e}", exc_info=True)
             await self._handle_error(update, e)
 
-    async def handle_research(self, update, context):
-        """Show and manage research."""
+    async def handle_research(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle the /research command"""
         try:
             player_id = str(update.effective_user.id)
-            researches = self.research_manager.get_all_research(player_id)
-            if isinstance(researches, str):
-                import json
-                try:
-                    researches = json.loads(researches)
-                    if not isinstance(researches, dict):
-                        researches = {}
-                except Exception:
-                    researches = {}
-            elif not isinstance(researches, dict):
-                researches = {}
-            if not researches:
-                await update.message.reply_text("No research started yet. Use /research to begin!")
-                return
-            message = "*Your Research:*\n\n"
-            for category, items in researches.items():
-                for r_id, r in items.items():
-                    name = r['info'].get('name', r_id)
-                    level = r.get('level', 0)
-                    emoji = r['info'].get('emoji', '')
-                    message += f"{emoji} {name}: Level {level}\n"
-            await update.message.reply_text(message, parse_mode='Markdown')
+            
+            # Get player's current research
+            current_research = self.research_manager.get_current_research(player_id)
+            available_research = self.research_manager.get_available_research(player_id)
+            
+            # Create message with current research
+            message = "🔬 *Research Center*\n\n"
+            
+            if current_research:
+                research_type = RESEARCH_TYPES[current_research['type']]
+                message += (
+                    f"*Current Research:*\n"
+                    f"{research_type['emoji']} {research_type['name']} - {current_research['name']}\n"
+                    f"⏳ Progress: {current_research['progress']}%\n"
+                    f"⏱️ Time remaining: {current_research['time_remaining']}s\n\n"
+                )
+            
+            # Add available research
+            message += "*Available Research:*\n"
+            for research_type, categories in RESEARCH_TYPES.items():
+                message += f"\n{categories['emoji']} *{categories['name']}*\n"
+                message += f"_{categories['description']}_\n"
+                
+                for category in categories['categories']:
+                    if category in available_research:
+                        research = available_research[category]
+                        rewards = RESEARCH_REWARDS[research_type][category]
+                        
+                        # Format rewards
+                        reward_text = []
+                        for bonus_type, value in rewards.items():
+                            if 'bonus' in bonus_type:
+                                reward_text.append(f"+{int(value * 100)}% {bonus_type.replace('_bonus', '')}")
+                        
+                        message += (
+                            f"• {research['name']}\n"
+                            f"  💰 Cost: {research['cost']} gold\n"
+                            f"  ⏱️ Time: {research['time']}s\n"
+                            f"  🎁 Rewards: {', '.join(reward_text)}\n"
+                        )
+            
+            # Add research tips
+            message += "\n💡 *Research Tips:*\n"
+            message += "• Research unlocks new technologies and upgrades\n"
+            message += "• Higher level research requires previous research completion\n"
+            message += "• Research time can be reduced with alliance perks\n"
+            
+            # Create inline keyboard for research actions
+            keyboard = [
+                [
+                    InlineKeyboardButton("📊 Research Status", callback_data="research_status"),
+                    InlineKeyboardButton("🎯 Research Goals", callback_data="research_goals")
+                ],
+                [
+                    InlineKeyboardButton("⚡ Speed Up", callback_data="research_speedup"),
+                    InlineKeyboardButton("❓ Help", callback_data="research_help")
+                ]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await update.message.reply_text(
+                message,
+                reply_markup=reply_markup,
+                parse_mode='Markdown'
+            )
+            
         except Exception as e:
             logger.error(f"Error in handle_research: {e}", exc_info=True)
             await self._handle_error(update, e)
@@ -981,16 +1036,73 @@ class GameHandler:
             logger.error(f"Error in handle_alliance_benefits: {e}", exc_info=True)
             await self._handle_error(update, e)
 
-    async def handle_alliance_perks(self, update, context):
-        """Show alliance perks."""
+    async def handle_alliance_perks(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle the /alliance_perks command"""
         try:
             player_id = str(update.effective_user.id)
-            perks = self.alliance_manager.get_alliance_perks(player_id)
-            if not perks:
-                await update.message.reply_text("No alliance perks found.")
+            
+            # Get player's alliance
+            alliance = self.alliance_manager.get_player_alliance(player_id)
+            if not alliance:
+                await update.message.reply_text(
+                    "❌ You are not in an alliance!\n"
+                    "Use /create_alliance to create one or /join_alliance to join one."
+                )
                 return
-            message = "*Alliance Perks:*\n" + "\n".join(f"{p['name']}: {p['description']}" for p in perks)
-            await update.message.reply_text(message, parse_mode='Markdown')
+            
+            # Get alliance perks
+            perks = self.alliance_manager.get_alliance_perks(alliance['id'])
+            
+            # Create message
+            message = f"🌟 *{alliance['name']} Alliance Perks*\n\n"
+            
+            # Add current perks
+            message += "*Active Perks:*\n"
+            for perk_id, level in perks.items():
+                if perk_id in ALLIANCE_PERKS:
+                    perk = ALLIANCE_PERKS[perk_id]
+                    bonus = perk['levels'][level]['bonus']
+                    message += (
+                        f"• {perk['name']} (Level {level})\n"
+                        f"  _{perk['description']}_\n"
+                        f"  🎁 Bonus: +{int(bonus * 100)}%\n"
+                    )
+            
+            # Add available perks
+            message += "\n*Available Perks:*\n"
+            for perk_id, perk in ALLIANCE_PERKS.items():
+                if perk_id not in perks:
+                    message += (
+                        f"• {perk['name']}\n"
+                        f"  _{perk['description']}_\n"
+                        f"  💰 Cost: {perk['levels'][1]['cost']} alliance points\n"
+                    )
+            
+            # Add perk tips
+            message += "\n💡 *Perk Tips:*\n"
+            message += "• Perks provide alliance-wide bonuses\n"
+            message += "• Higher level perks require more alliance points\n"
+            message += "• Perks can be upgraded using alliance points\n"
+            
+            # Create inline keyboard for perk actions
+            keyboard = [
+                [
+                    InlineKeyboardButton("📊 Perk Status", callback_data="alliance_perk_status"),
+                    InlineKeyboardButton("🎯 Perk Goals", callback_data="alliance_perk_goals")
+                ],
+                [
+                    InlineKeyboardButton("⚡ Upgrade", callback_data="alliance_perk_upgrade"),
+                    InlineKeyboardButton("❓ Help", callback_data="alliance_perk_help")
+                ]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await update.message.reply_text(
+                message,
+                reply_markup=reply_markup,
+                parse_mode='Markdown'
+            )
+            
         except Exception as e:
             logger.error(f"Error in handle_alliance_perks: {e}", exc_info=True)
             await self._handle_error(update, e)
