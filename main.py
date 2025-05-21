@@ -274,7 +274,7 @@ def main():
     resource_manager = ResourceManager()
     progression_manager = ProgressionManager()
     shop_manager = ShopManager(bag_manager, resource_manager)
-    black_market_manager = BlackMarketManager()
+    black_market_manager = BlackMarketManager(bag_manager, player_manager)
     
     # Set managers in handler modules
     from handlers.shop_commands import shop_manager as shop_module_manager
