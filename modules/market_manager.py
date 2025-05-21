@@ -5,7 +5,7 @@ Handles market listings, trades, and player transactions (per-player)
 
 import time
 from typing import Dict, List, Optional
-from config.game_config import MARKET_ITEMS
+# from config.game_config import MARKET_ITEMS  # Removed unused import
 
 class MarketManager:
     def __init__(self):

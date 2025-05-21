@@ -731,4 +731,36 @@ ALLIANCE_RANKS = {
             'donate_resources'
         ]
     }
+}
+
+MARKET_ITEMS = {
+    'revival': {
+        'name': 'Revival',
+        'description': 'Revive your army instantly after defeat.',
+        'price': {'hustlecoins': 3},
+        'cooldown': 86400,  # 24 hours
+        'emoji': '❤️‍🔥'
+    },
+    'speed_boost': {
+        'name': 'Speed Boost',
+        'description': 'Reduce all building and training times by 50% for 1 hour.',
+        'price': {'hustlecoins': 2},
+        'duration': 3600,
+        'emoji': '⚡'
+    },
+    'resource_pack': {
+        'name': 'Resource Pack',
+        'description': 'A bundle of random resources.',
+        'price': {'gold': 500},
+        'contents': {'wood': 200, 'stone': 100, 'food': 150},
+        'emoji': '🎁'
+    },
+    'protection_shield': {
+        'name': 'Protection Shield',
+        'description': 'Prevents attacks on your base for 8 hours.',
+        'price': {'hustlecoins': 4},
+        'duration': 28800,
+        'emoji': '🛡️'
+    }
+    # Add more items as needed
 } 
