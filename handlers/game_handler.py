@@ -475,9 +475,9 @@ class GameHandler:
                 return
             message = "*Your Army:*\n\n"
             for u_id, u in units.items():
-                name = u.get('name', u_id)
+                name = u['info'].get('name', u_id)
                 count = u.get('count', 0)
-                emoji = u.get('emoji', '')
+                emoji = u['info'].get('emoji', '')
                 message += f"{emoji} {name}: {count}\n"
             await update.message.reply_text(message, parse_mode='Markdown')
         except Exception as e:
@@ -493,11 +493,12 @@ class GameHandler:
                 await update.message.reply_text("No research started yet. Use /research to begin!")
                 return
             message = "*Your Research:*\n\n"
-            for r_id, r in researches.items():
-                name = r.get('name', r_id)
-                level = r.get('level', 0)
-                emoji = r.get('emoji', '')
-                message += f"{emoji} {name}: Level {level}\n"
+            for category, items in researches.items():
+                for r_id, r in items.items():
+                    name = r['info'].get('name', r_id)
+                    level = r.get('level', 0)
+                    emoji = r['info'].get('emoji', '')
+                    message += f"{emoji} {name}: Level {level}\n"
             await update.message.reply_text(message, parse_mode='Markdown')
         except Exception as e:
             logger.error(f"Error in handle_research: {e}", exc_info=True)
