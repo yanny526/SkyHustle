@@ -51,31 +51,31 @@ class GoogleSheetsManager:
         ]
         creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
         self.gc = gspread.authorize(creds)
-        self.sheet = self.gc.open_by_key(sheet_id)
-        # Ensure all tabs exist with correct headers
-        for tab, headers in SHEET_TABS.items():
-            self.ensure_headers(tab, headers)
+        self.sheet_id = sheet_id
+        self.sheet = None
+        self._worksheets = {}
 
-    def _get_or_create_worksheet(self, title: str, headers: List[str]):
-        try:
-            ws = self.sheet.worksheet(title)
-            # Check headers
-            current_headers = ws.row_values(1)
-            if current_headers != headers:
-                ws.delete_rows(1)
-                ws.insert_row(headers, 1)
-            return ws
-        except gspread.WorksheetNotFound:
-            ws = self.sheet.add_worksheet(title=title, rows=1000, cols=len(headers))
-            ws.insert_row(headers, 1)
-            return ws
-
-    def ensure_headers(self, tab: str, headers: List[str]):
-        self._get_or_create_worksheet(tab, headers)
+    def get_sheet(self):
+        if self.sheet is None:
+            self.sheet = self.gc.open_by_key(self.sheet_id)
+        return self.sheet
 
     def get_worksheet(self, tab: str) -> gspread.Worksheet:
         headers = SHEET_TABS[tab]
-        return self._get_or_create_worksheet(tab, headers)
+        if tab not in self._worksheets:
+            sheet = self.get_sheet()
+            try:
+                ws = sheet.worksheet(tab)
+                # Check headers
+                current_headers = ws.row_values(1)
+                if current_headers != headers:
+                    ws.delete_rows(1)
+                    ws.insert_row(headers, 1)
+            except gspread.WorksheetNotFound:
+                ws = sheet.add_worksheet(title=tab, rows=1000, cols=len(headers))
+                ws.insert_row(headers, 1)
+            self._worksheets[tab] = ws
+        return self._worksheets[tab]
 
     # --- CRUD for Players ---
     def get_all_players(self):
@@ -165,4 +165,7 @@ class GoogleSheetsManager:
     def log_event(self, log_data):
         ws = self.get_worksheet('Logs')
         values = [log_data.get(key, '') for key in SHEET_TABS['Logs']]
-        ws.append_row(values) 
+        ws.append_row(values)
+
+    def ensure_headers(self, tab: str, headers: list):
+        self.get_worksheet(tab) 
