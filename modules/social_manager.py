@@ -1,6 +1,6 @@
 """
 Social Manager Module
-Handles social features like friends, chat, and player interactions
+Handles friends, chat, and social features (per-player)
 """
 
 import time
@@ -8,7 +8,7 @@ from typing import Dict, List, Optional
 
 class SocialManager:
     def __init__(self):
-        self.friends = {}  # Store friend relationships
+        self.friends: Dict[str, List[Dict]] = {}
         self.friend_requests = {}  # Store pending friend requests
         self.chat_messages = {}  # Store chat messages
         self.player_status = {}  # Store player online status
@@ -159,18 +159,7 @@ class SocialManager:
 
     def get_friend_list(self, player_id: str) -> List[Dict]:
         """Get player's friend list with online status"""
-        if player_id not in self.friends:
-            return []
-        
-        friends = []
-        for friend_id in self.friends[player_id]:
-            friends.append({
-                'player_id': friend_id,
-                'online': self._is_online(friend_id),
-                'last_seen': self.last_activity.get(friend_id, 0)
-            })
-        
-        return friends
+        return self.friends.get(player_id, [])
 
     def get_friend_requests(self, player_id: str) -> List[Dict]:
         """Get pending friend requests"""
@@ -215,4 +204,12 @@ class SocialManager:
             return True
         
         time_since_last = time.time() - self.last_activity[player_id]
-        return time_since_last >= self.chat_settings['message_cooldown'] 
+        return time_since_last >= self.chat_settings['message_cooldown']
+
+    def add_friend(self, player_id: str, friend_id: str) -> bool:
+        if player_id not in self.friends:
+            self.friends[player_id] = []
+        if any(f['player_id'] == friend_id for f in self.friends[player_id]):
+            return False
+        self.friends[player_id].append({'player_id': friend_id, 'online': False, 'last_seen': time.time()})
+        return True 

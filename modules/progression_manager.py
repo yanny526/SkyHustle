@@ -1,6 +1,6 @@
 """
-Progression Manager for SkyHustle 2
-Handles player progression, levels, experience, and rewards
+Progression Manager Module
+Handles player progression, skills, and prestige (per-player)
 """
 
 from typing import Dict, List, Optional
@@ -9,6 +9,7 @@ import os
 
 class ProgressionManager:
     def __init__(self):
+        self.progression: Dict[str, Dict] = {}
         self.levels = {
             1: {"xp_required": 0, "rewards": {"coins": 100}},
             2: {"xp_required": 100, "rewards": {"coins": 200}},
@@ -41,6 +42,12 @@ class ProgressionManager:
         """Save player progression data to file"""
         with open(self.player_data_file, 'w') as f:
             json.dump(self.player_data, f, indent=4)
+
+    def get_player_progression(self, player_id: str) -> Dict:
+        return self.progression.get(player_id, {})
+
+    def set_player_progression(self, player_id: str, data: Dict):
+        self.progression[player_id] = data
 
     def get_player_level(self, player_id: int) -> int:
         """Get player's current level"""

@@ -67,10 +67,10 @@ class ShopManager:
         if not item:
             return {'success': False, 'message': 'Item not found.'}
         # Check if player can afford
-        if not self.resource_manager.can_afford(player_id, item['cost']):
+        if not self.resource_manager.can_afford(item['cost']):
             return {'success': False, 'message': 'Not enough resources.'}
         # Spend resources
-        self.resource_manager.spend_resources(player_id, item['cost'])
+        self.resource_manager.spend_resources(item['cost'])
         # Add item to bag
         self.bag_manager.add_item(player_id, item_id, item['type'], item['quantity'])
         # Log transaction

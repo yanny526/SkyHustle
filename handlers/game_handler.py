@@ -213,11 +213,11 @@ class GameHandler:
         """Update alliance wars"""
         try:
             current_time = time.time()
-            active_wars = self.alliance_war_manager.get_active_wars()
+            active_wars = self.alliance_manager.get_active_wars()
             
             for war in active_wars:
                 if current_time >= war['end_time']:
-                    self.alliance_war_manager.end_war(war['id'])
+                    self.alliance_manager.end_war(war['id'])
                     
         except Exception as e:
             logger.error(f"Error in _update_alliance_wars: {e}", exc_info=True)
