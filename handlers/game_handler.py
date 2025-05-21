@@ -262,42 +262,42 @@ class GameHandler:
             message = (
                 "*SkyHustle 2 Commands*\n\n"
                 "*Basic Commands:*\n"
-                "/start - Start the game\n"
-                "/help - Show this help message\n"
-                "/status - Check your base status\n"
-                "/profile - View your profile\n"
-                "/name <name> - Set your player name\n"
-                "/achievements - View your achievements\n"
-                "/leaderboard - View the top players\n"
-                "/tutorial - View your tutorial progress\n"
+                "`/start` \\- Start the game\n"
+                "`/help` \\- Show this help message\n"
+                "`/status` \\- Check your base status\n"
+                "`/profile` \\- View your profile\n"
+                "`/name <name>` \\- Set your player name\n"
+                "`/achievements` \\- View your achievements\n"
+                "`/leaderboard` \\- View the top players\n"
+                "`/tutorial` \\- View your tutorial progress\n"
                 "\n*Gameplay:*\n"
-                "/build - Manage buildings\n"
-                "/train - Train military units\n"
-                "/research - Research technologies\n"
-                "/attack - Attack other players\n"
-                "/quest - Complete quests\n"
-                "/market - Trade resources\n"
+                "`/build` \\- Manage buildings\n"
+                "`/train` \\- Train military units\n"
+                "`/research` \\- Research technologies\n"
+                "`/attack` \\- Attack other players\n"
+                "`/quest` \\- Complete quests\n"
+                "`/market` \\- Trade resources\n"
                 "\n*Alliance:*\n"
-                "/create_alliance - Create an alliance\n"
-                "/join_alliance - Join an alliance\n"
-                "/alliance_chat - Alliance chat\n"
-                "/alliance_donate - Donate to your alliance\n"
-                "/alliance_war - Declare alliance war\n"
-                "/alliance_manage - Manage your alliance\n"
-                "/alliance_list - List alliances\n"
-                "/alliance_info - Alliance info\n"
-                "/alliance_promote - Promote a member\n"
-                "/alliance_demote - Demote a member\n"
-                "/alliance_transfer - Transfer leadership\n"
-                "/alliance_requests - View join requests\n"
-                "/alliance_war_rankings - War rankings\n"
-                "/alliance_benefits - Alliance benefits\n"
-                "/alliance_perks - Alliance perks\n"
-                "/alliance_resources - Alliance resources\n"
-                "/alliance_research - Alliance research\n"
-                "/alliance_diplomacy - Alliance diplomacy\n"
+                "`/create\\_alliance` \\- Create an alliance\n"
+                "`/join\\_alliance` \\- Join an alliance\n"
+                "`/alliance\\_chat` \\- Alliance chat\n"
+                "`/alliance\\_donate` \\- Donate to your alliance\n"
+                "`/alliance\\_war` \\- Declare alliance war\n"
+                "`/alliance\\_manage` \\- Manage your alliance\n"
+                "`/alliance\\_list` \\- List alliances\n"
+                "`/alliance\\_info` \\- Alliance info\n"
+                "`/alliance\\_promote` \\- Promote a member\n"
+                "`/alliance\\_demote` \\- Demote a member\n"
+                "`/alliance\\_transfer` \\- Transfer leadership\n"
+                "`/alliance\\_requests` \\- View join requests\n"
+                "`/alliance\\_war\\_rankings` \\- War rankings\n"
+                "`/alliance\\_benefits` \\- Alliance benefits\n"
+                "`/alliance\\_perks` \\- Alliance perks\n"
+                "`/alliance\\_resources` \\- Alliance resources\n"
+                "`/alliance\\_research` \\- Alliance research\n"
+                "`/alliance\\_diplomacy` \\- Alliance diplomacy"
             )
-            await update.message.reply_text(message, parse_mode='Markdown')
+            await update.message.reply_text(message, parse_mode='MarkdownV2')
         except Exception as e:
             logger.error(f"Error in handle_help: {e}", exc_info=True)
             await self._handle_error(update, e)
@@ -310,12 +310,18 @@ class GameHandler:
             if not player:
                 await update.message.reply_text("❌ Player not found. Use /start to begin.")
                 return
+            
+            # Ensure resources is a dictionary
             resources = player.get('resources', {})
+            if not isinstance(resources, dict):
+                resources = {}
+            
             buildings = player.get('buildings', {})
             army = player.get('army', {})
             hustlecoins = player.get('hustlecoins', 0)
             level = player.get('level', 1)
             xp = player.get('xp', 0)
+            
             message = (
                 f"*Base Status*\n\n"
                 f"Level: {level} | XP: {xp}\n"
