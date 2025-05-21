@@ -102,7 +102,7 @@ class BuildingManager:
                 return True
         return False
 
-    def get_all_buildings(self) -> Dict[str, Dict]:
+    def get_all_buildings(self, player_id: str) -> Dict[str, Dict]:
         """Get information about all buildings"""
         return {
             building_id: {

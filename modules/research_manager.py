@@ -22,7 +22,7 @@ class ResearchManager:
                     'info': item
                 }
     
-    def get_all_research(self) -> Dict:
+    def get_all_research(self, player_id: str) -> Dict:
         """Get all research information"""
         return self.research
     

@@ -228,21 +228,28 @@ class GameHandler:
             all_players = [p['player_id'] for p in self.player_manager.get_all_players()]
             # Exclude self
             all_players = [pid for pid in all_players if pid != player_id]
-            # Exclude same alliance members
-            player_alliance = self.alliance_manager.members.get(player_id)
-            if player_alliance:
-                same_alliance = set(self.alliance_manager.alliances[player_alliance]['members'])
-                all_players = [pid for pid in all_players if pid not in same_alliance]
+            
+            # Get player's alliance
+            player_alliance = self.alliance_manager.get_player_alliance(player_id)
+            if player_alliance and player_alliance.get('success'):
+                # Exclude same alliance members
+                alliance_members = player_alliance['alliance']['members']
+                all_players = [pid for pid in all_players if pid not in alliance_members]
+            
             # Only include active players (logged in within last 7 days)
             now = time.time()
             active_players = [pid for pid in all_players if self.player_manager.get_player(pid) and self.player_manager.get_player(pid).get('last_login', 0) > now - 7*86400]
+            
             # If not enough, fallback to all_players
             candidates = active_players if len(active_players) >= 5 else all_players
+            
             # Sort by level difference (closest to player)
             my_level = self.player_manager.get_player(player_id)['level'] if self.player_manager.get_player(player_id) else 1
             candidates.sort(key=lambda pid: abs(self.player_manager.get_player(pid)['level'] - my_level) if self.player_manager.get_player(pid) else 100)
+            
             # Pick up to 5
             suggestions = candidates[:5]
+            
             # Return as list of dicts with name and level
             return [
                 {
@@ -512,44 +519,79 @@ class GameHandler:
             logger.error(f"Error in handle_attack: {e}", exc_info=True)
             await self._handle_error(update, e)
 
-    async def handle_quest(self, update, context):
-        """Show and manage quests."""
+    async def handle_quest(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle quest command"""
         try:
             player_id = str(update.effective_user.id)
-            quests = self.quest_manager.get_player_quests(player_id)
-            if not quests:
-                await update.message.reply_text("No active quests. Use /quest to get new quests!")
+            quest_result = self.quest_manager.get_player_quests(player_id)
+            
+            if not quest_result.get('success'):
+                await update.message.reply_text("You don't have any quests yet. Check back later!")
                 return
-            message = "*Your Quests:*\n\n"
-            for q in quests:
-                name = q.get('name', 'Quest')
-                desc = q.get('description', '')
-                progress = q.get('progress', 0)
-                goal = q.get('goal', 1)
-                status = "✅" if q.get('completed') else f"{progress}/{goal}"
-                message += f"{name}: {desc} [{status}]\n"
-            await update.message.reply_text(message, parse_mode='Markdown')
+                
+            active_quests = quest_result.get('active_quests', [])
+            completed_quests = quest_result.get('completed_quests', [])
+            
+            if not active_quests and not completed_quests:
+                await update.message.reply_text("You don't have any quests yet. Check back later!")
+                return
+                
+            message = "🎯 *Your Quests*\n\n"
+            
+            if active_quests:
+                message += "*Active Quests:*\n"
+                for quest in active_quests:
+                    progress = (quest['progress'] / quest['target']) * 100
+                    message += f"• {quest['name']}\n"
+                    message += f"  {quest['description']}\n"
+                    message += f"  Progress: {quest['progress']}/{quest['target']} ({progress:.1f}%)\n"
+                    message += f"  Reward: {', '.join(f'{k}: {v}' for k, v in quest['reward'].items())}\n\n"
+            
+            if completed_quests:
+                message += "\n*Completed Quests:*\n"
+                for quest in completed_quests[-5:]:  # Show last 5 completed quests
+                    message += f"• {quest['name']}\n"
+                    message += f"  Reward: {', '.join(f'{k}: {v}' for k, v in quest['reward'].items())}\n\n"
+            
+            await update.message.reply_text(message, parse_mode='MarkdownV2')
+            
         except Exception as e:
             logger.error(f"Error in handle_quest: {e}", exc_info=True)
-            await self._handle_error(update, e)
+            await update.message.reply_text("Sorry, there was an error processing your quests. Please try again later.")
 
-    async def handle_market(self, update, context):
-        """Show and manage market/trading."""
+    async def handle_market(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle market command"""
         try:
-            listings = self.market_manager.get_market_listings()
-            if not listings:
-                await update.message.reply_text("No market listings available.")
+            player_id = str(update.effective_user.id)
+            market_result = self.market_manager.get_market_listings()
+            
+            if not market_result.get('success'):
+                await update.message.reply_text("The market is currently unavailable. Please try again later!")
                 return
-            message = "*Market Listings:*\n\n"
-            for l in listings:
-                seller = l.get('seller', 'Unknown')
-                offer = l.get('offer', {})
-                price = l.get('price', {})
-                message += f"Seller: {seller}\nOffer: {offer}\nPrice: {price}\n---\n"
-            await update.message.reply_text(message, parse_mode='Markdown')
+                
+            listings = market_result.get('listings', [])
+            
+            if not listings:
+                await update.message.reply_text("There are no active listings in the market right now.")
+                return
+                
+            message = "🏪 *Market Listings*\n\n"
+            
+            for listing in listings:
+                seller_name = self.player_manager.get_player_name(listing['seller_id'])
+                message += f"*Listing ID:* `{listing['id']}`\n"
+                message += f"*Seller:* {seller_name}\n"
+                message += f"*Resources:* {', '.join(f'{k}: {v}' for k, v in listing['resources'].items())}\n"
+                message += f"*Price:* {', '.join(f'{k}: {v}' for k, v in listing['price'].items())}\n"
+                message += f"*Expires:* {time.strftime('%Y-%m-%d %H:%M', time.localtime(listing['expires_at']))}\n\n"
+            
+            message += "\nTo buy a listing, use /buy <listing_id>"
+            
+            await update.message.reply_text(message, parse_mode='MarkdownV2')
+            
         except Exception as e:
             logger.error(f"Error in handle_market: {e}", exc_info=True)
-            await self._handle_error(update, e)
+            await update.message.reply_text("Sorry, there was an error accessing the market. Please try again later.")
 
     async def handle_callback(self, update, context):
         await update.callback_query.answer("Callback: (This is a placeholder. Implement your callback logic here.)")

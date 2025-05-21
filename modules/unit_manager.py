@@ -20,7 +20,7 @@ class UnitManager:
                 'info': unit
             }
     
-    def get_all_units(self) -> Dict:
+    def get_all_units(self, player_id: str) -> Dict:
         """Get all unit information"""
         return self.units
     
