@@ -20,14 +20,62 @@ async def shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
     player_id = str(update.effective_user.id)
     items = shop_manager.get_shop_items()
     coins = player_manager.get_hustlecoins(player_id)
-    message = f"🛒 *Regular Shop*\n\nYour HustleCoins: {coins}\n\n"
-    keyboard = []
+    
+    # Enhanced shop message with better formatting
+    message = (
+        "🛒 *SkyHustle Shop*\n\n"
+        f"💎 *Your Balance:* {coins} HustleCoins\n\n"
+    )
+    
+    # Group items by category
+    categories = {}
     for item in items:
-        cost_str = " | ".join(f"{k}: {v}" for k, v in item['cost'].items())
-        message += f"*{item['name']}*\n{item['description']}\nCost: {cost_str}\n\n"
-        keyboard.append([InlineKeyboardButton(f"Buy {item['name']}", callback_data=f"shop_buy_{item['item_id']}")])
+        category = item.get('category', 'Other')
+        if category not in categories:
+            categories[category] = []
+        categories[category].append(item)
+    
+    # Display items by category
+    keyboard = []
+    for category, category_items in categories.items():
+        message += f"*{category}*\n"
+        for item in category_items:
+            # Format costs with emojis
+            cost_str = " | ".join(f"{self._get_resource_emoji(k)} {v}" for k, v in item['cost'].items())
+            message += (
+                f"└ *{item['name']}*\n"
+                f"  {item['description']}\n"
+                f"  💰 Cost: {cost_str}\n\n"
+            )
+            keyboard.append([
+                InlineKeyboardButton(
+                    f"Buy {item['name']}",
+                    callback_data=f"shop_buy_{item['item_id']}"
+                )
+            ])
+    
+    # Add navigation buttons
+    keyboard.append([
+        InlineKeyboardButton("🔄 Refresh", callback_data="shop_refresh"),
+        InlineKeyboardButton("🔙 Back", callback_data="status")
+    ])
+    
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text(message, reply_markup=reply_markup, parse_mode='Markdown')
+    await update.message.reply_text(message, reply_markup=reply_markup, parse_mode='MarkdownV2')
+
+def _get_resource_emoji(self, resource: str) -> str:
+    """Get emoji for resource type"""
+    emojis = {
+        'gold': '💰',
+        'wood': '🪵',
+        'stone': '🪨',
+        'food': '🍖',
+        'hustlecoins': '💎',
+        'gems': '💎',
+        'energy': '⚡',
+        'experience': '✨'
+    }
+    return emojis.get(resource, '❓')
 
 async def blackmarket(update: Update, context: ContextTypes.DEFAULT_TYPE):
     player_id = str(update.effective_user.id)
