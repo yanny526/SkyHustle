@@ -16,7 +16,7 @@ class PlayerManager:
         self.headers = [
             'player_id', 'name', 'level', 'xp', 'resources', 'army', 'alliance', 'hustlecoins', 'achievements', 'last_active', 'bag'
         ]
-        self.sheets.ensure_headers(self.headers)
+        self.sheets.ensure_headers('Players', self.headers)
 
     def get_player(self, player_id):
         return self.sheets.get_player(player_id)
