@@ -22,6 +22,7 @@ from modules.progression_manager import ProgressionManager
 from handlers.shop_commands import shop, blackmarket, bag, shop_callback, blackmarket_callback, bag_callback
 from handlers.premium_commands import buy, buy_callback, successful_payment
 from handlers.admin_handler import AdminHandler
+from telegram import Update
 
 # Load environment variables
 load_dotenv()
