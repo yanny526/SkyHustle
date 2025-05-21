@@ -321,11 +321,41 @@ class GameHandler:
             
             # Ensure resources is a dictionary
             resources = player.get('resources', {})
-            if not isinstance(resources, dict):
+            if isinstance(resources, str):
+                import json
+                try:
+                    resources = json.loads(resources)
+                    if not isinstance(resources, dict):
+                        resources = {}
+                except Exception:
+                    resources = {}
+            elif not isinstance(resources, dict):
                 resources = {}
             
             buildings = player.get('buildings', {})
+            if isinstance(buildings, str):
+                import json
+                try:
+                    buildings = json.loads(buildings)
+                    if not isinstance(buildings, dict):
+                        buildings = {}
+                except Exception:
+                    buildings = {}
+            elif not isinstance(buildings, dict):
+                buildings = {}
+            
             army = player.get('army', {})
+            if isinstance(army, str):
+                import json
+                try:
+                    army = json.loads(army)
+                    if not isinstance(army, dict):
+                        army = {}
+                except Exception:
+                    army = {}
+            elif not isinstance(army, dict):
+                army = {}
+            
             hustlecoins = player.get('hustlecoins', 0)
             level = player.get('level', 1)
             xp = player.get('xp', 0)
@@ -449,6 +479,16 @@ class GameHandler:
         try:
             player_id = str(update.effective_user.id)
             buildings = self.building_manager.get_all_buildings(player_id)
+            if isinstance(buildings, str):
+                import json
+                try:
+                    buildings = json.loads(buildings)
+                    if not isinstance(buildings, dict):
+                        buildings = {}
+                except Exception:
+                    buildings = {}
+            elif not isinstance(buildings, dict):
+                buildings = {}
             if not buildings:
                 await update.message.reply_text("You have no buildings yet. Use /build to construct your first building!")
                 return
@@ -470,6 +510,16 @@ class GameHandler:
         try:
             player_id = str(update.effective_user.id)
             units = self.unit_manager.get_all_units(player_id)
+            if isinstance(units, str):
+                import json
+                try:
+                    units = json.loads(units)
+                    if not isinstance(units, dict):
+                        units = {}
+                except Exception:
+                    units = {}
+            elif not isinstance(units, dict):
+                units = {}
             if not units:
                 await update.message.reply_text("You have no units yet. Use /train to train your first army!")
                 return
@@ -489,6 +539,16 @@ class GameHandler:
         try:
             player_id = str(update.effective_user.id)
             researches = self.research_manager.get_all_research(player_id)
+            if isinstance(researches, str):
+                import json
+                try:
+                    researches = json.loads(researches)
+                    if not isinstance(researches, dict):
+                        researches = {}
+                except Exception:
+                    researches = {}
+            elif not isinstance(researches, dict):
+                researches = {}
             if not researches:
                 await update.message.reply_text("No research started yet. Use /research to begin!")
                 return
@@ -650,6 +710,16 @@ class GameHandler:
             player_id = str(update.effective_user.id)
             player = self.player_manager.get_player(player_id)
             skills = player.get('skills', {}) if player else {}
+            if isinstance(skills, str):
+                import json
+                try:
+                    skills = json.loads(skills)
+                    if not isinstance(skills, dict):
+                        skills = {}
+                except Exception:
+                    skills = {}
+            elif not isinstance(skills, dict):
+                skills = {}
             if not skills:
                 await update.message.reply_text("No skills found. Unlock skills as you progress!")
                 return
@@ -930,6 +1000,16 @@ class GameHandler:
         try:
             player_id = str(update.effective_user.id)
             resources = self.alliance_manager.get_alliance_resources(player_id)
+            if isinstance(resources, str):
+                import json
+                try:
+                    resources = json.loads(resources)
+                    if not isinstance(resources, dict):
+                        resources = {}
+                except Exception:
+                    resources = {}
+            elif not isinstance(resources, dict):
+                resources = {}
             if not resources:
                 await update.message.reply_text("No alliance resources found.")
                 return
