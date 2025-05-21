@@ -127,10 +127,10 @@ class GameHandler:
             self.player_manager.update_last_login(player_id)
             current_step = self.tutorial_manager.get_current_step(player_id)
             message = (
-                "🎉 *Welcome to* _SkyHustle 2_! 🎮\n\n"
-                "*Your adventure begins now!*\n"
-                "Use /help or tap the button below to see what you can do!\n\n"
-                "🔥 _Tip: Invite friends for special rewards!_"
+                "🎉 *Welcome to* _SkyHustle 2_\\! 🎮\n\n"
+                "*Your adventure begins now\\!*\n"
+                "Use /help or tap the button below to see what you can do\\!\n\n"
+                "🔥 _Tip: Invite friends for special rewards\\!_"
             )
             if current_step:
                 message += f"\n\n📚 *Tutorial Step {current_step['step']}*\n_{current_step['description']}_"
@@ -635,12 +635,12 @@ class GameHandler:
             elif not isinstance(skills, dict):
                 skills = {}
             if not skills:
-                await update.message.reply_text("No skills found. Unlock skills as you progress!")
+                await update.message.reply_text("No skills found\\. Unlock skills as you progress\\!")
                 return
             message = "*Your Skills:*\n\n"
             for skill, value in skills.items():
-                message += f"{skill}: {value}\n"
-            await update.message.reply_text(message, parse_mode='Markdown')
+                message += f"*{skill}:* {value}\n"
+            await update.message.reply_text(message, parse_mode='MarkdownV2')
         except Exception as e:
             logger.error(f"Error in handle_skills: {e}", exc_info=True)
             await self._handle_error(update, e)
