@@ -59,7 +59,7 @@ class GameHandler:
         player_id = str(update.effective_user.id)
         
         # Create player if new
-        if player_id not in self.player_manager.players:
+        if not self.player_manager.get_player(player_id):
             result = self.player_manager.create_player(player_id)
             if not result['success']:
                 await update.message.reply_text("❌ Error creating player profile!")
@@ -2409,7 +2409,7 @@ class GameHandler:
     def get_daily_attack_suggestions(self, player_id: str) -> list:
         """Suggest 5 players to attack daily (not self, not in same alliance, active recently)"""
         # Get all player IDs
-        all_players = list(self.player_manager.players.keys())
+        all_players = [p['player_id'] for p in self.player_manager.get_all_players()]
         # Exclude self
         all_players = [pid for pid in all_players if pid != player_id]
         # Exclude same alliance members
@@ -2419,12 +2419,12 @@ class GameHandler:
             all_players = [pid for pid in all_players if pid not in same_alliance]
         # Only include active players (logged in within last 7 days)
         now = time.time()
-        active_players = [pid for pid in all_players if self.player_manager.players[pid]['last_login'] > now - 7*86400]
+        active_players = [pid for pid in all_players if self.player_manager.get_player(pid) and self.player_manager.get_player(pid).get('last_login', 0) > now - 7*86400]
         # If not enough, fallback to all_players
         candidates = active_players if len(active_players) >= 5 else all_players
         # Sort by level difference (closest to player)
-        my_level = self.player_manager.players[player_id]['level']
-        candidates.sort(key=lambda pid: abs(self.player_manager.players[pid]['level'] - my_level))
+        my_level = self.player_manager.get_player(player_id)['level'] if self.player_manager.get_player(player_id) else 1
+        candidates.sort(key=lambda pid: abs(self.player_manager.get_player(pid)['level'] - my_level) if self.player_manager.get_player(pid) else 100)
         # Pick up to 5
         suggestions = candidates[:5]
         # Return as list of dicts with name and level
@@ -2432,7 +2432,7 @@ class GameHandler:
             {
                 'id': pid,
                 'name': self.player_manager.get_player_name(pid),
-                'level': self.player_manager.players[pid]['level']
+                'level': self.player_manager.get_player(pid)['level'] if self.player_manager.get_player(pid) else 1
             }
             for pid in suggestions
         ]

@@ -166,36 +166,36 @@ class PlayerManager:
     def get_leaderboard(self, limit: int = 10) -> List[Dict]:
         """Get top players by level and experience"""
         players = []
-        for player_id, data in self.players.items():
+        for player in self.get_all_players():
             players.append({
-                'id': player_id,
-                'name': self.get_player_name(player_id),
-                'level': data['level'],
-                'experience': data['experience']
+                'id': player['player_id'],
+                'name': player['name'],
+                'level': player['level'],
+                'experience': player['xp']
             })
-        
         # Sort by level (descending) and experience (descending)
         players.sort(key=lambda x: (x['level'], x['experience']), reverse=True)
         return players[:limit]
 
     def get_hustlecoins(self, player_id: str) -> int:
         """Get the number of HustleCoins a player has"""
-        return self.players.get(player_id, {}).get('hustlecoins', 0)
+        player = self.get_player(player_id)
+        return player.get('hustlecoins', 0) if player else 0
 
     def add_hustlecoins(self, player_id: str, amount: int) -> bool:
         """Add HustleCoins to a player"""
-        if player_id not in self.players:
+        player = self.get_player(player_id)
+        if not player:
             return False
-        self.players[player_id]['hustlecoins'] = self.players[player_id].get('hustlecoins', 0) + amount
-        self._save_data()
+        player['hustlecoins'] = player.get('hustlecoins', 0) + amount
+        self.upsert_player(player)
         return True
 
     def spend_hustlecoins(self, player_id: str, amount: int) -> bool:
         """Spend HustleCoins if the player has enough"""
-        if player_id not in self.players:
+        player = self.get_player(player_id)
+        if not player or player.get('hustlecoins', 0) < amount:
             return False
-        if self.players[player_id].get('hustlecoins', 0) < amount:
-            return False
-        self.players[player_id]['hustlecoins'] -= amount
-        self._save_data()
+        player['hustlecoins'] -= amount
+        self.upsert_player(player)
         return True 
