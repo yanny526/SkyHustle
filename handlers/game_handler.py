@@ -255,3 +255,664 @@ class GameHandler:
         except Exception as e:
             logger.error(f"Error in get_daily_attack_suggestions: {e}", exc_info=True)
             return []
+
+    async def handle_help(self, update, context):
+        """Show help message with available commands."""
+        try:
+            message = (
+                "*SkyHustle 2 Commands*\n\n"
+                "*Basic Commands:*\n"
+                "/start - Start the game\n"
+                "/help - Show this help message\n"
+                "/status - Check your base status\n"
+                "/profile - View your profile\n"
+                "/name <name> - Set your player name\n"
+                "/achievements - View your achievements\n"
+                "/leaderboard - View the top players\n"
+                "/tutorial - View your tutorial progress\n"
+                "\n*Gameplay:*\n"
+                "/build - Manage buildings\n"
+                "/train - Train military units\n"
+                "/research - Research technologies\n"
+                "/attack - Attack other players\n"
+                "/quest - Complete quests\n"
+                "/market - Trade resources\n"
+                "\n*Alliance:*\n"
+                "/create_alliance - Create an alliance\n"
+                "/join_alliance - Join an alliance\n"
+                "/alliance_chat - Alliance chat\n"
+                "/alliance_donate - Donate to your alliance\n"
+                "/alliance_war - Declare alliance war\n"
+                "/alliance_manage - Manage your alliance\n"
+                "/alliance_list - List alliances\n"
+                "/alliance_info - Alliance info\n"
+                "/alliance_promote - Promote a member\n"
+                "/alliance_demote - Demote a member\n"
+                "/alliance_transfer - Transfer leadership\n"
+                "/alliance_requests - View join requests\n"
+                "/alliance_war_rankings - War rankings\n"
+                "/alliance_benefits - Alliance benefits\n"
+                "/alliance_perks - Alliance perks\n"
+                "/alliance_resources - Alliance resources\n"
+                "/alliance_research - Alliance research\n"
+                "/alliance_diplomacy - Alliance diplomacy\n"
+            )
+            await update.message.reply_text(message, parse_mode='Markdown')
+        except Exception as e:
+            logger.error(f"Error in handle_help: {e}", exc_info=True)
+            await self._handle_error(update, e)
+
+    async def handle_status(self, update, context):
+        """Show player status: resources, buildings, etc."""
+        try:
+            player_id = str(update.effective_user.id)
+            player = self.player_manager.get_player(player_id)
+            if not player:
+                await update.message.reply_text("❌ Player not found. Use /start to begin.")
+                return
+            resources = player.get('resources', {})
+            buildings = player.get('buildings', {})
+            army = player.get('army', {})
+            hustlecoins = player.get('hustlecoins', 0)
+            level = player.get('level', 1)
+            xp = player.get('xp', 0)
+            message = (
+                f"*Base Status*\n\n"
+                f"Level: {level} | XP: {xp}\n"
+                f"HustleCoins: {hustlecoins}\n\n"
+                f"*Resources:*\n" + "\n".join(f"{k}: {v}" for k, v in resources.items()) + "\n\n"
+                f"*Buildings:*\n" + ("\n".join(f"{k}: Level {v}" for k, v in buildings.items()) if buildings else "None") + "\n\n"
+                f"*Army:*\n" + ("\n".join(f"{k}: {v}" for k, v in army.items()) if army else "None")
+            )
+            await update.message.reply_text(message, parse_mode='Markdown')
+        except Exception as e:
+            logger.error(f"Error in handle_status: {e}", exc_info=True)
+            await self._handle_error(update, e)
+
+    async def handle_achievements(self, update, context):
+        """Show player's achievements."""
+        try:
+            player_id = str(update.effective_user.id)
+            result = self.achievement_manager.get_player_achievements(player_id)
+            if not result['success']:
+                await update.message.reply_text("❌ Could not fetch achievements.")
+                return
+            achievements = result['achievements']
+            if not achievements:
+                await update.message.reply_text("No achievements yet. Start playing to earn some!")
+                return
+            message = "*Your Achievements:*\n\n"
+            for ach in achievements:
+                status = "✅" if ach['completed'] else "❌"
+                message += f"{status} {ach['emoji']} {ach['name']}: {ach['description']}\n"
+            await update.message.reply_text(message, parse_mode='Markdown')
+        except Exception as e:
+            logger.error(f"Error in handle_achievements: {e}", exc_info=True)
+            await self._handle_error(update, e)
+
+    async def handle_profile(self, update, context):
+        """Show player profile."""
+        try:
+            player_id = str(update.effective_user.id)
+            player = self.player_manager.get_player(player_id)
+            if not player:
+                await update.message.reply_text("❌ Player not found. Use /start to begin.")
+                return
+            name = player.get('name', 'Unknown')
+            level = player.get('level', 1)
+            xp = player.get('xp', 0)
+            created = player.get('created_at', 0)
+            last_login = player.get('last_active', 0)
+            message = (
+                f"*Player Profile*\n\n"
+                f"Name: {name}\n"
+                f"Level: {level}\n"
+                f"XP: {xp}\n"
+                f"Created: {time.strftime('%Y-%m-%d', time.localtime(created)) if created else 'N/A'}\n"
+                f"Last Login: {time.strftime('%Y-%m-%d %H:%M', time.localtime(last_login)) if last_login else 'N/A'}"
+            )
+            await update.message.reply_text(message, parse_mode='Markdown')
+        except Exception as e:
+            logger.error(f"Error in handle_profile: {e}", exc_info=True)
+            await self._handle_error(update, e)
+
+    async def handle_name(self, update, context):
+        """Set or change player name."""
+        try:
+            player_id = str(update.effective_user.id)
+            if not context.args:
+                await update.message.reply_text("Please provide a name. Usage: /name <your_name>")
+                return
+            name = " ".join(context.args)
+            if not (3 <= len(name) <= 20) or not name.replace(' ', '').isalnum():
+                await update.message.reply_text("Name must be 3-20 characters, letters/numbers/spaces only.")
+                return
+            result = self.player_manager.set_player_name(player_id, name)
+            if result.get('success'):
+                await update.message.reply_text(f"✅ Your name has been set to: {name}")
+            else:
+                await update.message.reply_text(f"❌ {result.get('message', 'Could not set name.')}")
+        except Exception as e:
+            logger.error(f"Error in handle_name: {e}", exc_info=True)
+            await self._handle_error(update, e)
+
+    async def handle_leaderboard(self, update, context):
+        """Show top players by level and XP."""
+        try:
+            all_players = self.player_manager.get_all_players()
+            if not all_players:
+                await update.message.reply_text("No players found.")
+                return
+            # Sort by level, then XP
+            sorted_players = sorted(all_players, key=lambda p: (-p.get('level', 1), -p.get('xp', 0)))
+            message = "*Leaderboard*\n\n"
+            for i, p in enumerate(sorted_players[:10], 1):
+                name = p.get('name', 'Unknown')
+                level = p.get('level', 1)
+                xp = p.get('xp', 0)
+                message += f"{i}. {name} - Level {level} ({xp} XP)\n"
+            await update.message.reply_text(message, parse_mode='Markdown')
+        except Exception as e:
+            logger.error(f"Error in handle_leaderboard: {e}", exc_info=True)
+            await self._handle_error(update, e)
+
+    async def handle_tutorial(self, update, context):
+        """Show current tutorial step or guide."""
+        try:
+            player_id = str(update.effective_user.id)
+            step = self.tutorial_manager.get_current_step(player_id)
+            if not step:
+                await update.message.reply_text("You have completed the tutorial or it hasn't started yet.")
+                return
+            message = f"*Tutorial Step {step['step']}*\n{step['description']}"
+            await update.message.reply_text(message, parse_mode='Markdown')
+        except Exception as e:
+            logger.error(f"Error in handle_tutorial: {e}", exc_info=True)
+            await self._handle_error(update, e)
+
+    async def handle_build(self, update, context):
+        """Show and manage player buildings."""
+        try:
+            player_id = str(update.effective_user.id)
+            buildings = self.building_manager.get_all_buildings(player_id)
+            if not buildings:
+                await update.message.reply_text("You have no buildings yet. Use /build to construct your first building!")
+                return
+            message = "*Your Buildings:*\n\n"
+            for b_id, b in buildings.items():
+                info = b.get('info', {})
+                name = info.get('name', b_id)
+                level = b.get('level', 1)
+                max_level = info.get('max_level', '?')
+                emoji = info.get('emoji', '')
+                message += f"{emoji} {name}: Level {level}/{max_level}\n"
+            await update.message.reply_text(message, parse_mode='Markdown')
+        except Exception as e:
+            logger.error(f"Error in handle_build: {e}", exc_info=True)
+            await self._handle_error(update, e)
+
+    async def handle_train(self, update, context):
+        """Show and manage army training."""
+        try:
+            player_id = str(update.effective_user.id)
+            units = self.unit_manager.get_all_units(player_id)
+            if not units:
+                await update.message.reply_text("You have no units yet. Use /train to train your first army!")
+                return
+            message = "*Your Army:*\n\n"
+            for u_id, u in units.items():
+                name = u.get('name', u_id)
+                count = u.get('count', 0)
+                emoji = u.get('emoji', '')
+                message += f"{emoji} {name}: {count}\n"
+            await update.message.reply_text(message, parse_mode='Markdown')
+        except Exception as e:
+            logger.error(f"Error in handle_train: {e}", exc_info=True)
+            await self._handle_error(update, e)
+
+    async def handle_research(self, update, context):
+        """Show and manage research."""
+        try:
+            player_id = str(update.effective_user.id)
+            researches = self.research_manager.get_all_research(player_id)
+            if not researches:
+                await update.message.reply_text("No research started yet. Use /research to begin!")
+                return
+            message = "*Your Research:*\n\n"
+            for r_id, r in researches.items():
+                name = r.get('name', r_id)
+                level = r.get('level', 0)
+                emoji = r.get('emoji', '')
+                message += f"{emoji} {name}: Level {level}\n"
+            await update.message.reply_text(message, parse_mode='Markdown')
+        except Exception as e:
+            logger.error(f"Error in handle_research: {e}", exc_info=True)
+            await self._handle_error(update, e)
+
+    async def handle_attack(self, update, context):
+        """Initiate an attack on another player."""
+        try:
+            player_id = str(update.effective_user.id)
+            suggestions = self.get_daily_attack_suggestions(player_id)
+            if not suggestions:
+                await update.message.reply_text("No valid targets found for attack.")
+                return
+            message = "*Suggested Targets to Attack:*\n\n"
+            for s in suggestions:
+                message += f"{s['name']} (Level {s['level']})\n"
+            message += "\nUse /attack <player_id> to attack a specific player."
+            await update.message.reply_text(message, parse_mode='Markdown')
+        except Exception as e:
+            logger.error(f"Error in handle_attack: {e}", exc_info=True)
+            await self._handle_error(update, e)
+
+    async def handle_quest(self, update, context):
+        """Show and manage quests."""
+        try:
+            player_id = str(update.effective_user.id)
+            quests = self.quest_manager.get_player_quests(player_id)
+            if not quests:
+                await update.message.reply_text("No active quests. Use /quest to get new quests!")
+                return
+            message = "*Your Quests:*\n\n"
+            for q in quests:
+                name = q.get('name', 'Quest')
+                desc = q.get('description', '')
+                progress = q.get('progress', 0)
+                goal = q.get('goal', 1)
+                status = "✅" if q.get('completed') else f"{progress}/{goal}"
+                message += f"{name}: {desc} [{status}]\n"
+            await update.message.reply_text(message, parse_mode='Markdown')
+        except Exception as e:
+            logger.error(f"Error in handle_quest: {e}", exc_info=True)
+            await self._handle_error(update, e)
+
+    async def handle_market(self, update, context):
+        """Show and manage market/trading."""
+        try:
+            listings = self.market_manager.get_market_listings()
+            if not listings:
+                await update.message.reply_text("No market listings available.")
+                return
+            message = "*Market Listings:*\n\n"
+            for l in listings:
+                seller = l.get('seller', 'Unknown')
+                offer = l.get('offer', {})
+                price = l.get('price', {})
+                message += f"Seller: {seller}\nOffer: {offer}\nPrice: {price}\n---\n"
+            await update.message.reply_text(message, parse_mode='Markdown')
+        except Exception as e:
+            logger.error(f"Error in handle_market: {e}", exc_info=True)
+            await self._handle_error(update, e)
+
+    async def handle_callback(self, update, context):
+        await update.callback_query.answer("Callback: (This is a placeholder. Implement your callback logic here.)")
+
+    async def handle_friends(self, update, context):
+        """Show and manage friends."""
+        try:
+            player_id = str(update.effective_user.id)
+            friends = self.social_manager.get_friend_list(player_id)
+            if not friends:
+                await update.message.reply_text("You have no friends yet. Use /add_friend <player_id> to add one!")
+                return
+            message = "*Your Friends:*\n\n"
+            for f in friends:
+                name = f.get('player_id', 'Unknown')
+                online = "🟢" if f.get('online') else "⚪"
+                last_seen = f.get('last_seen', 0)
+                last_seen_str = time.strftime('%Y-%m-%d %H:%M', time.localtime(last_seen)) if last_seen else 'N/A'
+                message += f"{online} {name} (Last seen: {last_seen_str})\n"
+            await update.message.reply_text(message, parse_mode='Markdown')
+        except Exception as e:
+            logger.error(f"Error in handle_friends: {e}", exc_info=True)
+            await self._handle_error(update, e)
+
+    async def handle_chat(self, update, context):
+        """Show and manage chat."""
+        try:
+            player_id = str(update.effective_user.id)
+            # For simplicity, just show a placeholder
+            await update.message.reply_text("Chat feature coming soon!")
+        except Exception as e:
+            logger.error(f"Error in handle_chat: {e}", exc_info=True)
+            await self._handle_error(update, e)
+
+    async def handle_level(self, update, context):
+        """Show player's level and progress."""
+        try:
+            player_id = str(update.effective_user.id)
+            player = self.player_manager.get_player(player_id)
+            if not player:
+                await update.message.reply_text("❌ Player not found. Use /start to begin.")
+                return
+            level = player.get('level', 1)
+            xp = player.get('xp', 0)
+            message = f"Level: {level}\nXP: {xp}"
+            await update.message.reply_text(message)
+        except Exception as e:
+            logger.error(f"Error in handle_level: {e}", exc_info=True)
+            await self._handle_error(update, e)
+
+    async def handle_skills(self, update, context):
+        """Show player's skills."""
+        try:
+            player_id = str(update.effective_user.id)
+            player = self.player_manager.get_player(player_id)
+            skills = player.get('skills', {}) if player else {}
+            if not skills:
+                await update.message.reply_text("No skills found. Unlock skills as you progress!")
+                return
+            message = "*Your Skills:*\n\n"
+            for skill, value in skills.items():
+                message += f"{skill}: {value}\n"
+            await update.message.reply_text(message, parse_mode='Markdown')
+        except Exception as e:
+            logger.error(f"Error in handle_skills: {e}", exc_info=True)
+            await self._handle_error(update, e)
+
+    async def handle_prestige(self, update, context):
+        """Show or manage prestige."""
+        try:
+            player_id = str(update.effective_user.id)
+            player = self.player_manager.get_player(player_id)
+            prestige = player.get('prestige', 0) if player else 0
+            message = f"Your Prestige Level: {prestige}\n(Prestige system coming soon!)"
+            await update.message.reply_text(message)
+        except Exception as e:
+            logger.error(f"Error in handle_prestige: {e}", exc_info=True)
+            await self._handle_error(update, e)
+
+    async def handle_create_alliance(self, update, context):
+        """Create a new alliance."""
+        try:
+            player_id = str(update.effective_user.id)
+            if not context.args or len(context.args) < 2:
+                await update.message.reply_text("Usage: /create_alliance <name> <description>")
+                return
+            name = context.args[0]
+            description = " ".join(context.args[1:])
+            result = self.alliance_manager.create_alliance(player_id, name, description)
+            if result.get('success'):
+                await update.message.reply_text(f"✅ Alliance '{name}' created!")
+            else:
+                await update.message.reply_text(f"❌ {result.get('message', 'Could not create alliance.')}")
+        except Exception as e:
+            logger.error(f"Error in handle_create_alliance: {e}", exc_info=True)
+            await self._handle_error(update, e)
+
+    async def handle_join_alliance(self, update, context):
+        """Join an alliance."""
+        try:
+            player_id = str(update.effective_user.id)
+            if not context.args:
+                await update.message.reply_text("Usage: /join_alliance <alliance_id>")
+                return
+            alliance_id = context.args[0]
+            result = self.alliance_manager.join_alliance(player_id, alliance_id)
+            if result.get('success'):
+                await update.message.reply_text(f"✅ Joined alliance {alliance_id}!")
+            else:
+                await update.message.reply_text(f"❌ {result.get('message', 'Could not join alliance.')}")
+        except Exception as e:
+            logger.error(f"Error in handle_join_alliance: {e}", exc_info=True)
+            await self._handle_error(update, e)
+
+    async def handle_alliance_chat(self, update, context):
+        """Show alliance chat."""
+        try:
+            player_id = str(update.effective_user.id)
+            alliance = self.alliance_manager.get_player_alliance(player_id)
+            if not alliance:
+                await update.message.reply_text("You are not in an alliance.")
+                return
+            chat = self.alliance_manager.get_chat_history(alliance['alliance_id'])
+            if not chat:
+                await update.message.reply_text("No messages in alliance chat yet.")
+                return
+            message = "*Alliance Chat:*\n" + "\n".join(f"{msg['player_id']}: {msg['message']}" for msg in chat)
+            await update.message.reply_text(message, parse_mode='Markdown')
+        except Exception as e:
+            logger.error(f"Error in handle_alliance_chat: {e}", exc_info=True)
+            await self._handle_error(update, e)
+
+    async def handle_alliance_donate(self, update, context):
+        """Donate resources to alliance."""
+        try:
+            player_id = str(update.effective_user.id)
+            if not context.args or len(context.args) < 2:
+                await update.message.reply_text("Usage: /alliance_donate <alliance_id> <resource>:<amount> ...")
+                return
+            alliance_id = context.args[0]
+            resources = {}
+            for arg in context.args[1:]:
+                if ':' in arg:
+                    res, amt = arg.split(':', 1)
+                    try:
+                        resources[res] = int(amt)
+                    except ValueError:
+                        continue
+            result = self.alliance_manager.donate_resources(player_id, alliance_id, resources)
+            if result.get('success'):
+                await update.message.reply_text(f"✅ Donated to alliance {alliance_id}!")
+            else:
+                await update.message.reply_text(f"❌ {result.get('message', 'Could not donate resources.')}")
+        except Exception as e:
+            logger.error(f"Error in handle_alliance_donate: {e}", exc_info=True)
+            await self._handle_error(update, e)
+
+    async def handle_alliance_war(self, update, context):
+        """Declare war on another alliance."""
+        try:
+            player_id = str(update.effective_user.id)
+            if not context.args:
+                await update.message.reply_text("Usage: /alliance_war <target_alliance_id>")
+                return
+            target_alliance_id = context.args[0]
+            result = self.alliance_manager.declare_war(player_id, target_alliance_id)
+            if result.get('success'):
+                await update.message.reply_text(f"✅ War declared on alliance {target_alliance_id}!")
+            else:
+                await update.message.reply_text(f"❌ {result.get('message', 'Could not declare war.')}")
+        except Exception as e:
+            logger.error(f"Error in handle_alliance_war: {e}", exc_info=True)
+            await self._handle_error(update, e)
+
+    async def handle_alliance_manage(self, update, context):
+        """Show alliance management options."""
+        try:
+            player_id = str(update.effective_user.id)
+            alliance = self.alliance_manager.get_player_alliance(player_id)
+            if not alliance:
+                await update.message.reply_text("You are not in an alliance.")
+                return
+            message = f"*Alliance Management for {alliance['name']}*\n\n(Management features coming soon!)"
+            await update.message.reply_text(message, parse_mode='Markdown')
+        except Exception as e:
+            logger.error(f"Error in handle_alliance_manage: {e}", exc_info=True)
+            await self._handle_error(update, e)
+
+    async def handle_alliance_list(self, update, context):
+        """List all alliances."""
+        try:
+            alliances = self.alliance_manager.get_all_alliances()
+            if not alliances:
+                await update.message.reply_text("No alliances found.")
+                return
+            message = "*Alliances:*\n" + "\n".join(f"{a['name']} (ID: {a['alliance_id']})" for a in alliances)
+            await update.message.reply_text(message, parse_mode='Markdown')
+        except Exception as e:
+            logger.error(f"Error in handle_alliance_list: {e}", exc_info=True)
+            await self._handle_error(update, e)
+
+    async def handle_alliance_info(self, update, context):
+        """Show info about an alliance."""
+        try:
+            if not context.args:
+                await update.message.reply_text("Usage: /alliance_info <alliance_id>")
+                return
+            alliance_id = context.args[0]
+            alliance = self.alliance_manager.get_alliance(alliance_id)
+            if not alliance:
+                await update.message.reply_text("Alliance not found.")
+                return
+            message = (
+                f"*Alliance Info:*\n"
+                f"Name: {alliance['name']}\n"
+                f"Level: {alliance.get('level', 1)}\n"
+                f"Leader: {alliance.get('leader', 'Unknown')}\n"
+                f"Members: {alliance.get('members', [])}\n"
+                f"Description: {alliance.get('description', '')}"
+            )
+            await update.message.reply_text(message, parse_mode='Markdown')
+        except Exception as e:
+            logger.error(f"Error in handle_alliance_info: {e}", exc_info=True)
+            await self._handle_error(update, e)
+
+    async def handle_alliance_promote(self, update, context):
+        """Promote a member in the alliance."""
+        try:
+            player_id = str(update.effective_user.id)
+            if not context.args:
+                await update.message.reply_text("Usage: /alliance_promote <member_id>")
+                return
+            member_id = context.args[0]
+            result = self.alliance_manager.promote_member(player_id, member_id)
+            if result.get('success'):
+                await update.message.reply_text(f"✅ Promoted member {member_id}!")
+            else:
+                await update.message.reply_text(f"❌ {result.get('message', 'Could not promote member.')}")
+        except Exception as e:
+            logger.error(f"Error in handle_alliance_promote: {e}", exc_info=True)
+            await self._handle_error(update, e)
+
+    async def handle_alliance_demote(self, update, context):
+        """Demote a member in the alliance."""
+        try:
+            player_id = str(update.effective_user.id)
+            if not context.args:
+                await update.message.reply_text("Usage: /alliance_demote <member_id>")
+                return
+            member_id = context.args[0]
+            result = self.alliance_manager.demote_member(player_id, member_id)
+            if result.get('success'):
+                await update.message.reply_text(f"✅ Demoted member {member_id}!")
+            else:
+                await update.message.reply_text(f"❌ {result.get('message', 'Could not demote member.')}")
+        except Exception as e:
+            logger.error(f"Error in handle_alliance_demote: {e}", exc_info=True)
+            await self._handle_error(update, e)
+
+    async def handle_alliance_transfer(self, update, context):
+        """Transfer alliance leadership."""
+        try:
+            player_id = str(update.effective_user.id)
+            if not context.args:
+                await update.message.reply_text("Usage: /alliance_transfer <new_leader_id>")
+                return
+            new_leader_id = context.args[0]
+            result = self.alliance_manager.transfer_leadership(player_id, new_leader_id)
+            if result.get('success'):
+                await update.message.reply_text(f"✅ Leadership transferred to {new_leader_id}!")
+            else:
+                await update.message.reply_text(f"❌ {result.get('message', 'Could not transfer leadership.')}")
+        except Exception as e:
+            logger.error(f"Error in handle_alliance_transfer: {e}", exc_info=True)
+            await self._handle_error(update, e)
+
+    async def handle_alliance_requests(self, update, context):
+        """Show join requests for the alliance."""
+        try:
+            player_id = str(update.effective_user.id)
+            requests = self.alliance_manager.get_join_requests(player_id)
+            if not requests:
+                await update.message.reply_text("No join requests found.")
+                return
+            message = "*Join Requests:*\n" + "\n".join(f"{r['player_id']}" for r in requests)
+            await update.message.reply_text(message, parse_mode='Markdown')
+        except Exception as e:
+            logger.error(f"Error in handle_alliance_requests: {e}", exc_info=True)
+            await self._handle_error(update, e)
+
+    async def handle_alliance_war_rankings(self, update, context):
+        """Show alliance war rankings."""
+        try:
+            rankings = self.alliance_manager.get_alliance_rankings()
+            if not rankings:
+                await update.message.reply_text("No alliance war rankings found.")
+                return
+            message = "*Alliance War Rankings:*\n" + "\n".join(f"{i+1}. {r['name']} (Level {r.get('level', 1)})" for i, r in enumerate(rankings))
+            await update.message.reply_text(message, parse_mode='Markdown')
+        except Exception as e:
+            logger.error(f"Error in handle_alliance_war_rankings: {e}", exc_info=True)
+            await self._handle_error(update, e)
+
+    async def handle_alliance_benefits(self, update, context):
+        """Show alliance benefits."""
+        try:
+            player_id = str(update.effective_user.id)
+            benefits = self.alliance_manager.get_alliance_benefits(player_id)
+            if not benefits:
+                await update.message.reply_text("No alliance benefits found.")
+                return
+            message = "*Alliance Benefits:*\n" + "\n".join(f"{b['name']}: {b['description']}" for b in benefits)
+            await update.message.reply_text(message, parse_mode='Markdown')
+        except Exception as e:
+            logger.error(f"Error in handle_alliance_benefits: {e}", exc_info=True)
+            await self._handle_error(update, e)
+
+    async def handle_alliance_perks(self, update, context):
+        """Show alliance perks."""
+        try:
+            player_id = str(update.effective_user.id)
+            perks = self.alliance_manager.get_alliance_perks(player_id)
+            if not perks:
+                await update.message.reply_text("No alliance perks found.")
+                return
+            message = "*Alliance Perks:*\n" + "\n".join(f"{p['name']}: {p['description']}" for p in perks)
+            await update.message.reply_text(message, parse_mode='Markdown')
+        except Exception as e:
+            logger.error(f"Error in handle_alliance_perks: {e}", exc_info=True)
+            await self._handle_error(update, e)
+
+    async def handle_alliance_resources(self, update, context):
+        """Show alliance resources."""
+        try:
+            player_id = str(update.effective_user.id)
+            resources = self.alliance_manager.get_alliance_resources(player_id)
+            if not resources:
+                await update.message.reply_text("No alliance resources found.")
+                return
+            message = "*Alliance Resources:*\n" + "\n".join(f"{k}: {v}" for k, v in resources.items())
+            await update.message.reply_text(message, parse_mode='Markdown')
+        except Exception as e:
+            logger.error(f"Error in handle_alliance_resources: {e}", exc_info=True)
+            await self._handle_error(update, e)
+
+    async def handle_alliance_research(self, update, context):
+        """Show alliance research."""
+        try:
+            player_id = str(update.effective_user.id)
+            research = self.alliance_manager.get_alliance_research(player_id)
+            if not research:
+                await update.message.reply_text("No alliance research found.")
+                return
+            message = "*Alliance Research:*\n" + "\n".join(f"{r['name']}: Level {r['level']}" for r in research)
+            await update.message.reply_text(message, parse_mode='Markdown')
+        except Exception as e:
+            logger.error(f"Error in handle_alliance_research: {e}", exc_info=True)
+            await self._handle_error(update, e)
+
+    async def handle_alliance_diplomacy(self, update, context):
+        """Show alliance diplomacy status."""
+        try:
+            player_id = str(update.effective_user.id)
+            diplomacy = self.alliance_manager.get_alliance_diplomacy(player_id)
+            if not diplomacy:
+                await update.message.reply_text("No alliance diplomacy data found.")
+                return
+            message = "*Alliance Diplomacy:*\n" + "\n".join(f"{d['target']}: {d['status']} ({d['points']} pts)" for d in diplomacy)
+            await update.message.reply_text(message, parse_mode='Markdown')
+        except Exception as e:
+            logger.error(f"Error in handle_alliance_diplomacy: {e}", exc_info=True)
+            await self._handle_error(update, e)
