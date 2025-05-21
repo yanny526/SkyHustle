@@ -111,7 +111,7 @@ class GameHandler:
                 tutorial_result = self.tutorial_manager.start_tutorial(player_id)
                 if tutorial_result['success']:
                     # Grant starter bonus
-                    self.resource_manager.add_resources(self.tutorial_manager.starter_bonuses['resources'])
+                    self.resource_manager.add_resources(player_id, self.tutorial_manager.starter_bonuses['resources'])
                     
                     # Build starter buildings
                     for building_id, level in self.tutorial_manager.starter_bonuses['buildings'].items():
@@ -162,8 +162,9 @@ class GameHandler:
             time_passed = current_time - self.last_update
             self.last_update = current_time
             
-            # Update resources
-            self.resource_manager.update_resources()
+            # Update resources for all players
+            for player in self.player_manager.get_all_players():
+                self.resource_manager.update_resources(player['player_id'])
             
             # Update building upgrades
             self.building_manager.update_upgrades()
