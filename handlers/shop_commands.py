@@ -30,6 +30,12 @@ def _get_resource_emoji(resource: str) -> str:
     }
     return emojis.get(resource, '❓')
 
+def _escape_markdown(text: str) -> str:
+    special_chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+    for char in special_chars:
+        text = text.replace(char, f'\\{char}')
+    return text
+
 async def shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
     player_id = str(update.effective_user.id)
     items = shop_manager.get_shop_items()
@@ -132,7 +138,7 @@ async def shop_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         item_id = data.split("_")[-1]
         result = shop_manager.purchase_item(player_id, item_id)
         await query.answer()
-        await query.edit_message_text(result['message'], parse_mode='MarkdownV2')
+        await query.edit_message_text(_escape_markdown(result['message']), parse_mode='MarkdownV2')
 
 async def blackmarket_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -143,7 +149,7 @@ async def blackmarket_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         result = black_market_manager.purchase_item(player_id, item_id)
         await query.answer()
         await query.edit_message_text(
-            result['message'].replace('*', '\\*').replace('_', '\\_').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!'),
+            _escape_markdown(result['message']),
             parse_mode='MarkdownV2'
         )
 
@@ -155,7 +161,7 @@ async def bag_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         item_id = data.split("_")[-1]
         if bag_manager.use_item(player_id, item_id):
             await query.answer()
-            await query.edit_message_text(f"Used {item_id}\\!", parse_mode='MarkdownV2')
+            await query.edit_message_text(_escape_markdown(f"Used {item_id}!"), parse_mode='MarkdownV2')
         else:
             await query.answer()
-            await query.edit_message_text(f"Failed to use {item_id}\\.", parse_mode='MarkdownV2') 
+            await query.edit_message_text(_escape_markdown(f"Failed to use {item_id}.") , parse_mode='MarkdownV2') 

@@ -944,7 +944,7 @@ class GameHandler:
             message = "⚔️ *Alliance War Rankings* ⚔️\n\n"
             for i, alliance in enumerate(rankings[:10], 1):
                 message += (
-                    f"{i}. *{alliance['name'].replace('*', '\\*').replace('_', '\\_').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')}*\n"
+                    f"{i}. *{self._escape_markdown(alliance['name'])}*\n"
                     f"  Wins: {alliance['wins']}\n"
                     f"  Losses: {alliance['losses']}\n"
                     f"  Points: {alliance['points']}\n\n"
@@ -1013,9 +1013,9 @@ class GameHandler:
             message = "🔬 *Alliance Research* 🔬\n\n"
             for r in research:
                 message += (
-                    f"└ *{r['name'].replace('*', '\\*').replace('_', '\\_').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')}*\n"
+                    f"└ *{self._escape_markdown(r['name'])}*\n"
                     f"  Level: {r['level']}\n"
-                    f"  {r.get('description', '').replace('*', '\\*').replace('_', '\\_').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')}\n\n"
+                    f"  {self._escape_markdown(r.get('description', ''))}\n\n"
                 )
             keyboard = [[InlineKeyboardButton("🔙 Back", callback_data="status")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
@@ -1072,9 +1072,9 @@ class GameHandler:
                 req_str = " | ".join(f"{self._get_resource_emoji(k)} {v}" for k, v in reqs.items())
                 
                 message += (
-                    f"└ {BUILDINGS[building['id']]['emoji']} *{building['name'].replace('*', '\\*').replace('_', '\\_').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')}*\n"
+                    f"└ {BUILDINGS[building['id']]['emoji']} *{self._escape_markdown(building['name'])}*\n"
                     f"  Level: {current_level}\n"
-                    f"  {building['description'].replace('*', '\\*').replace('_', '\\_').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')}\n"
+                    f"  {self._escape_markdown(building['description'])}\n"
                     f"  💰 Cost: {req_str}\n\n"
                 )
                 
@@ -1638,8 +1638,8 @@ class GameHandler:
             # Format trade result message
             message = (
                 "🔄 *Trade Result* 🔄\n\n"
-                f"👤 *Seller:* {self.player_manager.get_player_name(listing['seller_id']).replace('*', '\\*').replace('_', '\\_').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')}\n"
-                f"👤 *Buyer:* {self.player_manager.get_player_name(player_id).replace('*', '\\*').replace('_', '\\_').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')}\n\n"
+                f"👤 *Seller:* {self._escape_markdown(self.player_manager.get_player_name(listing['seller_id']))}\n"
+                f"👤 *Buyer:* {self._escape_markdown(self.player_manager.get_player_name(player_id))}\n\n"
             )
             
             if result['success']:
