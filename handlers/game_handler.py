@@ -127,10 +127,10 @@ class GameHandler:
             self.player_manager.update_last_login(player_id)
             current_step = self.tutorial_manager.get_current_step(player_id)
             message = (
-                "🎉 *Welcome to* _SkyHustle 2_\\! 🎮\n\n"
-                "*Your adventure begins now\\!*\n"
-                "Use /help or tap the button below to see what you can do\\!\n\n"
-                "🔥 _Tip: Invite friends for special rewards\\!_"
+                "🎉 *Welcome to* _SkyHustle 2_! 🎮\n\n"
+                "*Your adventure begins now!*\n"
+                "Use /help or tap the button below to see what you can do!\n\n"
+                "🔥 _Tip: Invite friends for special rewards!_"
             )
             if current_step:
                 message += f"\n\n📚 *Tutorial Step {current_step['step']}*\n_{current_step['description']}_"
@@ -272,24 +272,24 @@ class GameHandler:
         try:
             message = (
                 "❓ *Help Center* ❓\n\n"
-                "Welcome to SkyHustle 2\\! Here's how to get started:\n\n"
+                "Welcome to SkyHustle 2! Here's how to get started:\n\n"
                 "🎮 *Basic Commands:*\n"
-                "└ /start \\- Begin your adventure\n"
-                "└ /status \\- Check your current status\n"
-                "└ /help \\- Show this help message\n"
-                "└ /tutorial \\- Start the tutorial\n\n"
+                "└ /start - Begin your adventure\n"
+                "└ /status - Check your current status\n"
+                "└ /help - Show this help message\n"
+                "└ /tutorial - Start the tutorial\n\n"
                 "🏰 *Game Features:*\n"
-                "└ /build \\- Manage your buildings\n"
-                "└ /train \\- Train your army\n"
-                "└ /market \\- Trade with other players\n"
-                "└ /alliance \\- Join or manage alliances\n"
-                "└ /social \\- Connect with friends\n\n"
+                "└ /build - Manage your buildings\n"
+                "└ /train - Train your army\n"
+                "└ /market - Trade with other players\n"
+                "└ /alliance - Join or manage alliances\n"
+                "└ /social - Connect with friends\n\n"
                 "📊 *Game Systems:*\n"
-                "└ /inventory \\- Manage your items\n"
-                "└ /events \\- View active events\n"
-                "└ /leaderboard \\- Check rankings\n"
-                "└ /settings \\- Configure game settings\n\n"
-                "Need more help\\? Select a category below:"
+                "└ /inventory - Manage your items\n"
+                "└ /events - View active events\n"
+                "└ /leaderboard - Check rankings\n"
+                "└ /settings - Configure game settings\n\n"
+                "Need more help? Select a category below:"
             )
             
             keyboard = [
@@ -561,11 +561,11 @@ class GameHandler:
             player_id = str(update.effective_user.id)
             result = self.achievement_manager.get_player_achievements(player_id)
             if not result['success']:
-                await update.message.reply_text("❌ Could not fetch achievements\\.", parse_mode='MarkdownV2')
+                await update.message.reply_text("❌ Could not fetch achievements.", parse_mode='MarkdownV2')
                 return
             achievements = result['achievements']
             if not achievements:
-                await update.message.reply_text("No achievements yet\\. Start playing to earn some\\! 🥇", parse_mode='MarkdownV2')
+                await update.message.reply_text("No achievements yet. Start playing to earn some! 🥇", parse_mode='MarkdownV2')
                 return
             message = "🥇 *Your Achievements* 🥇\n\n"
             for ach in achievements:
@@ -588,7 +588,7 @@ class GameHandler:
             player_id = str(update.effective_user.id)
             friends = self.social_manager.get_friend_list(player_id)
             if not friends:
-                await update.message.reply_text("You have no friends yet\\. Use /add\\_friend <player\\_id> to add one\\! 👥", parse_mode='MarkdownV2')
+                await update.message.reply_text("You have no friends yet. Use /add_friend <player_id> to add one! 👥", parse_mode='MarkdownV2')
                 return
             message = "👥 *Your Friends* 👥\n\n"
             for f in friends:
@@ -650,7 +650,7 @@ class GameHandler:
             elif not isinstance(skills, dict):
                 skills = {}
             if not skills:
-                await update.message.reply_text("No skills found\\. Unlock skills as you progress\\!")
+                await update.message.reply_text("No skills found. Unlock skills as you progress!")
                 return
             message = "*Your Skills:*\n\n"
             for skill, value in skills.items():
@@ -677,7 +677,7 @@ class GameHandler:
         try:
             player_id = str(update.effective_user.id)
             if not context.args or len(context.args) < 2:
-                await update.message.reply_text("Usage: /create\\_alliance <name> <description> 🤝", parse_mode='MarkdownV2')
+                await update.message.reply_text("Usage: /create_alliance <name> <description> 🤝", parse_mode='MarkdownV2')
                 return
             name = context.args[0]
             description = ' '.join(context.args[1:])
@@ -757,14 +757,14 @@ class GameHandler:
         try:
             player_id = str(update.effective_user.id)
             if not context.args:
-                await update.message.reply_text("Usage: /alliance\\_war <target\\_alliance\\_id> ⚔️", parse_mode='MarkdownV2')
+                await update.message.reply_text("Usage: /alliance_war <target_alliance_id> ⚔️", parse_mode='MarkdownV2')
                 return
             target_alliance_id = context.args[0]
             result = self.alliance_manager.declare_war(player_id, target_alliance_id)
             if result.get('success'):
-                await update.message.reply_text(f"⚔️ War declared on alliance {target_alliance_id}\\! Let the battles begin\\! ⚔️", parse_mode='MarkdownV2')
+                await update.message.reply_text(f"⚔️ War declared on alliance {target_alliance_id}! Let the battles begin! ⚔️", parse_mode='MarkdownV2')
             else:
-                await update.message.reply_text(f"❌ {result.get('message', 'Could not declare war\\.')}", parse_mode='MarkdownV2')
+                await update.message.reply_text(f"❌ {result.get('message', 'Could not declare war.')}", parse_mode='MarkdownV2')
         except Exception as e:
             logger.error(f"Error in handle_alliance_war: {e}", exc_info=True)
             await self._handle_error(update, e)
@@ -774,14 +774,14 @@ class GameHandler:
         try:
             player_id = str(update.effective_user.id)
             if not context.args:
-                await update.message.reply_text("Usage: /alliance\\_peace <target\\_alliance\\_id> 🕊️", parse_mode='MarkdownV2')
+                await update.message.reply_text("Usage: /alliance_peace <target_alliance_id> 🕊️", parse_mode='MarkdownV2')
                 return
             target_alliance_id = context.args[0]
             result = self.alliance_manager.declare_peace(player_id, target_alliance_id)
             if result.get('success'):
-                await update.message.reply_text(f"🕊️ Peace declared with alliance {target_alliance_id}\\! May prosperity follow\\! 🕊️", parse_mode='MarkdownV2')
+                await update.message.reply_text(f"🕊️ Peace declared with alliance {target_alliance_id}\! May prosperity follow\! 🕊️", parse_mode='MarkdownV2')
             else:
-                await update.message.reply_text(f"❌ {result.get('message', 'Could not declare peace\\.')}", parse_mode='MarkdownV2')
+                await update.message.reply_text(f"❌ {result.get('message', 'Could not declare peace.')}", parse_mode='MarkdownV2')
         except Exception as e:
             logger.error(f"Error in handle_alliance_peace: {e}", exc_info=True)
             await self._handle_error(update, e)
@@ -915,11 +915,11 @@ class GameHandler:
         try:
             rankings = self.alliance_manager.get_alliance_rankings()
             if not rankings:
-                await update.message.reply_text("No alliance war rankings available\\. ⚔️", parse_mode='MarkdownV2')
+                await update.message.reply_text("No alliance war rankings available. ⚔️", parse_mode='MarkdownV2')
                 return
             message = "⚔️ *Alliance War Rankings* ⚔️\n\n"
             for i, alliance in enumerate(rankings[:10], 1):
-                message += f"{i}\\. *{alliance['name']}*\n"
+                message += f"{i}. *{alliance['name']}*\n"
                 message += f"  Wins: {alliance['wins']}\n"
                 message += f"  Losses: {alliance['losses']}\n"
                 message += f"  Points: {alliance['points']}\n\n"
@@ -936,7 +936,7 @@ class GameHandler:
             player_id = str(update.effective_user.id)
             benefits = self.alliance_manager.get_alliance_benefits(player_id)
             if not benefits:
-                await update.message.reply_text("No alliance benefits found\\. 🎁", parse_mode='MarkdownV2')
+                await update.message.reply_text("No alliance benefits found. 🎁", parse_mode='MarkdownV2')
                 return
             message = "🎁 *Alliance Benefits* 🎁\n\n"
             for k, v in benefits.items():
@@ -965,7 +965,7 @@ class GameHandler:
             elif not isinstance(resources, dict):
                 resources = {}
             if not resources:
-                await update.message.reply_text("No alliance resources found\\. ��", parse_mode='MarkdownV2')
+                await update.message.reply_text("No alliance resources found. 🤝", parse_mode='MarkdownV2')
                 return
             message = "💰 *Alliance Resources* 💰\n\n"
             for k, v in resources.items():
@@ -982,7 +982,7 @@ class GameHandler:
             player_id = str(update.effective_user.id)
             research = self.alliance_manager.get_alliance_research(player_id)
             if not research:
-                await update.message.reply_text("No alliance research found\\. 🔬", parse_mode='MarkdownV2')
+                await update.message.reply_text("No alliance research found. 🔬", parse_mode='MarkdownV2')
                 return
             message = "🔬 *Alliance Research* 🔬\n\n"
             for r in research:
@@ -1002,7 +1002,7 @@ class GameHandler:
             player_id = str(update.effective_user.id)
             diplomacy = self.alliance_manager.get_alliance_diplomacy(player_id)
             if not diplomacy:
-                await update.message.reply_text("No alliance diplomacy data found\\. 🤝", parse_mode='MarkdownV2')
+                await update.message.reply_text("No alliance diplomacy data found. 🤝", parse_mode='MarkdownV2')
                 return
             message = "🤝 *Alliance Diplomacy* 🤝\n\n"
             for d in diplomacy:
