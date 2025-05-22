@@ -837,24 +837,28 @@ class GameHandler:
             logger.error(f"Error in handle_alliance_list: {e}", exc_info=True)
             await self._handle_error(update, e)
 
+    def _escape_markdown(self, text: str) -> str:
+        """Helper method to escape special characters for MarkdownV2"""
+        special_chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+        for char in special_chars:
+            text = text.replace(char, f'\\{char}')
+        return text
+
     async def handle_alliance_info(self, update, context):
-        """Show info about an alliance with lively UI"""
+        """Show alliance info with lively UI"""
         try:
-            if not context.args:
-                await update.message.reply_text("Usage: /alliance_info <alliance_id> 🤝", parse_mode='MarkdownV2')
-                return
-            alliance_id = context.args[0]
-            alliance = self.alliance_manager.get_alliance(alliance_id)
+            player_id = str(update.effective_user.id)
+            alliance = self.alliance_manager.get_alliance_info(player_id)
             if not alliance:
-                await update.message.reply_text("Alliance not found. 🤝", parse_mode='MarkdownV2')
+                await update.message.reply_text("You are not in an alliance. 🤝", parse_mode='MarkdownV2')
                 return
             message = (
                 f"🤝 *Alliance Info* 🤝\n"
-                f"*Name:* {alliance['name'].replace('*', '\\*').replace('_', '\\_').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')}\n"
+                f"*Name:* {self._escape_markdown(alliance['name'])}\n"
                 f"*Level:* {alliance.get('level', 1)}\n"
-                f"*Leader:* {alliance.get('leader', 'Unknown').replace('*', '\\*').replace('_', '\\_').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')}\n"
-                f"*Members:* {', '.join(alliance.get('members', [])).replace('*', '\\*').replace('_', '\\_').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')}\n"
-                f"*Description:* {alliance.get('description', '').replace('*', '\\*').replace('_', '\\_').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')}"
+                f"*Leader:* {self._escape_markdown(alliance.get('leader', 'Unknown'))}\n"
+                f"*Members:* {self._escape_markdown(', '.join(alliance.get('members', [])))}\n"
+                f"*Description:* {self._escape_markdown(alliance.get('description', ''))}"
             )
             keyboard = [[InlineKeyboardButton("🔙 Back", callback_data="status")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
