@@ -268,34 +268,49 @@ class GameHandler:
             return []
 
     async def handle_help(self, update, context):
-        """Show help message with lively, engaging UI"""
+        """Handle the /help command with enhanced UI"""
         try:
             message = (
-                "🆘 *SkyHustle 2 Commands* 🆘\n\n"
-                "*Main Actions:*\n"
-                "`/start` — Start your adventure 🎮\n"
-                "`/status` — View your base 🏰\n"
-                "`/build` — Construct buildings 🏗️\n"
-                "`/train` — Train your army ⚔️\n"
-                "`/research` — Discover new tech 🔬\n"
-                "`/quest` — Complete quests 🎯\n"
-                "`/market` — Trade resources 🏪\n"
-                "`/alliance` — Join or create alliances 🤝\n"
-                "\n*Social & Progression:*\n"
-                "`/profile` — Your profile 👤\n"
-                "`/leaderboard` — Top players 🏆\n"
-                "`/friends` — Manage friends 👥\n"
-                "`/achievements` — View achievements 🥇\n"
-                "\n*Tips:*\n"
-                "• Use the buttons below for quick actions!\n"
-                "• Invite friends for rewards!\n"
-                "• Check back daily for bonuses!\n"
+                "❓ *Help Center* ❓\n\n"
+                "Welcome to SkyHustle 2\\! Here's how to get started:\n\n"
+                "🎮 *Basic Commands:*\n"
+                "└ /start \\- Begin your adventure\n"
+                "└ /status \\- Check your current status\n"
+                "└ /help \\- Show this help message\n"
+                "└ /tutorial \\- Start the tutorial\n\n"
+                "🏰 *Game Features:*\n"
+                "└ /build \\- Manage your buildings\n"
+                "└ /train \\- Train your army\n"
+                "└ /market \\- Trade with other players\n"
+                "└ /alliance \\- Join or manage alliances\n"
+                "└ /social \\- Connect with friends\n\n"
+                "📊 *Game Systems:*\n"
+                "└ /inventory \\- Manage your items\n"
+                "└ /events \\- View active events\n"
+                "└ /leaderboard \\- Check rankings\n"
+                "└ /settings \\- Configure game settings\n\n"
+                "Need more help\\? Select a category below:"
             )
+            
             keyboard = [
-                [InlineKeyboardButton("🏗️ Build", callback_data="build"), InlineKeyboardButton("⚔️ Train", callback_data="train")],
-                [InlineKeyboardButton("🎯 Quest", callback_data="quest"), InlineKeyboardButton("🏪 Market", callback_data="market")],
-                [InlineKeyboardButton("🤝 Alliance", callback_data="alliance"), InlineKeyboardButton("👤 Profile", callback_data="profile")]
+                [
+                    InlineKeyboardButton("🎮 Gameplay", callback_data="help_gameplay"),
+                    InlineKeyboardButton("🏰 Buildings", callback_data="help_buildings")
+                ],
+                [
+                    InlineKeyboardButton("⚔️ Combat", callback_data="help_combat"),
+                    InlineKeyboardButton("💰 Economy", callback_data="help_economy")
+                ],
+                [
+                    InlineKeyboardButton("🤝 Social", callback_data="help_social"),
+                    InlineKeyboardButton("⚙️ Settings", callback_data="help_settings")
+                ],
+                [
+                    InlineKeyboardButton("❓ FAQ", callback_data="help_faq"),
+                    InlineKeyboardButton("📝 Support", callback_data="help_support")
+                ]
             ]
+            
             reply_markup = InlineKeyboardMarkup(keyboard)
             await update.message.reply_text(message, reply_markup=reply_markup, parse_mode='MarkdownV2')
         except Exception as e:
@@ -546,11 +561,11 @@ class GameHandler:
             player_id = str(update.effective_user.id)
             result = self.achievement_manager.get_player_achievements(player_id)
             if not result['success']:
-                await update.message.reply_text("❌ Could not fetch achievements.", parse_mode='MarkdownV2')
+                await update.message.reply_text("❌ Could not fetch achievements\\.", parse_mode='MarkdownV2')
                 return
             achievements = result['achievements']
             if not achievements:
-                await update.message.reply_text("No achievements yet. Start playing to earn some! 🥇", parse_mode='MarkdownV2')
+                await update.message.reply_text("No achievements yet\\. Start playing to earn some\\! 🥇", parse_mode='MarkdownV2')
                 return
             message = "🥇 *Your Achievements* 🥇\n\n"
             for ach in achievements:
@@ -573,7 +588,7 @@ class GameHandler:
             player_id = str(update.effective_user.id)
             friends = self.social_manager.get_friend_list(player_id)
             if not friends:
-                await update.message.reply_text("You have no friends yet. Use /add_friend <player_id> to add one! 👥", parse_mode='MarkdownV2')
+                await update.message.reply_text("You have no friends yet\\. Use /add\\_friend <player\\_id> to add one\\! 👥", parse_mode='MarkdownV2')
                 return
             message = "👥 *Your Friends* 👥\n\n"
             for f in friends:
@@ -657,15 +672,15 @@ class GameHandler:
             logger.error(f"Error in handle_prestige: {e}", exc_info=True)
             await self._handle_error(update, e)
 
-    async def handle_create_alliance(self, update, context):
-        """Create a new alliance with lively UI"""
+    async def handle_create_alliance(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle alliance creation"""
         try:
             player_id = str(update.effective_user.id)
             if not context.args or len(context.args) < 2:
-                await update.message.reply_text("Usage: /create_alliance <name> <description> 🤝", parse_mode='MarkdownV2')
+                await update.message.reply_text("Usage: /create\\_alliance <name> <description> 🤝", parse_mode='MarkdownV2')
                 return
             name = context.args[0]
-            description = " ".join(context.args[1:])
+            description = ' '.join(context.args[1:])
             result = self.alliance_manager.create_alliance(player_id, name, description)
             if result.get('success'):
                 await update.message.reply_text(f"✅ Alliance *{name}* created! Welcome to the world of alliances! 🤝", parse_mode='MarkdownV2')
@@ -737,21 +752,38 @@ class GameHandler:
             logger.error(f"Error in handle_alliance_donate: {e}", exc_info=True)
             await self._handle_error(update, e)
 
-    async def handle_alliance_war(self, update, context):
-        """Declare war on another alliance with lively UI"""
+    async def handle_alliance_war(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle alliance war declaration"""
         try:
             player_id = str(update.effective_user.id)
             if not context.args:
-                await update.message.reply_text("Usage: /alliance_war <target_alliance_id> ⚔️", parse_mode='MarkdownV2')
+                await update.message.reply_text("Usage: /alliance\\_war <target\\_alliance\\_id> ⚔️", parse_mode='MarkdownV2')
                 return
             target_alliance_id = context.args[0]
             result = self.alliance_manager.declare_war(player_id, target_alliance_id)
             if result.get('success'):
-                await update.message.reply_text(f"⚔️ War declared on alliance {target_alliance_id}! Let the battles begin! ⚔️", parse_mode='MarkdownV2')
+                await update.message.reply_text(f"⚔️ War declared on alliance {target_alliance_id}\\! Let the battles begin\\! ⚔️", parse_mode='MarkdownV2')
             else:
-                await update.message.reply_text(f"❌ {result.get('message', 'Could not declare war.')}", parse_mode='MarkdownV2')
+                await update.message.reply_text(f"❌ {result.get('message', 'Could not declare war\\.')}", parse_mode='MarkdownV2')
         except Exception as e:
             logger.error(f"Error in handle_alliance_war: {e}", exc_info=True)
+            await self._handle_error(update, e)
+
+    async def handle_alliance_peace(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle alliance peace declaration"""
+        try:
+            player_id = str(update.effective_user.id)
+            if not context.args:
+                await update.message.reply_text("Usage: /alliance\\_peace <target\\_alliance\\_id> 🕊️", parse_mode='MarkdownV2')
+                return
+            target_alliance_id = context.args[0]
+            result = self.alliance_manager.declare_peace(player_id, target_alliance_id)
+            if result.get('success'):
+                await update.message.reply_text(f"🕊️ Peace declared with alliance {target_alliance_id}\\! May prosperity follow\\! 🕊️", parse_mode='MarkdownV2')
+            else:
+                await update.message.reply_text(f"❌ {result.get('message', 'Could not declare peace\\.')}", parse_mode='MarkdownV2')
+        except Exception as e:
+            logger.error(f"Error in handle_alliance_peace: {e}", exc_info=True)
             await self._handle_error(update, e)
 
     async def handle_alliance_manage(self, update, context):
@@ -883,9 +915,14 @@ class GameHandler:
         try:
             rankings = self.alliance_manager.get_alliance_rankings()
             if not rankings:
-                await update.message.reply_text("No alliance war rankings found. ⚔️", parse_mode='MarkdownV2')
+                await update.message.reply_text("No alliance war rankings available\\. ⚔️", parse_mode='MarkdownV2')
                 return
-            message = "⚔️ *Alliance War Rankings* ⚔️\n" + "\n".join(f"{i+1}. {r['name']} (Level {r.get('level', 1)})" for i, r in enumerate(rankings))
+            message = "⚔️ *Alliance War Rankings* ⚔️\n\n"
+            for i, alliance in enumerate(rankings[:10], 1):
+                message += f"{i}\\. *{alliance['name']}*\n"
+                message += f"  Wins: {alliance['wins']}\n"
+                message += f"  Losses: {alliance['losses']}\n"
+                message += f"  Points: {alliance['points']}\n\n"
             keyboard = [[InlineKeyboardButton("🔙 Back", callback_data="status")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
             await update.message.reply_text(message, reply_markup=reply_markup, parse_mode='MarkdownV2')
@@ -899,9 +936,12 @@ class GameHandler:
             player_id = str(update.effective_user.id)
             benefits = self.alliance_manager.get_alliance_benefits(player_id)
             if not benefits:
-                await update.message.reply_text("No alliance benefits found. 🤝", parse_mode='MarkdownV2')
+                await update.message.reply_text("No alliance benefits found\\. 🎁", parse_mode='MarkdownV2')
                 return
-            message = "🎁 *Alliance Benefits* 🎁\n" + "\n".join(f"{b['name']}: {b['description']}" for b in benefits)
+            message = "🎁 *Alliance Benefits* 🎁\n\n"
+            for k, v in benefits.items():
+                message += f"└ *{k}*\n"
+                message += f"  {v}\n\n"
             keyboard = [[InlineKeyboardButton("🔙 Back", callback_data="status")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
             await update.message.reply_text(message, reply_markup=reply_markup, parse_mode='MarkdownV2')
@@ -925,25 +965,30 @@ class GameHandler:
             elif not isinstance(resources, dict):
                 resources = {}
             if not resources:
-                await update.message.reply_text("No alliance resources found. 🤝", parse_mode='MarkdownV2')
+                await update.message.reply_text("No alliance resources found\\. ��", parse_mode='MarkdownV2')
                 return
-            message = "💰 *Alliance Resources* 💰\n" + "\n".join(f"{k}: {v}" for k, v in resources.items())
+            message = "💰 *Alliance Resources* 💰\n\n"
+            for k, v in resources.items():
+                message += f"└ {self._get_resource_emoji(k)} {k}: {v}\n"
             keyboard = [[InlineKeyboardButton("🔙 Back", callback_data="status")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
             await update.message.reply_text(message, reply_markup=reply_markup, parse_mode='MarkdownV2')
         except Exception as e:
             logger.error(f"Error in handle_alliance_resources: {e}", exc_info=True)
             await self._handle_error(update, e)
-
     async def handle_alliance_research(self, update, context):
         """Show alliance research with lively UI"""
         try:
             player_id = str(update.effective_user.id)
             research = self.alliance_manager.get_alliance_research(player_id)
             if not research:
-                await update.message.reply_text("No alliance research found. 🔬", parse_mode='MarkdownV2')
+                await update.message.reply_text("No alliance research found\\. 🔬", parse_mode='MarkdownV2')
                 return
-            message = "🔬 *Alliance Research* 🔬\n" + "\n".join(f"{r['name']}: Level {r['level']}" for r in research)
+            message = "🔬 *Alliance Research* 🔬\n\n"
+            for r in research:
+                message += f"└ *{r['name']}*\n"
+                message += f"  Level: {r['level']}\n"
+                message += f"  {r.get('description', '')}\n\n"
             keyboard = [[InlineKeyboardButton("🔙 Back", callback_data="status")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
             await update.message.reply_text(message, reply_markup=reply_markup, parse_mode='MarkdownV2')
@@ -957,9 +1002,13 @@ class GameHandler:
             player_id = str(update.effective_user.id)
             diplomacy = self.alliance_manager.get_alliance_diplomacy(player_id)
             if not diplomacy:
-                await update.message.reply_text("No alliance diplomacy data found. 🤝", parse_mode='MarkdownV2')
+                await update.message.reply_text("No alliance diplomacy data found\\. 🤝", parse_mode='MarkdownV2')
                 return
-            message = "🤝 *Alliance Diplomacy* 🤝\n" + "\n".join(f"{d['target']}: {d['status']} ({d['points']} pts)" for d in diplomacy)
+            message = "🤝 *Alliance Diplomacy* 🤝\n\n"
+            for d in diplomacy:
+                message += f"└ *{d['target']}*\n"
+                message += f"  Status: {d['status']}\n"
+                message += f"  Points: {d['points']}\n\n"
             keyboard = [[InlineKeyboardButton("🔙 Back", callback_data="status")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
             await update.message.reply_text(message, reply_markup=reply_markup, parse_mode='MarkdownV2')
@@ -2379,56 +2428,6 @@ class GameHandler:
             logger.error(f"Error in handle_inventory_action: {e}", exc_info=True)
             await self._handle_error(update, e)
 
-    async def handle_help(self, update, context):
-        """Handle the /help command with enhanced UI"""
-        try:
-            message = (
-                "❓ *Help Center* ❓\n\n"
-                "Welcome to SkyHustle 2! Here's how to get started:\n\n"
-                "🎮 *Basic Commands:*\n"
-                "└ /start - Begin your adventure\n"
-                "└ /status - Check your current status\n"
-                "└ /help - Show this help message\n"
-                "└ /tutorial - Start the tutorial\n\n"
-                "🏰 *Game Features:*\n"
-                "└ /build - Manage your buildings\n"
-                "└ /train - Train your army\n"
-                "└ /market - Trade with other players\n"
-                "└ /alliance - Join or manage alliances\n"
-                "└ /social - Connect with friends\n\n"
-                "📊 *Game Systems:*\n"
-                "└ /inventory - Manage your items\n"
-                "└ /events - View active events\n"
-                "└ /leaderboard - Check rankings\n"
-                "└ /settings - Configure game settings\n\n"
-                "Need more help? Select a category below:"
-            )
-            
-            keyboard = [
-                [
-                    InlineKeyboardButton("🎮 Gameplay", callback_data="help_gameplay"),
-                    InlineKeyboardButton("🏰 Buildings", callback_data="help_buildings")
-                ],
-                [
-                    InlineKeyboardButton("⚔️ Combat", callback_data="help_combat"),
-                    InlineKeyboardButton("💰 Economy", callback_data="help_economy")
-                ],
-                [
-                    InlineKeyboardButton("🤝 Social", callback_data="help_social"),
-                    InlineKeyboardButton("⚙️ Settings", callback_data="help_settings")
-                ],
-                [
-                    InlineKeyboardButton("❓ FAQ", callback_data="help_faq"),
-                    InlineKeyboardButton("📝 Support", callback_data="help_support")
-                ]
-            ]
-            
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            await update.message.reply_text(message, reply_markup=reply_markup, parse_mode='MarkdownV2')
-        except Exception as e:
-            logger.error(f"Error in handle_help: {e}", exc_info=True)
-            await self._handle_error(update, e)
-
     async def handle_help_category(self, update, context):
         """Handle help category selection with enhanced UI"""
         try:
@@ -2628,4 +2627,32 @@ class GameHandler:
             await update.message.reply_text(message, reply_markup=reply_markup, parse_mode='MarkdownV2')
         except Exception as e:
             logger.error(f"Error in handle_support_submit: {e}", exc_info=True)
+            await self._handle_error(update, e)
+
+    async def handle_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle callback queries from inline keyboards"""
+        try:
+            query = update.callback_query
+            data = query.data
+            
+            # Handle different callback types
+            if data == 'show_help':
+                await self.handle_help(update, context)
+            elif data == 'build':
+                await self.handle_build(update, context)
+            elif data == 'train':
+                await self.handle_train(update, context)
+            elif data == 'quest':
+                await self.handle_quest(update, context)
+            elif data == 'market':
+                await self.handle_market(update, context)
+            elif data.startswith('help_'):
+                await self.handle_help_category(update, context)
+            elif data.startswith('support_'):
+                await self.handle_support_request(update, context)
+            else:
+                await query.answer("Invalid callback data")
+                
+        except Exception as e:
+            logger.error(f"Error in handle_callback: {e}", exc_info=True)
             await self._handle_error(update, e)
