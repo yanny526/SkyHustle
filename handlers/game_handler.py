@@ -127,18 +127,21 @@ class GameHandler:
             self.player_manager.update_last_login(player_id)
             current_step = self.tutorial_manager.get_current_step(player_id)
             
-            # Welcome message
+            # Welcome message with escaped special characters
             message = (
-                "🎉 *Welcome to* _SkyHustle 2_! 🎮\n\n"
-                "*Your adventure begins now!*\n"
-                "Use /help or tap the button below to see what you can do!\n\n"
+                "🎉 *Welcome to* _SkyHustle 2_\\! 🎮\n\n"
+                "*Your adventure begins now\\!*\n"
+                "Use /help or tap the button below to see what you can do\\!\n\n"
             )
             
             # Add tutorial step message if available
             if current_step:
-                message += f"📚 *Current Tutorial Step:*\n{current_step.get('message', 'Welcome to the game!')}\n\n"
+                # Escape special characters in the tutorial message
+                tutorial_message = current_step.get('message', 'Welcome to the game\\!')
+                tutorial_message = tutorial_message.replace('!', '\\!').replace('.', '\\.').replace('-', '\\-')
+                message += f"📚 *Current Tutorial Step:*\n{tutorial_message}\n\n"
             
-            message += "🔥 _Tip: Invite friends for special rewards!_"
+            message += "🔥 _Tip: Invite friends for special rewards\\!_"
             
             # Create keyboard with main menu options
             keyboard = [
@@ -847,11 +850,11 @@ class GameHandler:
                 return
             message = (
                 f"🤝 *Alliance Info* 🤝\n"
-                f"*Name:* {alliance['name']}\n"
+                f"*Name:* {alliance['name'].replace('*', '\\*').replace('_', '\\_').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')}\n"
                 f"*Level:* {alliance.get('level', 1)}\n"
-                f"*Leader:* {alliance.get('leader', 'Unknown')}\n"
-                f"*Members:* {', '.join(alliance.get('members', []))}\n"
-                f"*Description:* {alliance.get('description', '')}"
+                f"*Leader:* {alliance.get('leader', 'Unknown').replace('*', '\\*').replace('_', '\\_').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')}\n"
+                f"*Members:* {', '.join(alliance.get('members', [])).replace('*', '\\*').replace('_', '\\_').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')}\n"
+                f"*Description:* {alliance.get('description', '').replace('*', '\\*').replace('_', '\\_').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')}"
             )
             keyboard = [[InlineKeyboardButton("🔙 Back", callback_data="status")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
@@ -936,10 +939,12 @@ class GameHandler:
                 return
             message = "⚔️ *Alliance War Rankings* ⚔️\n\n"
             for i, alliance in enumerate(rankings[:10], 1):
-                message += f"{i}. *{alliance['name']}*\n"
-                message += f"  Wins: {alliance['wins']}\n"
-                message += f"  Losses: {alliance['losses']}\n"
-                message += f"  Points: {alliance['points']}\n\n"
+                message += (
+                    f"{i}. *{alliance['name'].replace('*', '\\*').replace('_', '\\_').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')}*\n"
+                    f"  Wins: {alliance['wins']}\n"
+                    f"  Losses: {alliance['losses']}\n"
+                    f"  Points: {alliance['points']}\n\n"
+                )
             keyboard = [[InlineKeyboardButton("🔙 Back", callback_data="status")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
             await update.message.reply_text(message, reply_markup=reply_markup, parse_mode='MarkdownV2')
@@ -1003,9 +1008,11 @@ class GameHandler:
                 return
             message = "🔬 *Alliance Research* 🔬\n\n"
             for r in research:
-                message += f"└ *{r['name']}*\n"
-                message += f"  Level: {r['level']}\n"
-                message += f"  {r.get('description', '')}\n\n"
+                message += (
+                    f"└ *{r['name'].replace('*', '\\*').replace('_', '\\_').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')}*\n"
+                    f"  Level: {r['level']}\n"
+                    f"  {r.get('description', '').replace('*', '\\*').replace('_', '\\_').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')}\n\n"
+                )
             keyboard = [[InlineKeyboardButton("🔙 Back", callback_data="status")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
             await update.message.reply_text(message, reply_markup=reply_markup, parse_mode='MarkdownV2')
@@ -1061,9 +1068,9 @@ class GameHandler:
                 req_str = " | ".join(f"{self._get_resource_emoji(k)} {v}" for k, v in reqs.items())
                 
                 message += (
-                    f"└ {BUILDINGS[building['id']]['emoji']} *{building['name']}*\n"
+                    f"└ {BUILDINGS[building['id']]['emoji']} *{building['name'].replace('*', '\\*').replace('_', '\\_').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')}*\n"
                     f"  Level: {current_level}\n"
-                    f"  {building['description']}\n"
+                    f"  {building['description'].replace('*', '\\*').replace('_', '\\_').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')}\n"
                     f"  💰 Cost: {req_str}\n\n"
                 )
                 
@@ -1627,8 +1634,8 @@ class GameHandler:
             # Format trade result message
             message = (
                 "🔄 *Trade Result* 🔄\n\n"
-                f"👤 *Seller:* {self.player_manager.get_player_name(listing['seller_id'])}\n"
-                f"👤 *Buyer:* {self.player_manager.get_player_name(player_id)}\n\n"
+                f"👤 *Seller:* {self.player_manager.get_player_name(listing['seller_id']).replace('*', '\\*').replace('_', '\\_').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')}\n"
+                f"👤 *Buyer:* {self.player_manager.get_player_name(player_id).replace('*', '\\*').replace('_', '\\_').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')}\n\n"
             )
             
             if result['success']:
@@ -1952,7 +1959,7 @@ class GameHandler:
             
             for key, name in game_settings.items():
                 status = "✅" if settings.get(key, True) else "❌"
-                message += f"└ {status} {name}\n"
+                message += f"└ {status} {name.replace('*', '\\*').replace('_', '\\_').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')}\n"
             
             # Create keyboard
             keyboard = [
@@ -2031,7 +2038,7 @@ class GameHandler:
                     'confirm_actions': 'Confirm Actions'
                 }.items():
                     status = "✅" if settings.get(key, True) else "❌"
-                    message += f"└ {status} {name}\n"
+                    message += f"└ {status} {name.replace('*', '\\*').replace('_', '\\_').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')}\n"
                     keyboard.append([
                         InlineKeyboardButton(
                             f"{'Disable' if settings.get(key, True) else 'Enable'} {name}",
@@ -2069,8 +2076,8 @@ class GameHandler:
                 message += "📨 *Unread Notifications:*\n"
                 for notification in unread[:5]:  # Show last 5 unread
                     message += (
-                        f"└ {notification['emoji']} *{notification['title']}*\n"
-                        f"  {notification['message']}\n"
+                        f"└ {notification['emoji']} *{notification['title'].replace('*', '\\*').replace('_', '\\_').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')}*\n"
+                        f"  {notification['message'].replace('*', '\\*').replace('_', '\\_').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')}\n"
                         f"  ⏰ {time.strftime('%Y-%m-%d %H:%M', time.localtime(notification['timestamp']))}\n\n"
                     )
             else:
@@ -2081,8 +2088,8 @@ class GameHandler:
             for notification in notifications[-5:]:  # Show last 5 notifications
                 read_status = "✅" if notification.get('read', False) else "📨"
                 message += (
-                    f"└ {read_status} {notification['emoji']} *{notification['title']}*\n"
-                    f"  {notification['message']}\n"
+                    f"└ {read_status} {notification['emoji']} *{notification['title'].replace('*', '\\*').replace('_', '\\_').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')}*\n"
+                    f"  {notification['message'].replace('*', '\\*').replace('_', '\\_').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')}\n"
                     f"  ⏰ {time.strftime('%Y-%m-%d %H:%M', time.localtime(notification['timestamp']))}\n\n"
                 )
             
@@ -2413,8 +2420,8 @@ class GameHandler:
             
             if result['success']:
                 message += (
-                    f"✅ *{result['item']['name']}*\n"
-                    f"{result['item']['description']}\n\n"
+                    f"✅ *{result['item']['name'].replace('*', '\\*').replace('_', '\\_').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')}*\n"
+                    f"{result['item']['description'].replace('*', '\\*').replace('_', '\\_').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')}\n\n"
                 )
                 
                 # Display action result

@@ -142,7 +142,10 @@ async def blackmarket_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         item_id = data.split("_")[-1]
         result = black_market_manager.purchase_item(player_id, item_id)
         await query.answer()
-        await query.edit_message_text(result['message'], parse_mode='MarkdownV2')
+        await query.edit_message_text(
+            result['message'].replace('*', '\\*').replace('_', '\\_').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!'),
+            parse_mode='MarkdownV2'
+        )
 
 async def bag_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
