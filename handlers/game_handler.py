@@ -126,19 +126,36 @@ class GameHandler:
                         self.unit_manager.train_units(player_id, unit_id, count)
             self.player_manager.update_last_login(player_id)
             current_step = self.tutorial_manager.get_current_step(player_id)
+            
+            # Welcome message
             message = (
                 "🎉 *Welcome to* _SkyHustle 2_! 🎮\n\n"
                 "*Your adventure begins now!*\n"
                 "Use /help or tap the button below to see what you can do!\n\n"
-                "🔥 _Tip: Invite friends for special rewards!_"
             )
+            
+            # Add tutorial step message if available
             if current_step:
-                message += f"\n\n📚 *Tutorial Step {current_step['step']}*\n_{current_step['description']}_"
+                message += f"📚 *Current Tutorial Step:*\n{current_step.get('message', 'Welcome to the game!')}\n\n"
+            
+            message += "🔥 _Tip: Invite friends for special rewards!_"
+            
+            # Create keyboard with main menu options
             keyboard = [
-                [InlineKeyboardButton("📖 Help & Commands", callback_data="show_help")],
-                [InlineKeyboardButton("🏗️ Build", callback_data="build"), InlineKeyboardButton("⚔️ Train", callback_data="train")],
-                [InlineKeyboardButton("🎯 Quest", callback_data="quest"), InlineKeyboardButton("🏪 Market", callback_data="market")]
+                [
+                    InlineKeyboardButton("📊 Status", callback_data="status"),
+                    InlineKeyboardButton("🏗️ Build", callback_data="build")
+                ],
+                [
+                    InlineKeyboardButton("⚔️ Train", callback_data="train"),
+                    InlineKeyboardButton("🎯 Attack", callback_data="attack")
+                ],
+                [
+                    InlineKeyboardButton("📚 Tutorial", callback_data="tutorial"),
+                    InlineKeyboardButton("❓ Help", callback_data="help")
+                ]
             ]
+            
             reply_markup = InlineKeyboardMarkup(keyboard)
             await update.message.reply_text(message, reply_markup=reply_markup, parse_mode='MarkdownV2')
         except Exception as e:
