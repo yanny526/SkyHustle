@@ -16,6 +16,12 @@ class AdminHandler:
     def __init__(self):
         self.admin_manager = AdminManager()
 
+    def _escape_markdown(self, text: str) -> str:
+        special_chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+        for char in special_chars:
+            text = text.replace(char, f'\\{char}')
+        return text
+
     @rate_limit(1)  # 1 second cooldown
     async def handle_admin_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle /admin command"""
@@ -24,7 +30,7 @@ class AdminHandler:
         if not self.admin_manager.is_admin(user_id):
             await update.message.reply_text(
                 "❌ You do not have permission to use admin commands.",
-                parse_mode=ParseMode.MARKDOWN
+                parse_mode='MarkdownV2'
             )
             return
             
@@ -43,7 +49,7 @@ class AdminHandler:
             "🔧 *Admin Control Panel*\n\n"
             "Select an option to manage the game:",
             reply_markup=reply_markup,
-            parse_mode=ParseMode.MARKDOWN
+            parse_mode='MarkdownV2'
         )
 
     @rate_limit(1)
@@ -58,7 +64,7 @@ class AdminHandler:
         if not context.args:
             await update.message.reply_text(
                 "Usage: /addadmin <user_id>",
-                parse_mode=ParseMode.MARKDOWN
+                parse_mode='MarkdownV2'
             )
             return
             
@@ -66,9 +72,9 @@ class AdminHandler:
         result = self.admin_manager.add_admin(target_id, user_id)
         
         if result['success']:
-            await update.message.reply_text(f"✅ Added {target_id} as admin")
+            await update.message.reply_text(_escape_markdown(f"✅ Added {target_id} as admin"), parse_mode='MarkdownV2')
         else:
-            await update.message.reply_text(f"❌ {result['message']}")
+            await update.message.reply_text(_escape_markdown(f"❌ {result['message']}"), parse_mode='MarkdownV2')
 
     @rate_limit(1)
     async def handle_remove_admin(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -82,7 +88,7 @@ class AdminHandler:
         if not context.args:
             await update.message.reply_text(
                 "Usage: /removeadmin <user_id>",
-                parse_mode=ParseMode.MARKDOWN
+                parse_mode='MarkdownV2'
             )
             return
             
@@ -90,9 +96,9 @@ class AdminHandler:
         result = self.admin_manager.remove_admin(target_id, user_id)
         
         if result['success']:
-            await update.message.reply_text(f"✅ Removed {target_id} from admins")
+            await update.message.reply_text(_escape_markdown(f"✅ Removed {target_id} from admins"), parse_mode='MarkdownV2')
         else:
-            await update.message.reply_text(f"❌ {result['message']}")
+            await update.message.reply_text(_escape_markdown(f"❌ {result['message']}"), parse_mode='MarkdownV2')
 
     @rate_limit(1)
     async def handle_broadcast(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -106,7 +112,7 @@ class AdminHandler:
         if not context.args:
             await update.message.reply_text(
                 "Usage: /broadcast <message>",
-                parse_mode=ParseMode.MARKDOWN
+                parse_mode='MarkdownV2'
             )
             return
             
@@ -122,8 +128,8 @@ class AdminHandler:
             try:
                 await context.bot.send_message(
                     chat_id=int(player['user_id']),
-                    text=f"📢 *Broadcast Message*\n\n{message}",
-                    parse_mode=ParseMode.MARKDOWN
+                    text=_escape_markdown(f"📢 *Broadcast Message*\n\n{message}"),
+                    parse_mode='MarkdownV2'
                 )
                 sent += 1
             except:
@@ -137,10 +143,8 @@ class AdminHandler:
         })
         
         await update.message.reply_text(
-            f"✅ Broadcast complete\n"
-            f"📤 Sent: {sent}\n"
-            f"❌ Failed: {failed}",
-            parse_mode=ParseMode.MARKDOWN
+            _escape_markdown(f"✅ Broadcast complete\n📤 Sent: {sent}\n❌ Failed: {failed}"),
+            parse_mode='MarkdownV2'
         )
 
     @rate_limit(1)
@@ -155,7 +159,7 @@ class AdminHandler:
         if not context.args:
             await update.message.reply_text(
                 "Usage: /maintenance <on|off>",
-                parse_mode=ParseMode.MARKDOWN
+                parse_mode='MarkdownV2'
             )
             return
             
@@ -177,8 +181,8 @@ class AdminHandler:
         log_admin_action(user_id, 'maintenance_mode', {'mode': mode})
         
         await update.message.reply_text(
-            f"✅ Maintenance mode turned {mode}",
-            parse_mode=ParseMode.MARKDOWN
+            _escape_markdown(f"✅ Maintenance mode turned {mode}"),
+            parse_mode='MarkdownV2'
         )
 
     @rate_limit(1)
@@ -202,14 +206,14 @@ class AdminHandler:
         log_text = "📝 *Recent Logs*\n\n"
         for log in logs:
             log_text += (
-                f"*{log['type']}*\n"
-                f"Time: {log['timestamp']}\n"
-                f"Details: {log['details']}\n\n"
+                f"*{_escape_markdown(log['type'])}*\n"
+                f"Time: {_escape_markdown(str(log['timestamp']))}\n"
+                f"Details: {_escape_markdown(str(log['details']))}\n\n"
             )
             
         await update.message.reply_text(
-            log_text,
-            parse_mode=ParseMode.MARKDOWN
+            _escape_markdown(log_text),
+            parse_mode='MarkdownV2'
         )
 
     async def handle_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -235,7 +239,7 @@ class AdminHandler:
                 "👥 *Admin Management*\n\n"
                 "Select an option:",
                 reply_markup=reply_markup,
-                parse_mode=ParseMode.MARKDOWN
+                parse_mode='MarkdownV2'
             )
             
         elif query.data == "admin_system_status":
@@ -244,22 +248,22 @@ class AdminHandler:
             status_text = "📊 *System Status*\n\n"
             
             for setting in status:
-                status_text += f"*{setting['key']}*: {setting['value']}\n"
+                status_text += f"*{_escape_markdown(setting['key'])}*: {_escape_markdown(str(setting['value']))}\n"
                 
             keyboard = [[InlineKeyboardButton("Back", callback_data="admin_back")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
             
             await query.edit_message_text(
-                status_text,
+                _escape_markdown(status_text),
                 reply_markup=reply_markup,
-                parse_mode=ParseMode.MARKDOWN
+                parse_mode='MarkdownV2'
             )
             
         elif query.data == "admin_broadcast":
             await query.edit_message_text(
                 "📢 *Broadcast Message*\n\n"
                 "Use /broadcast <message> to send a message to all players.",
-                parse_mode=ParseMode.MARKDOWN
+                parse_mode='MarkdownV2'
             )
             
         elif query.data == "admin_maintenance":
@@ -275,7 +279,7 @@ class AdminHandler:
                 "🔧 *Maintenance Mode*\n\n"
                 "Select an option:",
                 reply_markup=reply_markup,
-                parse_mode=ParseMode.MARKDOWN
+                parse_mode='MarkdownV2'
             )
             
         elif query.data == "admin_logs":
@@ -290,18 +294,18 @@ class AdminHandler:
             log_text = "📝 *Recent Logs*\n\n"
             for log in logs:
                 log_text += (
-                    f"*{log['type']}*\n"
-                    f"Time: {log['timestamp']}\n"
-                    f"Details: {log['details']}\n\n"
+                    f"*{_escape_markdown(log['type'])}*\n"
+                    f"Time: {_escape_markdown(str(log['timestamp']))}\n"
+                    f"Details: {_escape_markdown(str(log['details']))}\n\n"
                 )
                 
             keyboard = [[InlineKeyboardButton("Back", callback_data="admin_back")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
             
             await query.edit_message_text(
-                log_text,
+                _escape_markdown(log_text),
                 reply_markup=reply_markup,
-                parse_mode=ParseMode.MARKDOWN
+                parse_mode='MarkdownV2'
             )
             
         elif query.data == "admin_back":
@@ -319,7 +323,7 @@ class AdminHandler:
                 "🔧 *Admin Control Panel*\n\n"
                 "Select an option to manage the game:",
                 reply_markup=reply_markup,
-                parse_mode=ParseMode.MARKDOWN
+                parse_mode='MarkdownV2'
             )
 
     @rate_limit(1)

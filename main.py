@@ -8,7 +8,6 @@ import logging
 from dotenv import load_dotenv
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters
 from handlers.game_handler import GameHandler
-from config.game_config import BOT_TOKEN
 from config.alliance_config import ALLIANCE_SETTINGS
 from modules.player_manager import PlayerManager
 from modules.bag_manager import BagManager
@@ -275,7 +274,7 @@ def main():
     resource_manager = ResourceManager()
     progression_manager = ProgressionManager()
     shop_manager = ShopManager(bag_manager, resource_manager)
-    black_market_manager = BlackMarketManager()
+    black_market_manager = BlackMarketManager(bag_manager, player_manager)
     
     # Set managers in handler modules
     from handlers.shop_commands import shop_manager as shop_module_manager

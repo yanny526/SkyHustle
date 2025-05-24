@@ -1,6 +1,6 @@
 """
 Achievement Manager Module
-Handles player achievements, progress tracking, and rewards
+Handles achievements, progress, and rewards (per-player)
 """
 
 import time
@@ -12,22 +12,28 @@ from modules.game_logging import log_achievement
 class AchievementManager:
     def __init__(self):
         self.sheets = GoogleSheetsManager()
+        self.achievements: Dict[str, List[Dict]] = {}
 
     def get_player_achievements(self, player_id: str) -> Dict:
-        records = self.sheets.get_worksheet('Achievements').get_all_records()
-        player_achievements = set(r['achievement'] for r in records if r['player_id'] == player_id)
-        achievements = []
-        for achievement_id, achievement in ACHIEVEMENTS.items():
-            status = {
-                'id': achievement_id,
-                'name': achievement['name'],
-                'description': achievement['description'],
-                'emoji': achievement['emoji'],
-                'reward': achievement['reward'],
-                'completed': achievement['name'] in player_achievements
-            }
-            achievements.append(status)
-        return {'success': True, 'achievements': achievements}
+        if player_id not in self.achievements:
+            self.achievements[player_id] = []
+        return {'success': True, 'achievements': self.achievements[player_id]}
+
+    def add_achievement(self, player_id: str, achievement_id: str) -> bool:
+        if player_id not in self.achievements:
+            self.achievements[player_id] = []
+        achievement = ACHIEVEMENTS.get(achievement_id)
+        if not achievement:
+            return False
+        self.achievements[player_id].append({
+            'id': achievement_id,
+            'name': achievement['name'],
+            'description': achievement['description'],
+            'emoji': achievement.get('emoji', '🏆'),
+            'completed': True,
+            'reward': achievement.get('reward', {})
+        })
+        return True
 
     def update_progress(self, player_id: str, achievement_type: str, amount: int = 1) -> Dict:
         # For each achievement of this type, check if completed and log if new

@@ -203,62 +203,66 @@ RESEARCH = {
                 'food': 0
             },
             'effects': {
-                'infantry_attack': 1.1,  # 10% increase
-                'infantry_defense': 1.1
+                'unit_attack': 1.1,  # 10% attack bonus
+                'unit_defense': 1.1   # 10% defense bonus
             },
             'research_time': 300  # seconds
+        }
+    }
+}
+
+# Quest Definitions
+QUESTS = {
+    'first_building': {
+        'name': 'First Steps',
+        'description': 'Build your first building',
+        'target': 1,
+        'reward': {
+            'gold': 100,
+            'xp': 50
         },
-        'tier2': {
-            'name': 'Advanced Combat Tactics',
-            'description': 'Improves all unit combat effectiveness',
-            'base_cost': {
-                'wood': 400,
-                'stone': 200,
-                'gold': 100,
-                'food': 0
-            },
-            'effects': {
-                'all_units_attack': 1.15,  # 15% increase
-                'all_units_defense': 1.15
-            },
-            'research_time': 600,  # seconds
-            'prerequisites': {
-                'military_tier1': 1
-            }
-        }
+        'emoji': '🏗️'
     },
-    'economy': {
-        'tier1': {
-            'name': 'Basic Resource Efficiency',
-            'description': 'Improves resource production',
-            'base_cost': {
-                'wood': 150,
-                'stone': 100,
-                'gold': 50,
-                'food': 0
-            },
-            'effects': {
-                'wood_production': 1.1,  # 10% increase
-                'stone_production': 1.1
-            },
-            'research_time': 300  # seconds
-        }
+    'resource_master': {
+        'name': 'Resource Master',
+        'description': 'Collect 1000 resources in total',
+        'target': 1000,
+        'reward': {
+            'gold': 200,
+            'xp': 100
+        },
+        'emoji': '📦'
     },
-    'defense': {
-        'tier1': {
-            'name': 'Basic Defense',
-            'description': 'Improves base defense',
-            'base_cost': {
-                'wood': 200,
-                'stone': 150,
-                'gold': 100,
-                'food': 0
-            },
-            'effects': {
-                'defense_tower_bonus': 1.2  # 20% increase
-            },
-            'research_time': 300  # seconds
-        }
+    'military_power': {
+        'name': 'Military Power',
+        'description': 'Train 10 military units',
+        'target': 10,
+        'reward': {
+            'gold': 300,
+            'xp': 150
+        },
+        'emoji': '⚔️'
+    },
+    'combat_veteran': {
+        'name': 'Combat Veteran',
+        'description': 'Win 10 battles',
+        'target': 10,
+        'reward': {
+            'gold': 500,
+            'xp': 250
+        },
+        'emoji': '🏆'
+    },
+    'league_champion': {
+        'name': 'League Champion',
+        'description': 'Reach the top 100 in the league',
+        'target': 1,
+        'reward': {
+            'gold': 1000,
+            'xp': 500,
+            'hustlecoins': 5
+        },
+        'emoji': '👑'
     }
 }
 
@@ -552,4 +556,211 @@ MARKET_EVENTS = {
             'trade_volume': 2.0       # Double trade volume required
         }
     }
+}
+
+GAME_SETTINGS = {
+    'starting_gold': 100,
+    'starting_wood': 200,
+    'starting_stone': 100,
+    'starting_food': 300
+}
+
+# Research Types and Categories
+RESEARCH_TYPES = {
+    'military': {
+        'name': 'Military Research',
+        'emoji': '⚔️',
+        'description': 'Improve your military capabilities',
+        'categories': ['combat', 'training', 'defense']
+    },
+    'economy': {
+        'name': 'Economic Research',
+        'emoji': '💰',
+        'description': 'Enhance resource production and efficiency',
+        'categories': ['production', 'storage', 'trade']
+    },
+    'technology': {
+        'name': 'Technology Research',
+        'emoji': '🔬',
+        'description': 'Unlock new technologies and upgrades',
+        'categories': ['buildings', 'units', 'special']
+    }
+}
+
+# Research Rewards
+RESEARCH_REWARDS = {
+    'military': {
+        'combat': {
+            'attack_bonus': 0.1,  # 10% attack bonus
+            'defense_bonus': 0.1  # 10% defense bonus
+        },
+        'training': {
+            'speed_bonus': 0.15,  # 15% training speed bonus
+            'cost_reduction': 0.1  # 10% cost reduction
+        },
+        'defense': {
+            'tower_bonus': 0.2,   # 20% tower defense bonus
+            'wall_bonus': 0.15    # 15% wall defense bonus
+        }
+    },
+    'economy': {
+        'production': {
+            'resource_bonus': 0.2,  # 20% resource production bonus
+            'efficiency_bonus': 0.15 # 15% efficiency bonus
+        },
+        'storage': {
+            'capacity_bonus': 0.25,  # 25% storage capacity bonus
+            'protection_bonus': 0.2   # 20% resource protection bonus
+        },
+        'trade': {
+            'fee_reduction': 0.1,    # 10% trading fee reduction
+            'value_bonus': 0.15      # 15% resource value bonus
+        }
+    }
+}
+
+# Building Upgrades
+BUILDING_UPGRADES = {
+    'cost_multiplier': 1.5,  # Each level costs 50% more
+    'production_multiplier': 1.2,  # Each level produces 20% more
+    'max_level': 20,
+    'upgrade_time_multiplier': 1.3,  # Each level takes 30% longer to upgrade
+    'base_upgrade_time': 300  # 5 minutes base upgrade time
+}
+
+# Unit Upgrades
+UNIT_UPGRADES = {
+    'cost_multiplier': 1.4,  # Each level costs 40% more
+    'stats_multiplier': 1.15,  # Each level improves stats by 15%
+    'max_level': 10,
+    'training_time_multiplier': 1.2,  # Each level takes 20% longer to train
+    'base_training_time': 60  # 1 minute base training time
+}
+
+# League Rewards
+LEAGUE_REWARDS = {
+    'bronze': {
+        'daily': {'gold': 100, 'hustlecoins': 1},
+        'weekly': {'gold': 500, 'hustlecoins': 5},
+        'monthly': {'gold': 2000, 'hustlecoins': 20}
+    },
+    'silver': {
+        'daily': {'gold': 200, 'hustlecoins': 2},
+        'weekly': {'gold': 1000, 'hustlecoins': 10},
+        'monthly': {'gold': 4000, 'hustlecoins': 40}
+    },
+    'gold': {
+        'daily': {'gold': 300, 'hustlecoins': 3},
+        'weekly': {'gold': 1500, 'hustlecoins': 15},
+        'monthly': {'gold': 6000, 'hustlecoins': 60}
+    },
+    'platinum': {
+        'daily': {'gold': 400, 'hustlecoins': 4},
+        'weekly': {'gold': 2000, 'hustlecoins': 20},
+        'monthly': {'gold': 8000, 'hustlecoins': 80}
+    },
+    'diamond': {
+        'daily': {'gold': 500, 'hustlecoins': 5},
+        'weekly': {'gold': 2500, 'hustlecoins': 25},
+        'monthly': {'gold': 10000, 'hustlecoins': 100}
+    }
+}
+
+# Alliance Perks
+ALLIANCE_PERKS = {
+    'resource_bonus': {
+        'name': 'Resource Boost',
+        'description': 'Increases resource production for all members',
+        'levels': {
+            1: {'bonus': 0.05},  # 5% bonus
+            2: {'bonus': 0.10},  # 10% bonus
+            3: {'bonus': 0.15}   # 15% bonus
+        }
+    },
+    'training_bonus': {
+        'name': 'Rapid Training',
+        'description': 'Reduces unit training time',
+        'levels': {
+            1: {'bonus': 0.10},  # 10% faster
+            2: {'bonus': 0.20},  # 20% faster
+            3: {'bonus': 0.30}   # 30% faster
+        }
+    },
+    'research_bonus': {
+        'name': 'Research Boost',
+        'description': 'Reduces research time',
+        'levels': {
+            1: {'bonus': 0.10},  # 10% faster
+            2: {'bonus': 0.20},  # 20% faster
+            3: {'bonus': 0.30}   # 30% faster
+        }
+    }
+}
+
+# Alliance Ranks
+ALLIANCE_RANKS = {
+    'leader': {
+        'name': 'Leader',
+        'permissions': [
+            'manage_members',
+            'manage_ranks',
+            'declare_war',
+            'manage_alliance',
+            'manage_perks',
+            'manage_resources'
+        ]
+    },
+    'officer': {
+        'name': 'Officer',
+        'permissions': [
+            'manage_members',
+            'manage_ranks',
+            'manage_resources'
+        ]
+    },
+    'veteran': {
+        'name': 'Veteran',
+        'permissions': [
+            'manage_resources'
+        ]
+    },
+    'member': {
+        'name': 'Member',
+        'permissions': [
+            'view_alliance',
+            'donate_resources'
+        ]
+    }
+}
+
+MARKET_ITEMS = {
+    'revival': {
+        'name': 'Revival',
+        'description': 'Revive your army instantly after defeat.',
+        'price': {'hustlecoins': 3},
+        'cooldown': 86400,  # 24 hours
+        'emoji': '❤️‍🔥'
+    },
+    'speed_boost': {
+        'name': 'Speed Boost',
+        'description': 'Reduce all building and training times by 50% for 1 hour.',
+        'price': {'hustlecoins': 2},
+        'duration': 3600,
+        'emoji': '⚡'
+    },
+    'resource_pack': {
+        'name': 'Resource Pack',
+        'description': 'A bundle of random resources.',
+        'price': {'gold': 500},
+        'contents': {'wood': 200, 'stone': 100, 'food': 150},
+        'emoji': '🎁'
+    },
+    'protection_shield': {
+        'name': 'Protection Shield',
+        'description': 'Prevents attacks on your base for 8 hours.',
+        'price': {'hustlecoins': 4},
+        'duration': 28800,
+        'emoji': '🛡️'
+    }
+    # Add more items as needed
 } 

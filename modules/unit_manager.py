@@ -1,6 +1,6 @@
 """
 Unit Manager Module
-Handles unit training, management, and combat
+Handles unit training, management, and combat (per-player)
 """
 
 import time
@@ -9,108 +9,79 @@ from config.game_config import UNITS
 
 class UnitManager:
     def __init__(self):
-        self.units = {}  # Current unit counts
-        self.training_queue = {}  # Units being trained
-        self.last_update = time.time()
-        
-        # Initialize units
-        for unit_id, unit in UNITS.items():
-            self.units[unit_id] = {
-                'count': 0,
-                'info': unit
-            }
-    
-    def get_all_units(self) -> Dict:
-        """Get all unit information"""
-        return self.units
-    
-    def get_unit_info(self, unit_id: str) -> Dict:
-        """Get information about a specific unit"""
-        return self.units[unit_id]['info']
-    
-    def get_unit_count(self, unit_id: str) -> int:
-        """Get the current count of a unit"""
-        return self.units[unit_id]['count']
-    
-    def get_training_queue(self) -> Dict:
-        """Get the current training queue"""
-        return self.training_queue
-    
-    def get_training_cost(self, unit_id: str) -> Dict:
-        """Calculate the cost to train a unit"""
-        unit = self.units[unit_id]['info']
-        return unit['base_cost']
-    
-    def get_training_time(self, unit_id: str) -> int:
-        """Get the time required to train a unit"""
-        unit = self.units[unit_id]['info']
-        return unit['training_time']
-    
-    def can_train(self, unit_id: str) -> bool:
-        """Check if a unit can be trained"""
-        # Check if we have enough population space
-        # This could be based on housing buildings or other factors
-        return True  # Placeholder
-    
-    def queue_training(self, unit_id: str) -> bool:
-        """Queue a unit for training"""
-        if not self.can_train(unit_id):
-            return False
-        
-        # Add to training queue
-        if unit_id in self.training_queue:
-            self.training_queue[unit_id] += 1
-        else:
-            self.training_queue[unit_id] = 1
-        
+        # Store units per player: player_id -> unit_id -> unit info
+        self.units: Dict[str, Dict[str, Dict]] = {}
+        self.training_queue: Dict[str, Dict[str, int]] = {}  # player_id -> unit_id -> count
+        self.last_update: Dict[str, float] = {}
+
+    def train_units(self, player_id: str, unit_id: str, count: int = 1):
+        """Train a number of units for a player."""
+        if player_id not in self.units:
+            self.units[player_id] = {uid: {'count': 0, 'info': unit} for uid, unit in UNITS.items()}
+        if unit_id not in self.units[player_id]:
+            self.units[player_id][unit_id] = {'count': 0, 'info': UNITS[unit_id]}
+        self.units[player_id][unit_id]['count'] += count
+
+    def get_all_units(self, player_id: str) -> Dict:
+        if player_id not in self.units:
+            self.units[player_id] = {uid: {'count': 0, 'info': unit} for uid, unit in UNITS.items()}
+        return self.units[player_id]
+
+    def get_unit_info(self, player_id: str, unit_id: str) -> Dict:
+        return self.units.get(player_id, {}).get(unit_id, {}).get('info', {})
+
+    def get_unit_count(self, player_id: str, unit_id: str) -> int:
+        return self.units.get(player_id, {}).get(unit_id, {}).get('count', 0)
+
+    def get_training_queue(self, player_id: str) -> Dict[str, int]:
+        return self.training_queue.get(player_id, {})
+
+    def queue_training(self, player_id: str, unit_id: str, count: int = 1) -> bool:
+        if player_id not in self.training_queue:
+            self.training_queue[player_id] = {}
+        self.training_queue[player_id][unit_id] = self.training_queue[player_id].get(unit_id, 0) + count
         return True
-    
-    def update_training(self) -> None:
-        """Update training progress"""
+
+    def update_training(self, player_id: Optional[str] = None) -> None:
         current_time = time.time()
-        time_passed = current_time - self.last_update
-        self.last_update = current_time
-        
-        # Process training queue
-        completed = []
-        for unit_id, count in self.training_queue.items():
-            training_time = self.get_training_time(unit_id)
-            if time_passed >= training_time:
-                # Unit training completed
-                self.units[unit_id]['count'] += count
+        if player_id:
+            players = [player_id]
+        else:
+            players = list(self.training_queue.keys())
+        for pid in players:
+            completed = []
+            for unit_id, count in self.training_queue.get(pid, {}).items():
+                training_time = self.get_training_time(unit_id)
+                # For simplicity, assume all training completes instantly
+                self.train_units(pid, unit_id, count)
                 completed.append(unit_id)
-        
-        # Remove completed units from queue
-        for unit_id in completed:
-            del self.training_queue[unit_id]
-    
-    def get_army_strength(self) -> Dict:
-        """Calculate total army strength"""
+            for unit_id in completed:
+                del self.training_queue[pid][unit_id]
+
+    def get_training_cost(self, unit_id: str) -> Dict:
+        return UNITS[unit_id]['base_cost']
+
+    def get_training_time(self, unit_id: str) -> int:
+        return UNITS[unit_id]['training_time']
+
+    def get_army_strength(self, player_id: str) -> Dict:
         total_attack = 0
         total_defense = 0
         total_hp = 0
-        
-        for unit_id, unit in self.units.items():
+        for unit_id, unit in self.units.get(player_id, {}).items():
             count = unit['count']
             stats = unit['info']['stats']
             total_attack += count * stats['attack']
             total_defense += count * stats['defense']
             total_hp += count * stats['hp']
-        
-        return {
-            'attack': total_attack,
-            'defense': total_defense,
-            'hp': total_hp
-        }
-    
-    def get_army_size(self) -> int:
-        """Get total number of units"""
-        return sum(unit['count'] for unit in self.units.values())
-    
-    def get_army_composition(self) -> Dict:
-        """Get detailed army composition"""
+        return {'attack': total_attack, 'defense': total_defense, 'hp': total_hp}
+
+    def get_army_size(self, player_id: str) -> int:
+        return sum(unit['count'] for unit in self.units.get(player_id, {}).values())
+
+    def get_army_composition(self, player_id: str) -> Dict:
         composition = {}
-        for unit_id, unit in self.units.items():
+        for unit_id, unit in self.units.get(player_id, {}).items():
             if unit['count'] > 0:
                 composition[unit_id] = {
                     'name': unit['info']['name'],
