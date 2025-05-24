@@ -11,14 +11,20 @@ from modules.player_manager import PlayerManager
 player_manager: PlayerManager = None
 
 PREMIUM_PACKS = [
-    {'pack_id': 'pack_10', 'amount': 10, 'price': 2000, 'label': '10 HustleCoins \\(R20\\)'},
-    {'pack_id': 'pack_50', 'amount': 50, 'price': 9000, 'label': '50 HustleCoins \\(R90\\)'},
-    {'pack_id': 'pack_120', 'amount': 120, 'price': 20000, 'label': '120 HustleCoins \\(R200\\)'}
+    {'pack_id': 'pack_10', 'amount': 10, 'price': 2000, 'label': '10 HustleCoins (R20)'},
+    {'pack_id': 'pack_50', 'amount': 50, 'price': 9000, 'label': '50 HustleCoins (R90)'},
+    {'pack_id': 'pack_120', 'amount': 120, 'price': 20000, 'label': '120 HustleCoins (R200)'}
 ]
+
+def _escape_markdown(text: str) -> str:
+    special_chars = ['*', '_', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+    for char in special_chars:
+        text = text.replace(char, f'\\{char}')
+    return text
 
 async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     player_id = str(update.effective_user.id)
-    message = "💎 *Buy HustleCoins*\n\nSelect a pack to purchase premium currency\\.\n\n"
+    message = "💎 *Buy HustleCoins*\n\nSelect a pack to purchase premium currency.\n\n"
     keyboard = []
     for pack in PREMIUM_PACKS:
         message += f"{pack['label']}\n"
@@ -40,11 +46,11 @@ async def buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pack = next((p for p in PREMIUM_PACKS if p['pack_id'] == pack_id), None)
         if not pack:
             await query.answer()
-            await query.edit_message_text("Pack not found\\.", parse_mode='MarkdownV2')
+            await query.edit_message_text(_escape_markdown("Pack not found."), parse_mode='MarkdownV2')
             return
         # Send invoice
         title = f"Buy {pack['amount']} HustleCoins"
-        description = f"{pack['amount']} HustleCoins for SkyHustle 2\\."
+        description = _escape_markdown(f"{pack['amount']} HustleCoins for SkyHustle 2.")
         payload = f"hustlecoins_{pack_id}_{player_id}"
         provider_token = 'YOUR_PROVIDER_TOKEN'  # Replace with your Telegram payment provider token
         currency = 'ZAR'  # South African Rand
@@ -59,7 +65,7 @@ async def buy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             prices=prices
         )
         await query.answer()
-        await query.edit_message_text(f"Processing payment for {pack['amount']} HustleCoins\\.\\.\\.", parse_mode='MarkdownV2')
+        await query.edit_message_text(_escape_markdown("Processing payment for HustleCoins..."), parse_mode='MarkdownV2')
 
 async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
     player_id = str(update.effective_user.id)
@@ -72,6 +78,6 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
         pack = next((p for p in PREMIUM_PACKS if p['pack_id'] == pack_id), None)
         if pack:
             player_manager.add_hustlecoins(player_id, pack['amount'])
-            await update.message.reply_text(f"✅ You received {pack['amount']} HustleCoins\\! Enjoy your premium purchases\\.", parse_mode='MarkdownV2')
+            await update.message.reply_text(_escape_markdown(f"✅ You received {pack['amount']} HustleCoins! Enjoy your premium purchases."), parse_mode='MarkdownV2')
         else:
-            await update.message.reply_text("Payment received, but pack not found\\. Please contact support\\.", parse_mode='MarkdownV2') 
+            await update.message.reply_text(_escape_markdown("Payment received, but pack not found. Please contact support."), parse_mode='MarkdownV2') 

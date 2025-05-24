@@ -129,19 +129,18 @@ class GameHandler:
             
             # Welcome message with escaped special characters
             message = (
-                "🎉 *Welcome to* _SkyHustle 2_\\! 🎮\n\n"
-                "*Your adventure begins now\\!*\n"
-                "Use /help or tap the button below to see what you can do\\!\n\n"
+                "🎉 *Welcome to* _SkyHustle 2_! 🎮\n\n"
+                "*Your adventure begins now!*\n"
+                "Use /help or tap the button below to see what you can do!\n\n"
             )
             
             # Add tutorial step message if available
             if current_step:
                 # Escape special characters in the tutorial message
-                tutorial_message = current_step.get('message', 'Welcome to the game\\!')
-                tutorial_message = tutorial_message.replace('!', '\\!').replace('.', '\\.').replace('-', '\\-')
+                tutorial_message = self._escape_markdown(current_step.get('message', 'Welcome to the game!'))
                 message += f"📚 *Current Tutorial Step:*\n{tutorial_message}\n\n"
             
-            message += "🔥 _Tip: Invite friends for special rewards\\!_"
+            message += "🔥 _Tip: Invite friends for special rewards!_"
             
             # Create keyboard with main menu options
             keyboard = [
@@ -799,7 +798,7 @@ class GameHandler:
             target_alliance_id = context.args[0]
             result = self.alliance_manager.declare_peace(player_id, target_alliance_id)
             if result.get('success'):
-                await update.message.reply_text(f"🕊️ Peace declared with alliance {target_alliance_id}\! May prosperity follow\! 🕊️", parse_mode='MarkdownV2')
+                await update.message.reply_text(_escape_markdown(f"🕊️ Peace declared with alliance {target_alliance_id}! May prosperity follow! 🕊️"), parse_mode='MarkdownV2')
             else:
                 await update.message.reply_text(f"❌ {result.get('message', 'Could not declare peace.')}", parse_mode='MarkdownV2')
         except Exception as e:
@@ -1947,7 +1946,7 @@ class GameHandler:
             
             for key, name in notification_settings.items():
                 status = "✅" if settings.get(key, True) else "❌"
-                message += f"└ {status} {name}\n"
+                message += f"└ {status} {self._escape_markdown(name)}\n"
             
             # Display display settings
             message += "\n🎨 *Display Settings:*\n"
@@ -1960,7 +1959,7 @@ class GameHandler:
             
             for key, name in display_settings.items():
                 status = "✅" if settings.get(key, True) else "❌"
-                message += f"└ {status} {name}\n"
+                message += f"└ {status} {self._escape_markdown(name)}\n"
             
             # Create keyboard
             keyboard = [
@@ -1995,7 +1994,7 @@ class GameHandler:
             settings = self.player_manager.get_player_settings(player_id)
             
             # Create message based on setting type
-            message = f"⚙️ *{setting_type.title()} Settings* ⚙️\n\n"
+            message = f"⚙️ *{self._escape_markdown(setting_type.title())} Settings* ⚙️\n\n"
             keyboard = []
             
             if setting_type == 'notifications':
@@ -2007,7 +2006,7 @@ class GameHandler:
                     'market_alerts': 'Market Alerts'
                 }.items():
                     status = "✅" if settings.get(key, True) else "❌"
-                    message += f"└ {status} {name}\n"
+                    message += f"└ {status} {self._escape_markdown(name)}\n"
                     keyboard.append([
                         InlineKeyboardButton(
                             f"{'Disable' if settings.get(key, True) else 'Enable'} {name}",
@@ -2023,7 +2022,7 @@ class GameHandler:
                     'dark_mode': 'Dark Mode'
                 }.items():
                     status = "✅" if settings.get(key, True) else "❌"
-                    message += f"└ {status} {name}\n"
+                    message += f"└ {status} {self._escape_markdown(name)}\n"
                     keyboard.append([
                         InlineKeyboardButton(
                             f"{'Disable' if settings.get(key, True) else 'Enable'} {name}",
@@ -2039,7 +2038,7 @@ class GameHandler:
                     'confirm_actions': 'Confirm Actions'
                 }.items():
                     status = "✅" if settings.get(key, True) else "❌"
-                    message += f"└ {status} {name.replace('*', '\\*').replace('_', '\\_').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')}\n"
+                    message += f"└ {status} {self._escape_markdown(name)}\n"
                     keyboard.append([
                         InlineKeyboardButton(
                             f"{'Disable' if settings.get(key, True) else 'Enable'} {name}",
@@ -2077,8 +2076,8 @@ class GameHandler:
                 message += "📨 *Unread Notifications:*\n"
                 for notification in unread[:5]:  # Show last 5 unread
                     message += (
-                        f"└ {notification['emoji']} *{notification['title'].replace('*', '\\*').replace('_', '\\_').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')}*\n"
-                        f"  {notification['message'].replace('*', '\\*').replace('_', '\\_').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')}\n"
+                        f"└ {notification['emoji']} *{self._escape_markdown(notification['title'])}*\n"
+                        f"  {self._escape_markdown(notification['message'])}\n"
                         f"  ⏰ {time.strftime('%Y-%m-%d %H:%M', time.localtime(notification['timestamp']))}\n\n"
                     )
             else:
@@ -2089,8 +2088,8 @@ class GameHandler:
             for notification in notifications[-5:]:  # Show last 5 notifications
                 read_status = "✅" if notification.get('read', False) else "📨"
                 message += (
-                    f"└ {read_status} {notification['emoji']} *{notification['title'].replace('*', '\\*').replace('_', '\\_').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')}*\n"
-                    f"  {notification['message'].replace('*', '\\*').replace('_', '\\_').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')}\n"
+                    f"└ {read_status} {notification['emoji']} *{self._escape_markdown(notification['title'])}*\n"
+                    f"  {self._escape_markdown(notification['message'])}\n"
                     f"  ⏰ {time.strftime('%Y-%m-%d %H:%M', time.localtime(notification['timestamp']))}\n\n"
                 )
             
@@ -2421,26 +2420,26 @@ class GameHandler:
             
             if result['success']:
                 message += (
-                    f"✅ *{result['item']['name'].replace('*', '\\*').replace('_', '\\_').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')}*\n"
-                    f"{result['item']['description'].replace('*', '\\*').replace('_', '\\_').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')}\n\n"
+                    f"✅ *{self._escape_markdown(result['item']['name'])}*\n"
+                    f"{self._escape_markdown(result['item']['description'])}\n\n"
                 )
                 
                 # Display action result
                 if action == 'use':
                     message += "🎯 *Effect:*\n"
                     for effect in result['effects']:
-                        message += f"└ {effect['emoji']} {effect['description']}\n"
+                        message += f"└ {effect['emoji']} {self._escape_markdown(effect['description'])}\n"
                 elif action == 'equip':
                     message += "📊 *Stats Applied:*\n"
                     for stat, value in result['stats'].items():
                         message += f"└ {self._format_equipment_stats({stat: value})}\n"
                 elif action == 'consume':
                     message += "⚡ *Effect:*\n"
-                    message += f"└ {result['effect']['description']}\n"
+                    message += f"└ {self._escape_markdown(result['effect']['description'])}\n"
                 elif action == 'discard':
                     message += "🗑️ *Item discarded successfully*\n"
             else:
-                message += f"❌ {result['message']}\n"
+                message += f"❌ {self._escape_markdown(result['message'])}\n"
             
             keyboard = [
                 [InlineKeyboardButton("🔄 Refresh", callback_data="inventory_refresh")],

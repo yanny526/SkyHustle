@@ -113,7 +113,7 @@ async def bag(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = "🎒 *Your Bag*\n\n"
     keyboard = []
     if not items:
-        message += "Your bag is empty\\.\n"
+        message += "Your bag is empty.\n"
     else:
         for item in items:
             name = item['item_id']
