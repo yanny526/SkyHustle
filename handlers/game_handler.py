@@ -838,8 +838,8 @@ class GameHandler:
             await self._handle_error(update, e)
 
     def _escape_markdown(self, text: str) -> str:
-        """Helper method to escape special characters for MarkdownV2"""
-        special_chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+        """Helper function to escape markdown characters"""
+        special_chars = ['*', '_', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
         for char in special_chars:
             text = text.replace(char, f'\\{char}')
         return text
@@ -1921,12 +1921,22 @@ class GameHandler:
             player_id = str(update.effective_user.id)
             settings = self.player_manager.get_player_settings(player_id)
             
-            message = (
-                "⚙️ *Game Settings* ⚙️\n\n"
-            )
+            message = "⚙️ *Settings* ⚙️\n\n"
+            
+            # Display current settings
+            game_settings = {
+                'auto_collect': 'Auto-Collect Resources',
+                'auto_train': 'Auto-Train Units',
+                'auto_research': 'Auto-Research',
+                'confirm_actions': 'Confirm Actions'
+            }
+            
+            for key, name in game_settings.items():
+                status = "✅" if settings.get(key, True) else "❌"
+                message += f"└ {status} {self._escape_markdown(name)}\n"
             
             # Display notification settings
-            message += "🔔 *Notifications:*\n"
+            message += "\n🔔 *Notifications:*\n"
             notification_settings = {
                 'battle_alerts': 'Battle Alerts',
                 'resource_alerts': 'Resource Alerts',
@@ -1951,19 +1961,6 @@ class GameHandler:
             for key, name in display_settings.items():
                 status = "✅" if settings.get(key, True) else "❌"
                 message += f"└ {status} {name}\n"
-            
-            # Display game settings
-            message += "\n🎮 *Game Settings:*\n"
-            game_settings = {
-                'auto_collect': 'Auto-Collect Resources',
-                'auto_train': 'Auto-Train Units',
-                'auto_research': 'Auto-Research',
-                'confirm_actions': 'Confirm Actions'
-            }
-            
-            for key, name in game_settings.items():
-                status = "✅" if settings.get(key, True) else "❌"
-                message += f"└ {status} {name.replace('*', '\\*').replace('_', '\\_').replace('[', '\\[').replace(']', '\\]').replace('(', '\\(').replace(')', '\\)').replace('~', '\\~').replace('`', '\\`').replace('>', '\\>').replace('#', '\\#').replace('+', '\\+').replace('-', '\\-').replace('=', '\\=').replace('|', '\\|').replace('{', '\\{').replace('}', '\\}').replace('.', '\\.').replace('!', '\\!')}\n"
             
             # Create keyboard
             keyboard = [
