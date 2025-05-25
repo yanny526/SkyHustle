@@ -366,52 +366,47 @@ class GameHandler:
             buildings = self.building_manager.get_buildings(player_id)
             army = self.unit_manager.get_army(player_id)
 
-            # Enhanced status message with better formatting and emojis
-            message = (
-                "🏰 *Your SkyHustle Base* 🏰\n\n"
-                f"👤 *Player Status*\n"
-                f"└ Level: {level}  ✨ XP: {xp}  💎 HustleCoins: {hustlecoins}\n\n"
+            # Build message parts
+            message_parts = [
+                "🏰 *Your SkyHustle Base* 🏰\n\n",
+                "👤 *Player Status*\n",
+                f"└ Level: {level}  ✨ XP: {xp}  💎 HustleCoins: {hustlecoins}\n\n",
                 "🌲 *Resources*\n"
-            )
+            ]
             
             # Resource display with progress bars
             for k, v in resources.items():
                 max_capacity = self.resource_manager.get_max_capacity(player_id, k)
                 percentage = (v / max_capacity) * 100
                 progress_bar = self._create_progress_bar(percentage)
-                message += f"└ {RESOURCES[k]['emoji']} {RESOURCES[k]['name']}: {v}/{max_capacity} {progress_bar}\n"
+                message_parts.append(f"└ {RESOURCES[k]['emoji']} {RESOURCES[k]['name']}: {v}/{max_capacity} {progress_bar}\n")
             
-            message += "\n🏗️ *Buildings*\n"
+            message_parts.append("\n🏗️ *Buildings*\n")
             if buildings:
                 for k, v in buildings.items():
-                    message += f"└ {BUILDINGS[k]['emoji']} {BUILDINGS[k]['name']}: Lv{v}\n"
+                    message_parts.append(f"└ {BUILDINGS[k]['emoji']} {BUILDINGS[k]['name']}: Lv{v}\n")
             else:
-                message += "└ No buildings constructed yet\n"
+                message_parts.append("└ No buildings constructed yet\n")
             
-            message += "\n⚔️ *Army*\n"
+            message_parts.append("\n⚔️ *Army*\n")
             if army:
                 for k, v in army.items():
-                    message += f"└ {UNITS[k]['emoji']} {UNITS[k]['name']}: {v}\n"
+                    message_parts.append(f"└ {UNITS[k]['emoji']} {UNITS[k]['name']}: {v}\n")
             else:
-                message += "└ No units trained yet\n"
-
-            # Enhanced keyboard layout with better organization
-            keyboard = [
-                [
-                    InlineKeyboardButton("🏗️ Build", callback_data="build"),
-                    InlineKeyboardButton("⚔️ Train", callback_data="train")
-                ],
-                [
-                    InlineKeyboardButton("🎯 Quest", callback_data="quest"),
-                    InlineKeyboardButton("🏪 Market", callback_data="market")
-                ],
-                [
-                    InlineKeyboardButton("👥 Profile", callback_data="profile"),
-                    InlineKeyboardButton("🔄 Refresh", callback_data="refresh_status")
-                ]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            await update.message.reply_text(message, reply_markup=reply_markup, parse_mode='MarkdownV2')
+                message_parts.append("└ No units trained yet\n")
+            
+            # Join all parts and escape the entire message
+            message = ''.join(message_parts)
+            message = self._escape_markdown(message)
+            
+            # Add markdown formatting after escaping
+            message = message.replace('Your SkyHustle Base', '*Your SkyHustle Base*')
+            message = message.replace('Player Status', '*Player Status*')
+            message = message.replace('Resources', '*Resources*')
+            message = message.replace('Buildings', '*Buildings*')
+            message = message.replace('Army', '*Army*')
+            
+            await update.message.reply_text(message, parse_mode='MarkdownV2')
         except Exception as e:
             logger.error(f"Error in handle_status: {e}", exc_info=True)
             await self._handle_error(update, e)
