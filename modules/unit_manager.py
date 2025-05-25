@@ -4,7 +4,7 @@ Handles unit training, management, and combat (per-player)
 """
 
 import time
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 from config.game_config import UNITS
 
 class UnitManager:
@@ -89,4 +89,26 @@ class UnitManager:
                     'count': unit['count'],
                     'stats': unit['info']['stats']
                 }
-        return composition 
+        return composition
+
+    def get_available_units(self, player_id: str) -> List[Dict]:
+        """Get list of available units for a player"""
+        available = []
+        for unit_id, unit_info in UNITS.items():
+            available.append({
+                'id': unit_id,
+                'name': unit_info['name'],
+                'emoji': unit_info['emoji'],
+                'description': unit_info['description'],
+                'count': self.get_unit_count(player_id, unit_id),
+                'cost': unit_info['base_cost'],
+                'stats': unit_info['stats'],
+                'training_time': unit_info['training_time']
+            })
+        return available
+
+    def get_army(self, player_id: str) -> Dict[str, int]:
+        """Get all units and their counts for a player"""
+        if player_id not in self.units:
+            self.units[player_id] = {uid: {'count': 0, 'info': unit} for uid, unit in UNITS.items()}
+        return {unit_id: unit['count'] for unit_id, unit in self.units[player_id].items() if unit['count'] > 0} 

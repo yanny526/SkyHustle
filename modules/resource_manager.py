@@ -83,7 +83,19 @@ class ResourceManager:
             rates[resource] = base_production * building_bonus * research_bonus
         return rates
 
+    def get_resources(self, player_id: str) -> Dict[str, float]:
+        """Get current resources for a player"""
+        self._ensure_player(player_id)
+        return self.resources[player_id]
+
     def _ensure_player(self, player_id: str):
         if player_id not in self.resources:
             self.resources[player_id] = {resource: 0 for resource in RESOURCES.keys()}
-            self.last_update[player_id] = time.time() 
+            self.last_update[player_id] = time.time()
+
+    def get_max_capacity(self, player_id: str, resource: str) -> float:
+        """Get maximum storage capacity for a resource"""
+        base_capacity = 1000  # Base capacity for all resources
+        warehouse_level = self.buildings.get(player_id, {}).get('warehouse', 0)
+        research_bonus = self.research_effects.get(player_id, {}).get('storage_capacity', 1.0)
+        return base_capacity * (1 + (warehouse_level * 0.2)) * research_bonus 

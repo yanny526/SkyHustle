@@ -14,6 +14,10 @@ class BuildingManager:
         self.upgrade_queue: Dict[str, List[Dict]] = {}  # player_id -> list of upgrades
         self.last_update = time.time()
 
+    def get_buildings(self, player_id: str) -> Dict[str, int]:
+        """Get all buildings and their levels for a player"""
+        return self.buildings.get(player_id, {})
+
     def build_building(self, player_id: str, building_id: str, level: int = 1):
         """Construct a building for a player at a given level."""
         if player_id not in self.buildings:
@@ -112,4 +116,27 @@ class BuildingManager:
             return {}
         level = self.get_building_level(player_id, building_id)
         base_production = BUILDINGS[building_id]['production']
-        return {resource: amount * level for resource, amount in base_production.items()} 
+        return {resource: amount * level for resource, amount in base_production.items()}
+
+    def get_available_buildings(self, player_id: str) -> List[Dict]:
+        """Get list of available buildings for a player"""
+        available = []
+        for building_id, building_info in BUILDINGS.items():
+            current_level = self.get_building_level(player_id, building_id)
+            if current_level < building_info['max_level']:
+                available.append({
+                    'id': building_id,
+                    'name': building_info['name'],
+                    'emoji': building_info['emoji'],
+                    'description': building_info['description'],
+                    'level': current_level,
+                    'max_level': building_info['max_level'],
+                    'cost': self.get_upgrade_cost(player_id, building_id)
+                })
+        return available
+
+    def get_building_requirements(self, building_id: str) -> Dict[str, int]:
+        """Get resource requirements for a building"""
+        if building_id not in BUILDINGS:
+            return {}
+        return BUILDINGS[building_id]['base_cost'] 
