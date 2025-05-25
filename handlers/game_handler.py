@@ -108,6 +108,13 @@ class GameHandler:
                 logger.error(f"Error in update loop: {e}", exc_info=True)
                 await asyncio.sleep(5)  # Wait before retrying
 
+    def _escape_markdown(self, text: str) -> str:
+        """Helper function to escape markdown characters"""
+        special_chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+        for char in special_chars:
+            text = text.replace(char, f'\\{char}')
+        return text
+
     async def handle_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle the /start command with a lively, engaging UI"""
         try:
@@ -127,20 +134,32 @@ class GameHandler:
             self.player_manager.update_last_login(player_id)
             current_step = self.tutorial_manager.get_current_step(player_id)
             
-            # Welcome message with escaped special characters
-            message = (
-                "🎉 *Welcome to* _SkyHustle 2_! 🎮\n\n"
-                "*Your adventure begins now!*\n"
+            # Build the message first
+            message_parts = [
+                "🎉 Welcome to SkyHustle 2! 🎮\n\n",
+                "Your adventure begins now!\n",
                 "Use /help or tap the button below to see what you can do!\n\n"
-            )
+            ]
             
             # Add tutorial step message if available
             if current_step:
-                # Escape special characters in the tutorial message
-                tutorial_message = self._escape_markdown(current_step.get('message', 'Welcome to the game!'))
-                message += f"📚 *Current Tutorial Step:*\n{tutorial_message}\n\n"
+                tutorial_message = current_step.get('message', 'Welcome to the game!')
+                message_parts.extend([
+                    "📚 Current Tutorial Step:\n",
+                    f"{tutorial_message}\n\n"
+                ])
             
-            message += "🔥 _Tip: Invite friends for special rewards!_"
+            message_parts.append("🔥 Tip: Invite friends for special rewards!")
+            
+            # Join all parts and escape the entire message
+            message = self._escape_markdown(''.join(message_parts))
+            
+            # Add markdown formatting after escaping
+            message = message.replace('Welcome to', '*Welcome to*')
+            message = message.replace('SkyHustle 2', '_SkyHustle 2_')
+            message = message.replace('Your adventure begins now!', '*Your adventure begins now!*')
+            message = message.replace('Current Tutorial Step:', '*Current Tutorial Step:*')
+            message = message.replace('Tip: Invite friends for special rewards!', '_Tip: Invite friends for special rewards!_')
             
             # Create keyboard with main menu options
             keyboard = [
@@ -835,13 +854,6 @@ class GameHandler:
         except Exception as e:
             logger.error(f"Error in handle_alliance_list: {e}", exc_info=True)
             await self._handle_error(update, e)
-
-    def _escape_markdown(self, text: str) -> str:
-        """Helper function to escape markdown characters"""
-        special_chars = ['*', '_', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
-        for char in special_chars:
-            text = text.replace(char, f'\\{char}')
-        return text
 
     async def handle_alliance_info(self, update, context):
         """Show alliance info with lively UI"""
