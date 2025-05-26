@@ -1077,16 +1077,17 @@ class GameHandler:
             buildings = self.building_manager.get_available_buildings(player_id)
             resources = self.resource_manager.get_resources(player_id)
             
-            message = (
-                "🏗️ *Construction Site* 🏗️\n\n"
+            # Build message parts
+            message_parts = [
+                "🏗️ *Construction Site* 🏗️\n\n",
                 "🌲 *Your Resources:*\n"
-            )
+            ]
             
             # Display current resources
             for k, v in resources.items():
-                message += f"└ {RESOURCES[k]['emoji']} {RESOURCES[k]['name']}: {v}\n"
+                message_parts.append(f"└ {RESOURCES[k]['emoji']} {self._escape_markdown(RESOURCES[k]['name'])}: {v}\n")
             
-            message += "\n🏛️ *Available Buildings:*\n"
+            message_parts.append("\n🏛️ *Available Buildings:*\n")
             keyboard = []
             
             for building in buildings:
@@ -1094,15 +1095,24 @@ class GameHandler:
                 reqs = self.building_manager.get_building_requirements(building['id'])
                 current_level = self.building_manager.get_building_level(player_id, building['id'])
                 
-                # Format requirements with emojis
-                req_str = " | ".join(f"{self._get_resource_emoji(k)} {v}" for k, v in reqs.items())
+                # Format requirements with emojis and proper escaping
+                req_parts = []
+                for k, v in reqs.items():
+                    emoji = self._get_resource_emoji(k)
+                    name = self._escape_markdown(RESOURCES[k]['name'])
+                    req_parts.append(f"{emoji} {name}: {v}")
+                req_str = " \\| ".join(req_parts)  # Escape the pipe character
                 
-                message += (
-                    f"└ {BUILDINGS[building['id']]['emoji']} *{self._escape_markdown(building['name'])}*\n"
-                    f"  Level: {current_level}\n"
-                    f"  {self._escape_markdown(building['description'])}\n"
+                # Build the message part with proper escaping
+                building_name = self._escape_markdown(building['name'])
+                building_desc = self._escape_markdown(building['description'])
+                
+                message_parts.extend([
+                    f"└ {BUILDINGS[building['id']]['emoji']} *{building_name}*\n",
+                    f"  Level: {current_level}\n",
+                    f"  {building_desc}\n",
                     f"  💰 Cost: {req_str}\n\n"
-                )
+                ])
                 
                 # Add build button if requirements met
                 can_build = all(resources.get(k, 0) >= v for k, v in reqs.items())
@@ -1119,6 +1129,15 @@ class GameHandler:
                 InlineKeyboardButton("🔄 Refresh", callback_data="refresh_build"),
                 InlineKeyboardButton("🔙 Back", callback_data="status")
             ])
+            
+            # Join all message parts and escape the entire message
+            message = ''.join(message_parts)
+            message = self._escape_markdown(message)
+            
+            # Add markdown formatting after escaping
+            message = message.replace('Construction Site', '*Construction Site*')
+            message = message.replace('Your Resources', '*Your Resources*')
+            message = message.replace('Available Buildings', '*Available Buildings*')
             
             reply_markup = InlineKeyboardMarkup(keyboard)
             await update.message.reply_text(message, reply_markup=reply_markup, parse_mode='MarkdownV2')
