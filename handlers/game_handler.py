@@ -306,50 +306,65 @@ class GameHandler:
             return []
 
     async def handle_help(self, update, context):
-        """Handle the /help command with enhanced UI"""
+        """Handle the /help command"""
         try:
-            message = (
-                "❓ *Help Center* ❓\n\n"
-                "Welcome to SkyHustle 2! Here's how to get started:\n\n"
-                "🎮 *Basic Commands:*\n"
-                "└ /start - Begin your adventure\n"
-                "└ /status - Check your current status\n"
-                "└ /help - Show this help message\n"
-                "└ /tutorial - Start the tutorial\n\n"
-                "🏰 *Game Features:*\n"
-                "└ /build - Manage your buildings\n"
-                "└ /train - Train your army\n"
-                "└ /market - Trade with other players\n"
-                "└ /alliance - Join or manage alliances\n"
-                "└ /social - Connect with friends\n\n"
-                "📊 *Game Systems:*\n"
-                "└ /inventory - Manage your items\n"
-                "└ /events - View active events\n"
-                "└ /leaderboard - Check rankings\n"
-                "└ /settings - Configure game settings\n\n"
-                "Need more help? Select a category below:"
-            )
-            
-            keyboard = [
-                [
-                    InlineKeyboardButton("🎮 Gameplay", callback_data="help_gameplay"),
-                    InlineKeyboardButton("🏰 Buildings", callback_data="help_buildings")
-                ],
-                [
-                    InlineKeyboardButton("⚔️ Combat", callback_data="help_combat"),
-                    InlineKeyboardButton("💰 Economy", callback_data="help_economy")
-                ],
-                [
-                    InlineKeyboardButton("🤝 Social", callback_data="help_social"),
-                    InlineKeyboardButton("⚙️ Settings", callback_data="help_settings")
-                ],
-                [
-                    InlineKeyboardButton("❓ FAQ", callback_data="help_faq"),
-                    InlineKeyboardButton("📝 Support", callback_data="help_support")
-                ]
+            # Build message parts
+            message_parts = [
+                "🎮 *SkyHustle 2 Help* 🎮\n\n",
+                "Here are the main commands you can use:\n\n",
+                "*Basic Commands:*\n",
+                "└ /start \\- Start your adventure\n",
+                "└ /help \\- Show this help message\n",
+                "└ /status \\- Check your base status\n",
+                "└ /profile \\- View your profile\n\n",
+                "*Building & Resources:*\n",
+                "└ /build \\- Construct buildings\n",
+                "└ /train \\- Train military units\n",
+                "└ /research \\- Research new technologies\n\n",
+                "*Combat & Alliances:*\n",
+                "└ /combat \\- Attack other players\n",
+                "└ /alliance \\- Manage your alliance\n",
+                "└ /market \\- Trade with other players\n\n",
+                "*Social Features:*\n",
+                "└ /friends \\- Manage friends list\n",
+                "└ /chat \\- Global chat\n",
+                "└ /gift \\- Send gifts to friends\n\n",
+                "*Other Features:*\n",
+                "└ /quest \\- View available quests\n",
+                "└ /inventory \\- Check your items\n",
+                "└ /settings \\- Configure game settings\n\n",
+                "Need more help? Use /support to contact us!"
             ]
             
+            # Join all parts and escape the entire message
+            message = ''.join(message_parts)
+            message = self._escape_markdown(message)
+            
+            # Add markdown formatting after escaping
+            message = message.replace('SkyHustle 2 Help', '*SkyHustle 2 Help*')
+            message = message.replace('Basic Commands:', '*Basic Commands:*')
+            message = message.replace('Building & Resources:', '*Building & Resources:*')
+            message = message.replace('Combat & Alliances:', '*Combat & Alliances:*')
+            message = message.replace('Social Features:', '*Social Features:*')
+            message = message.replace('Other Features:', '*Other Features:*')
+            
+            # Create keyboard with help categories
+            keyboard = [
+                [
+                    InlineKeyboardButton("🏗️ Buildings", callback_data="help_buildings"),
+                    InlineKeyboardButton("⚔️ Combat", callback_data="help_combat")
+                ],
+                [
+                    InlineKeyboardButton("👥 Social", callback_data="help_social"),
+                    InlineKeyboardButton("🎯 Quests", callback_data="help_quests")
+                ],
+                [
+                    InlineKeyboardButton("📚 Tutorial", callback_data="help_tutorial"),
+                    InlineKeyboardButton("❓ FAQ", callback_data="help_faq")
+                ]
+            ]
             reply_markup = InlineKeyboardMarkup(keyboard)
+            
             await update.message.reply_text(message, reply_markup=reply_markup, parse_mode='MarkdownV2')
         except Exception as e:
             logger.error(f"Error in handle_help: {e}", exc_info=True)
