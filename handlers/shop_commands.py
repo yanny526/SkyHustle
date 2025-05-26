@@ -43,8 +43,8 @@ async def shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # Enhanced shop message with better formatting
     message = (
-        "🛒 *SkyHustle Shop*\n\n"
-        f"💎 *Your Balance:* {coins} HustleCoins\n\n"
+        "<b>🛒 SkyHustle Shop</b>\n\n"
+        f"<b>💎 Your Balance:</b> {coins} HustleCoins\n\n"
     )
     
     # Group items by category
@@ -58,12 +58,12 @@ async def shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Display items by category
     keyboard = []
     for category, category_items in categories.items():
-        message += f"*{category}*\n"
+        message += f"<b>{category}</b>\n"
         for item in category_items:
             # Format costs with emojis
             cost_str = " | ".join(f"{_get_resource_emoji(k)} {v}" for k, v in item['cost'].items())
             message += (
-                f"└ *{item['name']}*\n"
+                f"└ <b>{item['name']}</b>\n"
                 f"  {item['description']}\n"
                 f"  💰 Cost: {cost_str}\n\n"
             )
@@ -81,20 +81,20 @@ async def shop(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ])
     
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text(message, reply_markup=reply_markup, parse_mode='MarkdownV2')
+    await update.message.reply_text(message, reply_markup=reply_markup, parse_mode='HTML')
 
 async def blackmarket(update: Update, context: ContextTypes.DEFAULT_TYPE):
     player_id = str(update.effective_user.id)
     items = black_market_manager.get_market_items()
     coins = player_manager.get_hustlecoins(player_id)
     message = (
-        "🖤 *Black Market*\n\n"
-        f"💎 *Your Balance:* {coins} HustleCoins\n\n"
+        "<b>🖤 Black Market</b>\n\n"
+        f"<b>💎 Your Balance:</b> {coins} HustleCoins\n\n"
     )
     keyboard = []
     for item in items:
         message += (
-            f"*{item['name']}*\n"
+            f"<b>{item['name']}</b>\n"
             f"{item['description']}\n"
             f"💰 Cost: {item['cost']} HustleCoins\n\n"
         )
@@ -105,12 +105,12 @@ async def blackmarket(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         ])
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text(message, reply_markup=reply_markup, parse_mode='MarkdownV2')
+    await update.message.reply_text(message, reply_markup=reply_markup, parse_mode='HTML')
 
 async def bag(update: Update, context: ContextTypes.DEFAULT_TYPE):
     player_id = str(update.effective_user.id)
     items = bag_manager.get_bag(player_id)
-    message = "🎒 *Your Bag*\n\n"
+    message = "<b>🎒 Your Bag</b>\n\n"
     keyboard = []
     if not items:
         message += "Your bag is empty.\n"
@@ -118,7 +118,7 @@ async def bag(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for item in items:
             name = item['item_id']
             qty = item['quantity']
-            message += f"*{name}* x{qty}\n"
+            message += f"<b>{name}</b> x{qty}\n"
             if item['type'] in ['single', 'multi', 'timed']:
                 keyboard.append([
                     InlineKeyboardButton(
@@ -127,7 +127,7 @@ async def bag(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     )
                 ])
     reply_markup = InlineKeyboardMarkup(keyboard) if keyboard else None
-    await update.message.reply_text(message, reply_markup=reply_markup, parse_mode='MarkdownV2')
+    await update.message.reply_text(message, reply_markup=reply_markup, parse_mode='HTML')
 
 # Callback query handlers for purchases and item use
 async def shop_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -138,7 +138,7 @@ async def shop_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         item_id = data.split("_")[-1]
         result = shop_manager.purchase_item(player_id, item_id)
         await query.answer()
-        await query.edit_message_text(_escape_markdown(result['message']), parse_mode='MarkdownV2')
+        await query.edit_message_text(result['message'], parse_mode='HTML')
 
 async def blackmarket_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -149,8 +149,8 @@ async def blackmarket_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         result = black_market_manager.purchase_item(player_id, item_id)
         await query.answer()
         await query.edit_message_text(
-            _escape_markdown(result['message']),
-            parse_mode='MarkdownV2'
+            result['message'],
+            parse_mode='HTML'
         )
 
 async def bag_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -161,7 +161,7 @@ async def bag_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         item_id = data.split("_")[-1]
         if bag_manager.use_item(player_id, item_id):
             await query.answer()
-            await query.edit_message_text(_escape_markdown(f"Used {item_id}!"), parse_mode='MarkdownV2')
+            await query.edit_message_text(f"Used {item_id}!", parse_mode='HTML')
         else:
             await query.answer()
-            await query.edit_message_text(_escape_markdown(f"Failed to use {item_id}.") , parse_mode='MarkdownV2') 
+            await query.edit_message_text(f"Failed to use {item_id}.", parse_mode='HTML') 

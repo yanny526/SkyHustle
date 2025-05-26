@@ -132,47 +132,32 @@ class GameHandler:
         """Handle the /start command with a lively, engaging UI"""
         try:
             player_id = str(update.effective_user.id)
-            if not self.player_manager.get_player(player_id):
-                result = self.player_manager.create_player(player_id)
-                if not result['success']:
-                    await update.message.reply_text("❌ Error creating player profile!")
-                    return
-                tutorial_result = self.tutorial_manager.start_tutorial(player_id)
-                if tutorial_result['success']:
-                    self.resource_manager.add_resources(player_id, self.tutorial_manager.starter_bonuses['resources'])
-                    for building_id, level in self.tutorial_manager.starter_bonuses['buildings'].items():
-                        self.building_manager.build_building(player_id, building_id, level)
-                    for unit_id, count in self.tutorial_manager.starter_bonuses['units'].items():
-                        self.unit_manager.train_units(player_id, unit_id, count)
-            self.player_manager.update_last_login(player_id)
-            current_step = self.tutorial_manager.get_current_step(player_id)
             
-            # Build the message first
+            # Build message parts
             message_parts = [
-                "🎉 Welcome to SkyHustle 2! 🎮\n\n",
-                "Your adventure begins now!\n",
-                "Use /help or tap the button below to see what you can do!\n\n"
+                "<b>Welcome to</b> <i>SkyHustle 2</i>\n\n",
+                "<b>Your adventure begins now!</b>\n\n"
             ]
             
-            # Add tutorial step message if available
-            if current_step:
-                tutorial_message = current_step.get('message', 'Welcome to the game!')
+            # Check if player exists
+            if not self.player_manager.player_exists(player_id):
+                # Create new player
+                self.player_manager.create_player(player_id)
+                message_parts.append("🎉 <i>New player created!</i>\n\n")
+            
+            # Get tutorial step
+            tutorial_step = self.tutorial_manager.get_current_step(player_id)
+            if tutorial_step:
                 message_parts.extend([
-                    "📚 Current Tutorial Step:\n",
-                    f"{tutorial_message}\n\n"
+                    "<b>Current Tutorial Step:</b>\n",
+                    f"└ {tutorial_step['description']}\n\n"
                 ])
             
-            message_parts.append("🔥 Tip: Invite friends for special rewards!")
+            # Add tip
+            message_parts.append("<i>Tip: Invite friends for special rewards!</i>")
             
-            # Join all parts and escape the entire message
-            message = self._escape_markdown(''.join(message_parts))
-            
-            # Add markdown formatting after escaping
-            message = message.replace('Welcome to', '*Welcome to*')
-            message = message.replace('SkyHustle 2', '_SkyHustle 2_')
-            message = message.replace('Your adventure begins now!', '*Your adventure begins now!*')
-            message = message.replace('Current Tutorial Step:', '*Current Tutorial Step:*')
-            message = message.replace('Tip: Invite friends for special rewards!', '_Tip: Invite friends for special rewards!_')
+            # Join all parts
+            message = ''.join(message_parts)
             
             # Create keyboard with main menu options
             keyboard = [
@@ -191,7 +176,7 @@ class GameHandler:
             ]
             
             reply_markup = InlineKeyboardMarkup(keyboard)
-            await update.message.reply_text(message, reply_markup=reply_markup, parse_mode='MarkdownV2')
+            await update.message.reply_text(message, reply_markup=reply_markup, parse_mode='HTML')
         except Exception as e:
             logger.error(f"Error in handle_start: {e}", exc_info=True)
             await self._handle_error(update, e)
@@ -319,39 +304,36 @@ class GameHandler:
             return []
 
     async def handle_help(self, update, context):
-        """Handle the /help command"""
+        """Handle the /help command with enhanced UI"""
         try:
             # Build message parts
             message_parts = [
-                "🎮 *SkyHustle 2 Help* 🎮\n\n",
-                "Here are the main commands you can use:\n\n",
-                "*Basic Commands:*\n",
-                "└ /start - Start your adventure\n",
-                "└ /help - Show this help message\n",
+                "<b>📚 SkyHustle 2 Help Center 📚</b>\n\n",
+                "<b>Basic Commands:</b>\n",
+                "└ /start - Begin your adventure\n",
                 "└ /status - Check your base status\n",
-                "└ /profile - View your profile\n\n",
-                "*Building & Resources:*\n",
                 "└ /build - Construct buildings\n",
                 "└ /train - Train military units\n",
-                "└ /research - Research new technologies\n\n",
-                "*Combat & Alliances:*\n",
-                "└ /combat - Attack other players\n",
+                "└ /attack - Attack other players\n",
+                "└ /quest - View available quests\n\n",
+                
+                "<b>Social Features:</b>\n",
                 "└ /alliance - Manage your alliance\n",
-                "└ /market - Trade with other players\n\n",
-                "*Social Features:*\n",
-                "└ /friends - Manage friends list\n",
-                "└ /chat - Global chat\n",
+                "└ /friends - View your friends list\n",
+                "└ /chat - Chat with other players\n",
                 "└ /gift - Send gifts to friends\n\n",
-                "*Other Features:*\n",
-                "└ /quest - View available quests\n",
-                "└ /inventory - Check your items\n",
-                "└ /settings - Configure game settings\n\n",
-                "Need more help? Use /support to contact us!"
+                
+                "<b>Advanced Features:</b>\n",
+                "└ /research - Research new technologies\n",
+                "└ /market - Trade with other players\n",
+                "└ /prestige - Reset for bonuses\n",
+                "└ /settings - Configure your game\n\n",
+                
+                "<i>Select a category below for detailed information:</i>"
             ]
             
-            # Join all parts and escape the entire message
+            # Join all parts
             message = ''.join(message_parts)
-            message = self._escape_markdown(message)
             
             # Create keyboard with help categories
             keyboard = [
@@ -370,7 +352,7 @@ class GameHandler:
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             
-            await update.message.reply_text(message, reply_markup=reply_markup, parse_mode='MarkdownV2')
+            await update.message.reply_text(message, reply_markup=reply_markup, parse_mode='HTML')
         except Exception as e:
             logger.error(f"Error in handle_help: {e}", exc_info=True)
             await self._handle_error(update, e)
@@ -379,54 +361,49 @@ class GameHandler:
         """Handle the /status command"""
         try:
             player_id = str(update.effective_user.id)
-            level = self.progression_manager.get_player_level(player_id)
-            xp = self.progression_manager.get_player_xp(player_id)
-            hustlecoins = self.player_manager.get_hustlecoins(player_id)
+            player = self.player_manager.get_player(player_id)
+            if not player:
+                await update.message.reply_text("❌ Player not found!")
+                return
+            
+            # Get player resources
             resources = self.resource_manager.get_resources(player_id)
-            buildings = self.building_manager.get_buildings(player_id)
-            army = self.unit_manager.get_army(player_id)
-
+            
+            # Get player buildings
+            buildings = self.building_manager.get_player_buildings(player_id)
+            
+            # Get player army
+            army = self.unit_manager.get_player_army(player_id)
+            
             # Build message parts
             message_parts = [
-                "🏰 *Your SkyHustle Base* 🏰\n\n",
-                "👤 *Player Status*\n",
-                f"└ Level: {level}  ✨ XP: {xp}  💎 HustleCoins: {hustlecoins}\n\n",
-                "🌲 *Resources*\n"
+                f"<b>Your SkyHustle Base</b>\n\n",
+                f"<b>Player Status</b>\n",
+                f"└ Level: {player.get('level', 1)}\n",
+                f"└ Experience: {player.get('experience', 0)}/{player.get('next_level_exp', 100)}\n",
+                f"└ Prestige: {player.get('prestige', 0)}\n\n",
+                
+                f"<b>Resources</b>\n"
             ]
             
-            # Resource display with progress bars
+            # Add resources
             for k, v in resources.items():
-                max_capacity = self.resource_manager.get_max_capacity(player_id, k)
-                percentage = (v / max_capacity) * 100
-                progress_bar = self._create_progress_bar(percentage)
-                message_parts.append(f"└ {RESOURCES[k]['emoji']} {RESOURCES[k]['name']}: {v}/{max_capacity} {progress_bar}\n")
+                message_parts.append(f"└ {RESOURCES[k]['emoji']} {RESOURCES[k]['name']}: {v}\n")
             
-            message_parts.append("\n🏗️ *Buildings*\n")
-            if buildings:
-                for k, v in buildings.items():
-                    message_parts.append(f"└ {BUILDINGS[k]['emoji']} {BUILDINGS[k]['name']}: Lv{v}\n")
-            else:
-                message_parts.append("└ No buildings constructed yet\n")
+            message_parts.append("\n<b>Buildings</b>\n")
+            # Add buildings
+            for building_id, level in buildings.items():
+                message_parts.append(f"└ {BUILDINGS[building_id]['emoji']} {BUILDINGS[building_id]['name']}: Level {level}\n")
             
-            message_parts.append("\n⚔️ *Army*\n")
-            if army:
-                for k, v in army.items():
-                    message_parts.append(f"└ {UNITS[k]['emoji']} {UNITS[k]['name']}: {v}\n")
-            else:
-                message_parts.append("└ No units trained yet\n")
+            message_parts.append("\n<b>Army</b>\n")
+            # Add army
+            for unit_id, count in army.items():
+                message_parts.append(f"└ {UNITS[unit_id]['emoji']} {UNITS[unit_id]['name']}: {count}\n")
             
-            # Join all parts and escape the entire message
+            # Join all parts
             message = ''.join(message_parts)
-            message = self._escape_markdown(message)
             
-            # Add markdown formatting after escaping
-            message = message.replace('Your SkyHustle Base', '*Your SkyHustle Base*')
-            message = message.replace('Player Status', '*Player Status*')
-            message = message.replace('Resources', '*Resources*')
-            message = message.replace('Buildings', '*Buildings*')
-            message = message.replace('Army', '*Army*')
-            
-            await update.message.reply_text(message, parse_mode='MarkdownV2')
+            await update.message.reply_text(message, parse_mode='HTML')
         except Exception as e:
             logger.error(f"Error in handle_status: {e}", exc_info=True)
             await self._handle_error(update, e)
@@ -443,42 +420,36 @@ class GameHandler:
             player_id = str(update.effective_user.id)
             player = self.player_manager.get_player(player_id)
             if not player:
-                await update.message.reply_text("❌ Player not found. Use /start to begin.")
+                await update.message.reply_text("❌ Player not found!")
                 return
-
-            # Get player stats
-            level = self.progression_manager.get_player_level(player_id)
-            xp = self.progression_manager.get_player_xp(player_id)
-            next_level_xp = self.progression_manager.get_next_level_xp(player_id)
-            progress = self.progression_manager.get_level_progress(player_id)
-            achievements = self.achievement_manager.get_player_achievements(player_id)
             
-            # Enhanced profile message with better formatting
-            message = (
-                "👤 *Player Profile*\n\n"
-                f"*Name:* {player.get('name', 'Unknown')}\n"
-                f"*Level:* {level}  ✨ *XP:* {xp}/{next_level_xp}\n"
-                f"*Progress:* {self._create_progress_bar(progress['progress_percentage'])}\n\n"
-            )
-
-            # Add achievements section
-            if achievements.get('achievements'):
-                message += "🏆 *Recent Achievements*\n"
-                for achievement in achievements['achievements'][-3:]:  # Show last 3 achievements
-                    message += f"└ {achievement['emoji']} {achievement['name']}\n"
-                message += "\n"
-
-            # Add stats section
-            message += "📊 *Stats*\n"
+            # Get player stats
             stats = {
-                "Buildings": len(player.get('buildings', {})),
-                "Units": sum(player.get('army', {}).values()),
-                "Wars Won": player.get('wars_won', 0),
-                "Quests Completed": player.get('quests_completed', 0)
+                "Level": player.get('level', 1),
+                "Experience": f"{player.get('experience', 0)}/{player.get('next_level_exp', 100)}",
+                "Prestige": player.get('prestige', 0),
+                "Total Battles": player.get('total_battles', 0),
+                "Battles Won": player.get('battles_won', 0),
+                "Resources Gathered": player.get('resources_gathered', 0),
+                "Buildings Constructed": player.get('buildings_constructed', 0),
+                "Units Trained": player.get('units_trained', 0)
             }
+            
+            # Build message parts
+            message_parts = [
+                f"<b>👤 Player Profile</b>\n\n",
+                f"<b>Name:</b> {player.get('name', 'Unknown')}\n",
+                f"<b>Alliance:</b> {player.get('alliance', 'None')}\n\n",
+                f"<b>Statistics:</b>\n"
+            ]
+            
+            # Add stats
             for stat, value in stats.items():
-                message += f"└ {stat}: {value}\n"
-
+                message_parts.append(f"└ {stat}: {value}\n")
+            
+            # Join all parts
+            message = ''.join(message_parts)
+            
             # Enhanced keyboard layout
             keyboard = [
                 [
@@ -494,7 +465,7 @@ class GameHandler:
                 ]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
-            await update.message.reply_text(message, reply_markup=reply_markup, parse_mode='MarkdownV2')
+            await update.message.reply_text(message, reply_markup=reply_markup, parse_mode='HTML')
         except Exception as e:
             logger.error(f"Error in handle_profile: {e}", exc_info=True)
             await self._handle_error(update, e)
@@ -609,28 +580,45 @@ class GameHandler:
         return "N/A"
 
     async def handle_achievements(self, update, context):
-        """Show player's achievements with lively UI"""
+        """Show player achievements with lively UI"""
         try:
             player_id = str(update.effective_user.id)
             result = self.achievement_manager.get_player_achievements(player_id)
             if not result['success']:
-                await update.message.reply_text("❌ Could not fetch achievements.", parse_mode='MarkdownV2')
+                await update.message.reply_text("❌ Could not fetch achievements.")
                 return
+            
             achievements = result['achievements']
             if not achievements:
-                await update.message.reply_text("No achievements yet. Start playing to earn some! 🥇", parse_mode='MarkdownV2')
+                await update.message.reply_text("No achievements yet. Start playing to earn some! 🥇")
                 return
-            message = "🥇 *Your Achievements* 🥇\n\n"
+            
+            # Build message parts
+            message_parts = [
+                "<b>🥇 Your Achievements 🥇</b>\n\n"
+            ]
+            
+            # Add achievements
             for ach in achievements:
                 status = "✅" if ach['completed'] else "❌"
                 emoji = ach.get('emoji', '🏆')
-                message += f"{status} {emoji} *{ach['name']}*: {ach['description']}\n"
+                message_parts.append(f"{status} {emoji} <b>{ach['name']}</b>: {ach['description']}\n")
+            
+            # Join all parts
+            message = ''.join(message_parts)
+            
+            # Create keyboard
             keyboard = [
-                [InlineKeyboardButton("🏆 Leaderboard", callback_data="leaderboard"), InlineKeyboardButton("👤 Profile", callback_data="profile")],
-                [InlineKeyboardButton("🔙 Back", callback_data="status")]
+                [
+                    InlineKeyboardButton("🏆 Leaderboard", callback_data="leaderboard"),
+                    InlineKeyboardButton("👤 Profile", callback_data="profile")
+                ],
+                [
+                    InlineKeyboardButton("🔙 Back", callback_data="status")
+                ]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
-            await update.message.reply_text(message, reply_markup=reply_markup, parse_mode='MarkdownV2')
+            await update.message.reply_text(message, reply_markup=reply_markup, parse_mode='HTML')
         except Exception as e:
             logger.error(f"Error in handle_achievements: {e}", exc_info=True)
             await self._handle_error(update, e)
@@ -876,19 +864,26 @@ class GameHandler:
             player_id = str(update.effective_user.id)
             alliance = self.alliance_manager.get_alliance_info(player_id)
             if not alliance:
-                await update.message.reply_text("You are not in an alliance. 🤝", parse_mode='MarkdownV2')
+                await update.message.reply_text("You are not in an alliance. 🤝")
                 return
-            message = (
-                f"🤝 *Alliance Info* 🤝\n"
-                f"*Name:* {self._escape_markdown(alliance['name'])}\n"
-                f"*Level:* {alliance.get('level', 1)}\n"
-                f"*Leader:* {self._escape_markdown(alliance.get('leader', 'Unknown'))}\n"
-                f"*Members:* {self._escape_markdown(', '.join(alliance.get('members', [])))}\n"
-                f"*Description:* {self._escape_markdown(alliance.get('description', ''))}"
-            )
+            
+            # Build message parts
+            message_parts = [
+                "<b>🤝 Alliance Info 🤝</b>\n\n",
+                f"<b>Name:</b> {alliance['name']}\n",
+                f"<b>Level:</b> {alliance.get('level', 1)}\n",
+                f"<b>Leader:</b> {alliance.get('leader', 'Unknown')}\n",
+                f"<b>Members:</b> {', '.join(alliance.get('members', []))}\n",
+                f"<b>Description:</b> {alliance.get('description', '')}"
+            ]
+            
+            # Join all parts
+            message = ''.join(message_parts)
+            
+            # Create keyboard
             keyboard = [[InlineKeyboardButton("🔙 Back", callback_data="status")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
-            await update.message.reply_text(message, reply_markup=reply_markup, parse_mode='MarkdownV2')
+            await update.message.reply_text(message, reply_markup=reply_markup, parse_mode='HTML')
         except Exception as e:
             logger.error(f"Error in handle_alliance_info: {e}", exc_info=True)
             await self._handle_error(update, e)
@@ -965,19 +960,30 @@ class GameHandler:
         try:
             rankings = self.alliance_manager.get_alliance_rankings()
             if not rankings:
-                await update.message.reply_text("No alliance war rankings available. ⚔️", parse_mode='MarkdownV2')
+                await update.message.reply_text("No alliance war rankings available. ⚔️")
                 return
-            message = "⚔️ *Alliance War Rankings* ⚔️\n\n"
+            
+            # Build message parts
+            message_parts = [
+                "<b>⚔️ Alliance War Rankings ⚔️</b>\n\n"
+            ]
+            
+            # Add rankings
             for i, alliance in enumerate(rankings[:10], 1):
-                message += (
-                    f"{i}. *{self._escape_markdown(alliance['name'])}*\n"
-                    f"  Wins: {alliance['wins']}\n"
-                    f"  Losses: {alliance['losses']}\n"
+                message_parts.extend([
+                    f"{i}. <b>{alliance['name']}</b>\n",
+                    f"  Wins: {alliance['wins']}\n",
+                    f"  Losses: {alliance['losses']}\n",
                     f"  Points: {alliance['points']}\n\n"
-                )
+                ])
+            
+            # Join all parts
+            message = ''.join(message_parts)
+            
+            # Create keyboard
             keyboard = [[InlineKeyboardButton("🔙 Back", callback_data="status")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
-            await update.message.reply_text(message, reply_markup=reply_markup, parse_mode='MarkdownV2')
+            await update.message.reply_text(message, reply_markup=reply_markup, parse_mode='HTML')
         except Exception as e:
             logger.error(f"Error in handle_alliance_war_rankings: {e}", exc_info=True)
             await self._handle_error(update, e)
@@ -988,15 +994,28 @@ class GameHandler:
             player_id = str(update.effective_user.id)
             benefits = self.alliance_manager.get_alliance_benefits(player_id)
             if not benefits:
-                await update.message.reply_text("No alliance benefits found. 🎁", parse_mode='MarkdownV2')
+                await update.message.reply_text("No alliance benefits found. 🎁")
                 return
-            message = "🎁 *Alliance Benefits* 🎁\n\n"
+            
+            # Build message parts
+            message_parts = [
+                "<b>🎁 Alliance Benefits 🎁</b>\n\n"
+            ]
+            
+            # Add benefits
             for k, v in benefits.items():
-                message += f"└ *{k}*\n"
-                message += f"  {v}\n\n"
+                message_parts.extend([
+                    f"└ <b>{k}</b>\n",
+                    f"  {v}\n\n"
+                ])
+            
+            # Join all parts
+            message = ''.join(message_parts)
+            
+            # Create keyboard
             keyboard = [[InlineKeyboardButton("🔙 Back", callback_data="status")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
-            await update.message.reply_text(message, reply_markup=reply_markup, parse_mode='MarkdownV2')
+            await update.message.reply_text(message, reply_markup=reply_markup, parse_mode='HTML')
         except Exception as e:
             logger.error(f"Error in handle_alliance_benefits: {e}", exc_info=True)
             await self._handle_error(update, e)
@@ -1079,15 +1098,15 @@ class GameHandler:
             
             # Build message parts
             message_parts = [
-                "🏗️ *Construction Site* 🏗️\n\n",
-                "🌲 *Your Resources:*\n"
+                "<b>🏗️ Construction Site 🏗️</b>\n\n",
+                "<b>🌲 Your Resources:</b>\n"
             ]
             
             # Display current resources
             for k, v in resources.items():
-                message_parts.append(f"└ {RESOURCES[k]['emoji']} {self._escape_markdown(RESOURCES[k]['name'])}: {v}\n")
+                message_parts.append(f"└ {RESOURCES[k]['emoji']} {RESOURCES[k]['name']}: {v}\n")
             
-            message_parts.append("\n🏛️ *Available Buildings:*\n")
+            message_parts.append("\n<b>🏛️ Available Buildings:</b>\n")
             keyboard = []
             
             for building in buildings:
@@ -1095,22 +1114,19 @@ class GameHandler:
                 reqs = self.building_manager.get_building_requirements(building['id'])
                 current_level = self.building_manager.get_building_level(player_id, building['id'])
                 
-                # Format requirements with emojis and proper escaping
+                # Format requirements with emojis
                 req_parts = []
                 for k, v in reqs.items():
                     emoji = self._get_resource_emoji(k)
-                    name = self._escape_markdown(RESOURCES[k]['name'])
+                    name = RESOURCES[k]['name']
                     req_parts.append(f"{emoji} {name}: {v}")
-                req_str = " \\| ".join(req_parts)  # Escape the pipe character
+                req_str = " | ".join(req_parts)
                 
-                # Build the message part with proper escaping
-                building_name = self._escape_markdown(building['name'])
-                building_desc = self._escape_markdown(building['description'])
-                
+                # Build the message part
                 message_parts.extend([
-                    f"└ {BUILDINGS[building['id']]['emoji']} *{building_name}*\n",
+                    f"└ {BUILDINGS[building['id']]['emoji']} <b>{building['name']}</b>\n",
                     f"  Level: {current_level}\n",
-                    f"  {building_desc}\n",
+                    f"  {building['description']}\n",
                     f"  💰 Cost: {req_str}\n\n"
                 ])
                 
@@ -1130,17 +1146,11 @@ class GameHandler:
                 InlineKeyboardButton("🔙 Back", callback_data="status")
             ])
             
-            # Join all message parts and escape the entire message
+            # Join all message parts
             message = ''.join(message_parts)
-            message = self._escape_markdown(message)
-            
-            # Add markdown formatting after escaping
-            message = message.replace('Construction Site', '*Construction Site*')
-            message = message.replace('Your Resources', '*Your Resources*')
-            message = message.replace('Available Buildings', '*Available Buildings*')
             
             reply_markup = InlineKeyboardMarkup(keyboard)
-            await update.message.reply_text(message, reply_markup=reply_markup, parse_mode='MarkdownV2')
+            await update.message.reply_text(message, reply_markup=reply_markup, parse_mode='HTML')
         except Exception as e:
             logger.error(f"Error in handle_build: {e}", exc_info=True)
             await self._handle_error(update, e)

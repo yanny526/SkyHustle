@@ -16,12 +16,6 @@ class AdminHandler:
     def __init__(self):
         self.admin_manager = AdminManager()
 
-    def _escape_markdown(self, text: str) -> str:
-        special_chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
-        for char in special_chars:
-            text = text.replace(char, f'\\{char}')
-        return text
-
     @rate_limit(1)  # 1 second cooldown
     async def handle_admin_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle /admin command"""
@@ -30,7 +24,7 @@ class AdminHandler:
         if not self.admin_manager.is_admin(user_id):
             await update.message.reply_text(
                 "❌ You do not have permission to use admin commands.",
-                parse_mode='MarkdownV2'
+                parse_mode='HTML'
             )
             return
             
@@ -46,10 +40,9 @@ class AdminHandler:
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         await update.message.reply_text(
-            "🔧 *Admin Control Panel*\n\n"
-            "Select an option to manage the game:",
+            "<b>🔧 Admin Control Panel</b>\n\nSelect an option to manage the game:",
             reply_markup=reply_markup,
-            parse_mode='MarkdownV2'
+            parse_mode='HTML'
         )
 
     @rate_limit(1)
@@ -58,13 +51,13 @@ class AdminHandler:
         user_id = str(update.effective_user.id)
         
         if not self.admin_manager.is_admin(user_id):
-            await update.message.reply_text("❌ Unauthorized")
+            await update.message.reply_text("❌ Unauthorized", parse_mode='HTML')
             return
             
         if not context.args:
             await update.message.reply_text(
                 "Usage: /addadmin <user_id>",
-                parse_mode='MarkdownV2'
+                parse_mode='HTML'
             )
             return
             
@@ -72,9 +65,9 @@ class AdminHandler:
         result = self.admin_manager.add_admin(target_id, user_id)
         
         if result['success']:
-            await update.message.reply_text(_escape_markdown(f"✅ Added {target_id} as admin"), parse_mode='MarkdownV2')
+            await update.message.reply_text(f"✅ Added {target_id} as admin", parse_mode='HTML')
         else:
-            await update.message.reply_text(_escape_markdown(f"❌ {result['message']}"), parse_mode='MarkdownV2')
+            await update.message.reply_text(f"❌ {result['message']}", parse_mode='HTML')
 
     @rate_limit(1)
     async def handle_remove_admin(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -82,13 +75,13 @@ class AdminHandler:
         user_id = str(update.effective_user.id)
         
         if not self.admin_manager.is_admin(user_id):
-            await update.message.reply_text("❌ Unauthorized")
+            await update.message.reply_text("❌ Unauthorized", parse_mode='HTML')
             return
             
         if not context.args:
             await update.message.reply_text(
                 "Usage: /removeadmin <user_id>",
-                parse_mode='MarkdownV2'
+                parse_mode='HTML'
             )
             return
             
@@ -96,9 +89,9 @@ class AdminHandler:
         result = self.admin_manager.remove_admin(target_id, user_id)
         
         if result['success']:
-            await update.message.reply_text(_escape_markdown(f"✅ Removed {target_id} from admins"), parse_mode='MarkdownV2')
+            await update.message.reply_text(f"✅ Removed {target_id} from admins", parse_mode='HTML')
         else:
-            await update.message.reply_text(_escape_markdown(f"❌ {result['message']}"), parse_mode='MarkdownV2')
+            await update.message.reply_text(f"❌ {result['message']}", parse_mode='HTML')
 
     @rate_limit(1)
     async def handle_broadcast(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -106,13 +99,13 @@ class AdminHandler:
         user_id = str(update.effective_user.id)
         
         if not self.admin_manager.is_admin(user_id):
-            await update.message.reply_text("❌ Unauthorized")
+            await update.message.reply_text("❌ Unauthorized", parse_mode='HTML')
             return
             
         if not context.args:
             await update.message.reply_text(
                 "Usage: /broadcast <message>",
-                parse_mode='MarkdownV2'
+                parse_mode='HTML'
             )
             return
             
@@ -128,8 +121,8 @@ class AdminHandler:
             try:
                 await context.bot.send_message(
                     chat_id=int(player['user_id']),
-                    text=_escape_markdown(f"📢 *Broadcast Message*\n\n{message}"),
-                    parse_mode='MarkdownV2'
+                    text=f"<b>📢 Broadcast Message</b>\n\n{message}",
+                    parse_mode='HTML'
                 )
                 sent += 1
             except:
@@ -143,8 +136,8 @@ class AdminHandler:
         })
         
         await update.message.reply_text(
-            _escape_markdown(f"✅ Broadcast complete\n📤 Sent: {sent}\n❌ Failed: {failed}"),
-            parse_mode='MarkdownV2'
+            f"✅ Broadcast complete\n📤 Sent: {sent}\n❌ Failed: {failed}",
+            parse_mode='HTML'
         )
 
     @rate_limit(1)
@@ -153,20 +146,20 @@ class AdminHandler:
         user_id = str(update.effective_user.id)
         
         if not self.admin_manager.is_admin(user_id):
-            await update.message.reply_text("❌ Unauthorized")
+            await update.message.reply_text("❌ Unauthorized", parse_mode='HTML')
             return
             
         if not context.args:
             await update.message.reply_text(
                 "Usage: /maintenance <on|off>",
-                parse_mode='MarkdownV2'
+                parse_mode='HTML'
             )
             return
             
         mode = context.args[0].lower()
         
         if mode not in ['on', 'off']:
-            await update.message.reply_text("Invalid mode. Use 'on' or 'off'")
+            await update.message.reply_text("Invalid mode. Use 'on' or 'off'", parse_mode='HTML')
             return
             
         # Update maintenance mode in settings
@@ -181,8 +174,8 @@ class AdminHandler:
         log_admin_action(user_id, 'maintenance_mode', {'mode': mode})
         
         await update.message.reply_text(
-            _escape_markdown(f"✅ Maintenance mode turned {mode}"),
-            parse_mode='MarkdownV2'
+            f"✅ Maintenance mode turned {mode}",
+            parse_mode='HTML'
         )
 
     @rate_limit(1)
@@ -191,7 +184,7 @@ class AdminHandler:
         user_id = str(update.effective_user.id)
         
         if not self.admin_manager.is_admin(user_id):
-            await update.message.reply_text("❌ Unauthorized")
+            await update.message.reply_text("❌ Unauthorized", parse_mode='HTML')
             return
             
         # Get recent logs
@@ -199,22 +192,19 @@ class AdminHandler:
         logs = sorted(logs, key=lambda x: x['timestamp'], reverse=True)[:10]
         
         if not logs:
-            await update.message.reply_text("No recent logs found")
+            await update.message.reply_text("No recent logs found", parse_mode='HTML')
             return
             
         # Format logs
-        log_text = "📝 *Recent Logs*\n\n"
+        log_text = "<b>📝 Recent Logs</b>\n\n"
         for log in logs:
             log_text += (
-                f"*{_escape_markdown(log['type'])}*\n"
-                f"Time: {_escape_markdown(str(log['timestamp']))}\n"
-                f"Details: {_escape_markdown(str(log['details']))}\n\n"
+                f"<b>{log['type']}</b>\n"
+                f"Time: {str(log['timestamp'])}\n"
+                f"Details: {str(log['details'])}\n\n"
             )
             
-        await update.message.reply_text(
-            _escape_markdown(log_text),
-            parse_mode='MarkdownV2'
-        )
+        await update.message.reply_text(log_text, parse_mode='HTML')
 
     async def handle_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle admin callback queries"""
@@ -236,34 +226,33 @@ class AdminHandler:
             reply_markup = InlineKeyboardMarkup(keyboard)
             
             await query.edit_message_text(
-                "👥 *Admin Management*\n\n"
-                "Select an option:",
+                "<b>👥 Admin Management</b>\n\nSelect an option:",
                 reply_markup=reply_markup,
-                parse_mode='MarkdownV2'
+                parse_mode='HTML'
             )
             
         elif query.data == "admin_system_status":
             # Show system status
             status = self.admin_manager.sheets.get_worksheet('Settings').get_all_records()
-            status_text = "📊 *System Status*\n\n"
+            status_text = "<b>📊 System Status</b>\n\n"
             
             for setting in status:
-                status_text += f"*{_escape_markdown(setting['key'])}*: {_escape_markdown(str(setting['value']))}\n"
+                status_text += f"<b>{setting['key']}</b>: {str(setting['value'])}\n"
                 
             keyboard = [[InlineKeyboardButton("Back", callback_data="admin_back")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
             
             await query.edit_message_text(
-                _escape_markdown(status_text),
+                status_text,
                 reply_markup=reply_markup,
-                parse_mode='MarkdownV2'
+                parse_mode='HTML'
             )
             
         elif query.data == "admin_broadcast":
             await query.edit_message_text(
-                "📢 *Broadcast Message*\n\n"
+                "<b>📢 Broadcast Message</b>\n\n"
                 "Use /broadcast <message> to send a message to all players.",
-                parse_mode='MarkdownV2'
+                parse_mode='HTML'
             )
             
         elif query.data == "admin_maintenance":
@@ -276,10 +265,9 @@ class AdminHandler:
             reply_markup = InlineKeyboardMarkup(keyboard)
             
             await query.edit_message_text(
-                "🔧 *Maintenance Mode*\n\n"
-                "Select an option:",
+                "<b>🔧 Maintenance Mode</b>\n\nSelect an option:",
                 reply_markup=reply_markup,
-                parse_mode='MarkdownV2'
+                parse_mode='HTML'
             )
             
         elif query.data == "admin_logs":
@@ -288,24 +276,24 @@ class AdminHandler:
             logs = sorted(logs, key=lambda x: x['timestamp'], reverse=True)[:10]
             
             if not logs:
-                await query.edit_message_text("No recent logs found")
+                await query.edit_message_text("No recent logs found", parse_mode='HTML')
                 return
                 
-            log_text = "📝 *Recent Logs*\n\n"
+            log_text = "<b>📝 Recent Logs</b>\n\n"
             for log in logs:
                 log_text += (
-                    f"*{_escape_markdown(log['type'])}*\n"
-                    f"Time: {_escape_markdown(str(log['timestamp']))}\n"
-                    f"Details: {_escape_markdown(str(log['details']))}\n\n"
+                    f"<b>{log['type']}</b>\n"
+                    f"Time: {str(log['timestamp'])}\n"
+                    f"Details: {str(log['details'])}\n\n"
                 )
                 
             keyboard = [[InlineKeyboardButton("Back", callback_data="admin_back")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
             
             await query.edit_message_text(
-                _escape_markdown(log_text),
+                log_text,
                 reply_markup=reply_markup,
-                parse_mode='MarkdownV2'
+                parse_mode='HTML'
             )
             
         elif query.data == "admin_back":
@@ -320,43 +308,42 @@ class AdminHandler:
             reply_markup = InlineKeyboardMarkup(keyboard)
             
             await query.edit_message_text(
-                "🔧 *Admin Control Panel*\n\n"
-                "Select an option to manage the game:",
+                "<b>🔧 Admin Control Panel</b>\n\nSelect an option to manage the game:",
                 reply_markup=reply_markup,
-                parse_mode='MarkdownV2'
+                parse_mode='HTML'
             )
 
     @rate_limit(1)
     async def handle_ban(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle /ban command (stub)"""
-        await update.message.reply_text("[BAN] Command coming soon.")
+        await update.message.reply_text("[BAN] Command coming soon.", parse_mode='HTML')
 
     @rate_limit(1)
     async def handle_unban(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle /unban command (stub)"""
-        await update.message.reply_text("[UNBAN] Command coming soon.")
+        await update.message.reply_text("[UNBAN] Command coming soon.", parse_mode='HTML')
 
     @rate_limit(1)
     async def handle_grant(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle /grant command (stub)"""
-        await update.message.reply_text("[GRANT] Command coming soon.")
+        await update.message.reply_text("[GRANT] Command coming soon.", parse_mode='HTML')
 
     @rate_limit(1)
     async def handle_reset_player(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle /reset_player command (stub)"""
-        await update.message.reply_text("[RESET PLAYER] Command coming soon.")
+        await update.message.reply_text("[RESET PLAYER] Command coming soon.", parse_mode='HTML')
 
     @rate_limit(1)
     async def handle_stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle /stats command (stub)"""
-        await update.message.reply_text("[STATS] Command coming soon.")
+        await update.message.reply_text("[STATS] Command coming soon.", parse_mode='HTML')
 
     @rate_limit(1)
     async def handle_search_player(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle /search_player command (stub)"""
-        await update.message.reply_text("[SEARCH PLAYER] Command coming soon.")
+        await update.message.reply_text("[SEARCH PLAYER] Command coming soon.", parse_mode='HTML')
 
     @rate_limit(1)
     async def handle_admin_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle /admin_help command (stub)"""
-        await update.message.reply_text("[ADMIN HELP] Command coming soon.") 
+        await update.message.reply_text("[ADMIN HELP] Command coming soon.", parse_mode='HTML') 
