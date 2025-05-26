@@ -109,10 +109,23 @@ class GameHandler:
                 await asyncio.sleep(5)  # Wait before retrying
 
     def _escape_markdown(self, text: str) -> str:
-        """Helper function to escape markdown characters"""
+        """Escape special characters for MarkdownV2 formatting"""
+        # List of all special characters that need to be escaped in MarkdownV2
         special_chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+        
+        # First, escape all special characters
         for char in special_chars:
             text = text.replace(char, f'\\{char}')
+            
+        # Handle special cases for formatting
+        # Replace escaped asterisks with proper markdown bold/italic
+        text = text.replace('\\*\\*', '**')  # Double asterisks for bold
+        text = text.replace('\\*', '*')      # Single asterisks for italic
+        
+        # Replace escaped underscores with proper markdown underline
+        text = text.replace('\\_\\_', '__')  # Double underscores for underline
+        text = text.replace('\\_', '_')      # Single underscores for italic
+        
         return text
 
     async def handle_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -313,40 +326,32 @@ class GameHandler:
                 "🎮 *SkyHustle 2 Help* 🎮\n\n",
                 "Here are the main commands you can use:\n\n",
                 "*Basic Commands:*\n",
-                "└ /start \\- Start your adventure\n",
-                "└ /help \\- Show this help message\n",
-                "└ /status \\- Check your base status\n",
-                "└ /profile \\- View your profile\n\n",
+                "└ /start - Start your adventure\n",
+                "└ /help - Show this help message\n",
+                "└ /status - Check your base status\n",
+                "└ /profile - View your profile\n\n",
                 "*Building & Resources:*\n",
-                "└ /build \\- Construct buildings\n",
-                "└ /train \\- Train military units\n",
-                "└ /research \\- Research new technologies\n\n",
+                "└ /build - Construct buildings\n",
+                "└ /train - Train military units\n",
+                "└ /research - Research new technologies\n\n",
                 "*Combat & Alliances:*\n",
-                "└ /combat \\- Attack other players\n",
-                "└ /alliance \\- Manage your alliance\n",
-                "└ /market \\- Trade with other players\n\n",
+                "└ /combat - Attack other players\n",
+                "└ /alliance - Manage your alliance\n",
+                "└ /market - Trade with other players\n\n",
                 "*Social Features:*\n",
-                "└ /friends \\- Manage friends list\n",
-                "└ /chat \\- Global chat\n",
-                "└ /gift \\- Send gifts to friends\n\n",
+                "└ /friends - Manage friends list\n",
+                "└ /chat - Global chat\n",
+                "└ /gift - Send gifts to friends\n\n",
                 "*Other Features:*\n",
-                "└ /quest \\- View available quests\n",
-                "└ /inventory \\- Check your items\n",
-                "└ /settings \\- Configure game settings\n\n",
+                "└ /quest - View available quests\n",
+                "└ /inventory - Check your items\n",
+                "└ /settings - Configure game settings\n\n",
                 "Need more help? Use /support to contact us!"
             ]
             
             # Join all parts and escape the entire message
             message = ''.join(message_parts)
             message = self._escape_markdown(message)
-            
-            # Add markdown formatting after escaping
-            message = message.replace('SkyHustle 2 Help', '*SkyHustle 2 Help*')
-            message = message.replace('Basic Commands:', '*Basic Commands:*')
-            message = message.replace('Building & Resources:', '*Building & Resources:*')
-            message = message.replace('Combat & Alliances:', '*Combat & Alliances:*')
-            message = message.replace('Social Features:', '*Social Features:*')
-            message = message.replace('Other Features:', '*Other Features:*')
             
             # Create keyboard with help categories
             keyboard = [
