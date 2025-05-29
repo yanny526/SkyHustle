@@ -45,7 +45,11 @@ class BaseHandler:
     
     def format_message(self, title: str, sections: List[Dict[str, Any]]) -> str:
         """Format a message with title and sections"""
-        message_parts = [self.formatter.bold(title)]
+        # Make the build menu header lively if it's the build menu
+        if 'build' in title.lower():
+            message_parts = [f"🏗️ <b>Build Menu</b> — Choose your next upgrade! ✨\n"]
+        else:
+            message_parts = [self.formatter.bold(title)]
         
         for section in sections:
             if 'title' in section:
@@ -60,12 +64,14 @@ class BaseHandler:
             if 'items' in section:
                 for item in section['items']:
                     if isinstance(item, dict):
-                        if item.get('type') == 'alliance':
+                        if item.get('type') == 'building':
+                            # Only use format_building, add sparkle separator
+                            message_parts.append(self.formatter.format_building(item, item.get('emoji', '🏗️')))
+                            message_parts.append('✨────────────✨')
+                        elif item.get('type') == 'alliance':
                             message_parts.append(self.formatter.format_alliance_info(item))
                         elif item.get('type') == 'notification':
                             message_parts.append(self.formatter.format_notification(item))
-                        elif item.get('type') == 'building':
-                            message_parts.append(self.formatter.format_building(item, item.get('emoji', '🏗️')))
                         elif item.get('type') == 'transaction':
                             message_parts.append(self.formatter.format_transaction(item['seller'], item['buyer']))
                         elif item.get('type') == 'setting':
@@ -80,9 +86,7 @@ class BaseHandler:
                                 message_parts.append(f"  {html.escape(item['description'])}")
                     else:
                         message_parts.append(f"└ {html.escape(str(item))}")
-            
             message_parts.append("")  # Add empty line between sections
-        
         return "\n".join(message_parts)
     
     async def send_message(
