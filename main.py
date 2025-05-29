@@ -21,7 +21,7 @@ from modules.alliance_manager import AllianceManager
 from modules.premium_manager import PremiumManager
 from modules.admin_manager import AdminManager
 from handlers.shop_commands import shop, blackmarket, bag, shop_callback, blackmarket_callback, bag_callback
-from handlers.premium_commands import buy, buy_callback, successful_payment
+from handlers.premium_commands import buy_callback, successful_payment
 from handlers.admin_handler import AdminHandler
 from modules.game_manager import GameManager
 from modules.building_manager import BuildingManager
