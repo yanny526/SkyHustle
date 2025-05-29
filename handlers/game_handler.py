@@ -47,39 +47,32 @@ class GameHandler(BaseHandler):
         self.chat_manager = chat_manager
     
     async def handle_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle /start command"""
+        """Handle /start command with polished, emoji-rich, Telegram-friendly UI."""
         try:
             player_id = str(update.effective_user.id)
             result = self.game_manager.start_game(player_id)
-            
+
             if result['success']:
-                message = self.format_message(
-                    "Welcome to SkyHustle 2! 🎮",
-                    [{
-                        'title': 'Getting Started',
-                        'content': (
-                            "Your adventure begins now! Here's what you can do:\n\n"
-                            "🎯 /status - Check your status\n"
-                            "🏪 /shop - Visit the shop\n"
-                            "🎒 /bag - View your inventory\n"
-                            "👥 /friends - Manage friends\n"
-                            "🤝 /alliances - Join an alliance\n"
-                            "💎 /premium - Get premium currency\n\n"
-                            "Type /help for more commands!"
-                        )
-                    }]
+                message = (
+                    "<b>🎉 Welcome to <u>SkyHustle 2</u>! 🎮</b>\n\n"
+                    "<b>Your adventure begins now!</b>\n\n"
+                    "<b>What you can do:</b>\n"
+                    "<b>📊</b> <b>/status</b> — Check your status\n"
+                    "<b>🏪</b> <b>/shop</b> — Visit the shop\n"
+                    "<b>🎒</b> <b>/bag</b> — View your inventory\n"
+                    "<b>👥</b> <b>/friends</b> — Manage friends\n"
+                    "<b>🤝</b> <b>/alliances</b> — Join an alliance\n"
+                    "<b>💎</b> <b>/premium</b> — Get premium currency\n\n"
+                    "Type <b>/help</b> for <u>all commands</u>! 💡"
                 )
             else:
-                message = self.format_message(
-                    "Error",
-                    [{
-                        'title': 'Failed to Start Game',
-                        'content': result.get('message', 'Could not start game.')
-                    }]
+                message = (
+                    "<b>❌ Error</b>\n\n"
+                    f"<b>Failed to Start Game:</b> {result.get('message', 'Could not start game.')}"
                 )
-            
+
             await self.send_message(update, message)
-            
+
         except Exception as e:
             logger.error(f"Error in handle_start: {e}", exc_info=True)
             await self._handle_error(update, e)
@@ -157,147 +150,37 @@ class GameHandler(BaseHandler):
             await self._handle_error(update, e)
     
     async def handle_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle /help command: provide a comprehensive help menu with command descriptions and examples."""
+        """Handle /help command: provide a beautiful, emoji-rich help menu with command descriptions and examples."""
         try:
             sections = [{
-                'title': 'Game Commands 🎮',
+                'title': '🕹️ <b>Game Commands</b>',
                 'items': [
-                    {
-                        'type': 'command',
-                        'name': '/start',
-                        'description': 'Start the game and create your account',
-                        'example': '/start'
-                    },
-                    {
-                        'type': 'command',
-                        'name': '/status',
-                        'description': 'View your current game status',
-                        'example': '/status'
-                    },
-                    {
-                        'type': 'command',
-                        'name': '/build',
-                        'description': 'Build and upgrade buildings',
-                        'example': '/build'
-                    },
-                    {
-                        'type': 'command',
-                        'name': '/train',
-                        'description': 'Train military units',
-                        'example': '/train'
-                    },
-                    {
-                        'type': 'command',
-                        'name': '/research',
-                        'description': 'Research new technologies',
-                        'example': '/research'
-                    },
-                    {
-                        'type': 'command',
-                        'name': '/attack',
-                        'description': 'Attack other players',
-                        'example': '/attack'
-                    },
-                    {
-                        'type': 'command',
-                        'name': '/quest',
-                        'description': 'View and complete quests',
-                        'example': '/quest'
-                    },
-                    {
-                        'type': 'command',
-                        'name': '/market',
-                        'description': 'Trade resources in the market',
-                        'example': '/market'
-                    },
-                    {
-                        'type': 'command',
-                        'name': '/shop',
-                        'description': 'Purchase items and upgrades',
-                        'example': '/shop'
-                    },
-                    {
-                        'type': 'command',
-                        'name': '/bag',
-                        'description': 'View your inventory',
-                        'example': '/bag'
-                    },
-                    {
-                        'type': 'command',
-                        'name': '/blackmarket',
-                        'description': 'Access the black market',
-                        'example': '/blackmarket'
-                    },
-                    {
-                        'type': 'command',
-                        'name': '/achievements',
-                        'description': 'View your achievements',
-                        'example': '/achievements'
-                    },
-                    {
-                        'type': 'command',
-                        'name': '/daily',
-                        'description': 'Claim daily rewards',
-                        'example': '/daily'
-                    },
-                    {
-                        'type': 'command',
-                        'name': '/prestige',
-                        'description': 'Prestige your account',
-                        'example': '/prestige'
-                    },
-                    {
-                        'type': 'command',
-                        'name': '/profile',
-                        'description': 'View your profile',
-                        'example': '/profile'
-                    },
-                    {
-                        'type': 'command',
-                        'name': '/leaderboard',
-                        'description': 'View the global leaderboard',
-                        'example': '/leaderboard'
-                    },
-                    {
-                        'type': 'command',
-                        'name': '/name',
-                        'description': 'Change your display name',
-                        'example': '/name New Name'
-                    },
-                    {
-                        'type': 'command',
-                        'name': '/chat',
-                        'description': 'Send a message to global chat',
-                        'example': '/chat Hello, world!'
-                    },
-                    {
-                        'type': 'command',
-                        'name': '/block',
-                        'description': 'Block a player',
-                        'example': '/block @username'
-                    },
-                    {
-                        'type': 'command',
-                        'name': '/unblock',
-                        'description': 'Unblock a player',
-                        'example': '/unblock @username'
-                    },
-                    {
-                        'type': 'command',
-                        'name': '/level',
-                        'description': 'View your level and XP',
-                        'example': '/level'
-                    },
-                    {
-                        'type': 'command',
-                        'name': '/skills',
-                        'description': 'View and upgrade your skills',
-                        'example': '/skills'
-                    }
+                    {'type': 'command', 'name': '🎮 /start', 'description': 'Start the game and create your account', 'example': '/start'},
+                    {'type': 'command', 'name': '📊 /status', 'description': 'View your current game status', 'example': '/status'},
+                    {'type': 'command', 'name': '🏗️ /build', 'description': 'Build and upgrade buildings', 'example': '/build'},
+                    {'type': 'command', 'name': '🪖 /train', 'description': 'Train military units', 'example': '/train'},
+                    {'type': 'command', 'name': '🔬 /research', 'description': 'Research new technologies', 'example': '/research'},
+                    {'type': 'command', 'name': '⚔️ /attack', 'description': 'Attack other players', 'example': '/attack'},
+                    {'type': 'command', 'name': '🎯 /quest', 'description': 'View and complete quests', 'example': '/quest'},
+                    {'type': 'command', 'name': '🏪 /market', 'description': 'Trade resources in the market', 'example': '/market'},
+                    {'type': 'command', 'name': '🏪 /shop', 'description': 'Purchase items and upgrades', 'example': '/shop'},
+                    {'type': 'command', 'name': '🎒 /bag', 'description': 'View your inventory', 'example': '/bag'},
+                    {'type': 'command', 'name': '🕵️‍♂️ /blackmarket', 'description': 'Access the black market', 'example': '/blackmarket'},
+                    {'type': 'command', 'name': '🏆 /achievements', 'description': 'View your achievements', 'example': '/achievements'},
+                    {'type': 'command', 'name': '🎁 /daily', 'description': 'Claim daily rewards', 'example': '/daily'},
+                    {'type': 'command', 'name': '🌟 /prestige', 'description': 'Prestige your account', 'example': '/prestige'},
+                    {'type': 'command', 'name': '👤 /profile', 'description': 'View your profile', 'example': '/profile'},
+                    {'type': 'command', 'name': '🏅 /leaderboard', 'description': 'View the global leaderboard', 'example': '/leaderboard'},
+                    {'type': 'command', 'name': '✏️ /name', 'description': 'Change your display name', 'example': '/name New Name'},
+                    {'type': 'command', 'name': '💬 /chat', 'description': 'Send a message to global chat', 'example': '/chat Hello, world!'},
+                    {'type': 'command', 'name': '🚫 /block', 'description': 'Block a player', 'example': '/block @username'},
+                    {'type': 'command', 'name': '✅ /unblock', 'description': 'Unblock a player', 'example': '/unblock @username'},
+                    {'type': 'command', 'name': '🏆 /level', 'description': 'View your level and XP', 'example': '/level'},
+                    {'type': 'command', 'name': '✨ /skills', 'description': 'View and upgrade your skills', 'example': '/skills'}
                 ]
             }]
-            keyboard = [[{'text': '🔙 Back', 'callback_data': 'status'}]]
-            message = self.format_message("Help", sections)
+            keyboard = [[{'text': '🔙 Main Menu', 'callback_data': 'status'}]]
+            message = self.format_message("<b>📖 Help Menu</b>", sections)
             await self.send_message(update, message, keyboard=keyboard)
         except Exception as e:
             logger.error(f"Error in handle_help: {e}", exc_info=True)

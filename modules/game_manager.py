@@ -12,3 +12,15 @@ class GameManager:
         self.friend_manager = friend_manager
         self.alliance_manager = alliance_manager
         self.premium_manager = premium_manager 
+
+    def start_game(self, player_id):
+        # Check if player exists, if not, create them
+        player = self.player_manager.get_player(player_id)
+        if player:
+            return {'success': True, 'message': 'Welcome back!'}
+        else:
+            result = self.player_manager.create_player(player_id)
+            if result.get('success'):
+                return {'success': True, 'message': 'Game started!'}
+            else:
+                return {'success': False, 'message': result.get('message', 'Could not start game.')} 
