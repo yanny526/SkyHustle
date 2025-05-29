@@ -15,9 +15,22 @@ from modules.shop_manager import ShopManager
 from modules.black_market_manager import BlackMarketManager
 from modules.resource_manager import ResourceManager
 from modules.progression_manager import ProgressionManager
+from modules.achievement_manager import AchievementManager
+from modules.friend_manager import FriendManager
+from modules.alliance_manager import AllianceManager
+from modules.premium_manager import PremiumManager
+from modules.admin_manager import AdminManager
 from handlers.shop_commands import shop, blackmarket, bag, shop_callback, blackmarket_callback, bag_callback
 from handlers.premium_commands import buy, buy_callback, successful_payment
 from handlers.admin_handler import AdminHandler
+from modules.game_manager import GameManager
+from modules.building_manager import BuildingManager
+from modules.unit_manager import UnitManager
+from modules.research_manager import ResearchManager
+from modules.combat_manager import CombatManager
+from modules.quest_manager import QuestManager
+from modules.market_manager import MarketManager
+from modules.chat_manager import ChatManager
 
 # Load environment variables
 load_dotenv()
@@ -34,9 +47,43 @@ BOT_TOKEN = os.getenv('BOT_TOKEN')
 if not BOT_TOKEN:
     raise ValueError("No BOT_TOKEN found in environment variables")
 
-# Initialize game handler
-game_handler = GameHandler()
-admin_handler = AdminHandler()
+# Initialize managers
+player_manager = PlayerManager()
+bag_manager = BagManager()
+shop_manager = ShopManager()
+black_market_manager = BlackMarketManager()
+resource_manager = ResourceManager()
+building_manager = BuildingManager()
+progression_manager = ProgressionManager()
+achievement_manager = AchievementManager()
+friend_manager = FriendManager()
+alliance_manager = AllianceManager(ALLIANCE_SETTINGS)
+premium_manager = PremiumManager()
+admin_manager = AdminManager()
+unit_manager = UnitManager()
+research_manager = ResearchManager()
+combat_manager = CombatManager()
+quest_manager = QuestManager()
+market_manager = MarketManager()
+chat_manager = ChatManager()
+
+# Initialize game manager with all required managers
+game_manager = GameManager(
+    player_manager=player_manager,
+    bag_manager=bag_manager,
+    shop_manager=shop_manager,
+    black_market_manager=black_market_manager,
+    resource_manager=resource_manager,
+    progression_manager=progression_manager,
+    achievement_manager=achievement_manager,
+    friend_manager=friend_manager,
+    alliance_manager=alliance_manager,
+    premium_manager=premium_manager
+)
+
+# Initialize handlers
+game_handler = GameHandler(game_manager, building_manager, resource_manager, unit_manager, research_manager, combat_manager, quest_manager, market_manager, chat_manager)
+admin_handler = AdminHandler(admin_manager)
 
 async def start(update, context):
     """Handle the /start command"""
@@ -101,10 +148,6 @@ async def leaderboard(update, context):
 async def tutorial(update, context):
     """Handle the /tutorial command"""
     await game_handler.handle_tutorial(update, context)
-
-async def callback(update, context):
-    """Handle callback queries"""
-    await game_handler.handle_callback(update, context)
 
 async def friends(update, context):
     """Handle the /friends command"""
@@ -263,36 +306,48 @@ async def admin_help(update, context):
     """Handle the /admin_help command"""
     await admin_handler.handle_admin_help(update, context)
 
+async def rules(update, context):
+    """Handle the /rules command"""
+    await game_handler.handle_rules(update, context)
+
+async def remove_friend(update, context):
+    """Handle the /remove_friend command"""
+    await game_handler.handle_remove_friend(update, context)
+
+async def callback(update, context):
+    """Handle callback queries"""
+    query = update.callback_query
+    if query.data.startswith('admin_'):
+        await admin_handler.handle_callback(update, context)
+    elif query.data.startswith('shop_'):
+        await shop_callback(update, context)
+    elif query.data.startswith('blackmarket_'):
+        await blackmarket_callback(update, context)
+    elif query.data.startswith('bag_'):
+        await bag_callback(update, context)
+    elif query.data.startswith('premium_'):
+        await buy_callback(update, context)
+    else:
+        await game_handler.handle_callback(update, context)
+
+async def shop(update, context):
+    """Handle the /shop command"""
+    await game_handler.handle_shop(update, context)
+
+async def bag(update, context):
+    """Handle the /bag command"""
+    await game_handler.handle_bag(update, context)
+
+async def blackmarket(update, context):
+    """Handle the /blackmarket command"""
+    await game_handler.handle_blackmarket(update, context)
+
 def main():
     """Start the bot"""
     # Create the Application
     application = Application.builder().token(BOT_TOKEN).build()
 
-    # Initialize managers
-    player_manager = PlayerManager()
-    bag_manager = BagManager()
-    resource_manager = ResourceManager()
-    progression_manager = ProgressionManager()
-    shop_manager = ShopManager(bag_manager, resource_manager)
-    black_market_manager = BlackMarketManager(bag_manager, player_manager)
-    
-    # Set managers in handler modules
-    from handlers.shop_commands import shop_manager as shop_module_manager
-    from handlers.shop_commands import black_market_manager as black_market_module_manager
-    from handlers.shop_commands import bag_manager as bag_module_manager
-    from handlers.shop_commands import player_manager as player_module_manager
-    from handlers.premium_commands import player_manager as premium_player_manager
-    
-    shop_module_manager = shop_manager
-    black_market_module_manager = black_market_manager
-    bag_module_manager = bag_manager
-    player_module_manager = player_manager
-    premium_player_manager = player_manager
-
-    # Add error handler
-    application.add_error_handler(error_handler)
-
-    # Register command handlers
+    # Add command handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help))
     application.add_handler(CommandHandler("status", status))
@@ -311,20 +366,19 @@ def main():
     application.add_handler(CommandHandler("tutorial", tutorial))
     application.add_handler(CommandHandler("friends", friends))
     application.add_handler(CommandHandler("add_friend", add_friend))
+    application.add_handler(CommandHandler("remove_friend", remove_friend))
     application.add_handler(CommandHandler("chat", chat))
     application.add_handler(CommandHandler("block", block))
     application.add_handler(CommandHandler("unblock", unblock))
     application.add_handler(CommandHandler("level", level))
     application.add_handler(CommandHandler("skills", skills))
     application.add_handler(CommandHandler("prestige", prestige))
-
-    # Shop and premium commands
+    application.add_handler(CommandHandler("rules", rules))
     application.add_handler(CommandHandler("shop", shop))
-    application.add_handler(CommandHandler("blackmarket", blackmarket))
     application.add_handler(CommandHandler("bag", bag))
-    application.add_handler(CommandHandler("buy", buy))
+    application.add_handler(CommandHandler("blackmarket", blackmarket))
 
-    # Alliance commands
+    # Add alliance command handlers
     application.add_handler(CommandHandler("create_alliance", create_alliance))
     application.add_handler(CommandHandler("join_alliance", join_alliance))
     application.add_handler(CommandHandler("alliance_chat", alliance_chat))
@@ -344,7 +398,7 @@ def main():
     application.add_handler(CommandHandler("alliance_research", alliance_research))
     application.add_handler(CommandHandler("alliance_diplomacy", alliance_diplomacy))
 
-    # Admin commands
+    # Add admin command handlers
     application.add_handler(CommandHandler("admin", admin))
     application.add_handler(CommandHandler("addadmin", addadmin))
     application.add_handler(CommandHandler("removeadmin", removeadmin))
@@ -359,19 +413,13 @@ def main():
     application.add_handler(CommandHandler("search_player", search_player))
     application.add_handler(CommandHandler("admin_help", admin_help))
 
-    # Callback query handler
+    # Add callback query handler
     application.add_handler(CallbackQueryHandler(callback))
 
-    # Register callback query handlers
-    application.add_handler(CallbackQueryHandler(shop_callback, pattern="^shop_buy_"))
-    application.add_handler(CallbackQueryHandler(blackmarket_callback, pattern="^blackmarket_buy_"))
-    application.add_handler(CallbackQueryHandler(bag_callback, pattern="^bag_use_"))
-    application.add_handler(CallbackQueryHandler(buy_callback, pattern="^buy_pack_"))
+    # Add error handler
+    application.add_error_handler(error_handler)
 
-    # Register payment handler
-    application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
-
-    # Start the Bot
+    # Start the bot
     application.run_polling()
 
 async def error_handler(update, context):
