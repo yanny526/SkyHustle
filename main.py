@@ -50,9 +50,9 @@ if not BOT_TOKEN:
 # Initialize managers
 player_manager = PlayerManager()
 bag_manager = BagManager()
-shop_manager = ShopManager()
-black_market_manager = BlackMarketManager()
 resource_manager = ResourceManager()
+shop_manager = ShopManager(bag_manager, resource_manager)
+black_market_manager = BlackMarketManager()
 building_manager = BuildingManager()
 progression_manager = ProgressionManager()
 achievement_manager = AchievementManager()
