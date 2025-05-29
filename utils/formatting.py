@@ -110,10 +110,22 @@ class MessageFormatter:
     
     @staticmethod
     def format_building(building: Dict[str, Any], emoji: str) -> str:
-        """Format building information"""
+        """Format building information for a beautiful Telegram build menu"""
+        # Level
+        level = building.get('level', 0)
+        max_level = building.get('max_level', 20)
+        # Cost
+        cost = building.get('cost', {})
+        cost_str = " | ".join([
+            MessageFormatter.format_resource(res, amt)
+            for res, amt in cost.items()
+        ])
         return (
-            f"└ {emoji} <b>{html.escape(building['name'])}</b>\n"
-            f"  {html.escape(building['description'])}"
+            f"{emoji} <b>{html.escape(building['name'])}</b>\n"
+            f"{html.escape(building['description'])}\n"
+            f"Level: <b>{level}/{max_level}</b>\n"
+            f"Cost: {cost_str}\n"
+            f"────────────"
         )
     
     @staticmethod
