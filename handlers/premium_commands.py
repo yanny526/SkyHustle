@@ -149,4 +149,12 @@ class PremiumHandler(BaseHandler):
             
         except Exception as e:
             logger.error(f"Error in handle_premium_payment: {e}", exc_info=True)
-            await self._handle_error(update, e) 
+            await self._handle_error(update, e)
+
+async def buy_callback(update, context):
+    """Stub for handling premium buy callbacks. Implement payment logic here in the future."""
+    pass
+
+async def successful_payment(update, context):
+    """Stub for handling successful payments. Implement post-payment logic here in the future."""
+    pass 
