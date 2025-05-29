@@ -47,35 +47,40 @@ class GameHandler(BaseHandler):
         self.chat_manager = chat_manager
     
     async def handle_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle /start command with polished, emoji-rich, Telegram-friendly UI."""
+        """Handle /start command"""
         try:
             player_id = str(update.effective_user.id)
             result = self.game_manager.start_game(player_id)
-
-            if result['success']:
-                message = (
-                    "<b>🎉 Welcome to <u>SkyHustle 2</u>! 🎮</b>\n\n"
-                    "<b>Your adventure begins now!</b>\n\n"
-                    "<b>What you can do:</b>\n"
-                    "<b>📊</b> <b>/status</b> — Check your status\n"
-                    "<b>🏪</b> <b>/shop</b> — Visit the shop\n"
-                    "<b>🎒</b> <b>/bag</b> — View your inventory\n"
-                    "<b>👥</b> <b>/friends</b> — Manage friends\n"
-                    "<b>🤝</b> <b>/alliances</b> — Join an alliance\n"
-                    "<b>💎</b> <b>/premium</b> — Get premium currency\n\n"
-                    "Type <b>/help</b> for <u>all commands</u>! 💡"
+            
+            if result.get('success'):
+                # Welcome message with emojis and improved formatting
+                welcome_text = (
+                    f"🌟 *Welcome to SkyHustle!* 🌟\n\n"
+                    f"Your adventure begins now! Use these commands to get started:\n\n"
+                    f"📊 /status - Check your current stats\n"
+                    f"🏗️ /build - Build new structures\n"
+                    f"⚔️ /train - Train your army\n"
+                    f"💰 /market - Trade resources\n"
+                    f"❓ /help - Get detailed help\n\n"
+                    f"Good luck, commander! 🚀"
                 )
+                
+                # Inline keyboard with emojis
+                keyboard = [
+                    [InlineKeyboardButton("📊 Status", callback_data="status"),
+                     InlineKeyboardButton("🏗️ Build", callback_data="build")],
+                    [InlineKeyboardButton("⚔️ Train", callback_data="train"),
+                     InlineKeyboardButton("💰 Market", callback_data="market")],
+                    [InlineKeyboardButton("❓ Help", callback_data="help")]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                
+                await update.message.reply_text(welcome_text, reply_markup=reply_markup, parse_mode='Markdown')
             else:
-                message = (
-                    "<b>❌ Error</b>\n\n"
-                    f"<b>Failed to Start Game:</b> {result.get('message', 'Could not start game.')}"
-                )
-
-            await self.send_message(update, message)
-
+                await update.message.reply_text(f"❌ {result.get('message', 'Failed to start game.')}")
         except Exception as e:
-            logger.error(f"Error in handle_start: {e}", exc_info=True)
-            await self._handle_error(update, e)
+            logger.error(f"Error in handle_start: {str(e)}", exc_info=True)
+            await update.message.reply_text("❌ An error occurred. Please try again later.")
     
     async def handle_status(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /status command"""
@@ -92,7 +97,7 @@ class GameHandler(BaseHandler):
             
             # Format status
             sections = [{
-                'title': 'Player Status 🎮',
+                'title': '🎮 Player Status',
                 'items': [
                     {
                         'type': 'stat',
@@ -107,7 +112,7 @@ class GameHandler(BaseHandler):
             # Add resources section if available
             if 'resources' in status:
                 sections.append({
-                    'title': 'Resources 💰',
+                    'title': '💰 Resources',
                     'items': [
                         {
                             'type': 'resource',
@@ -122,7 +127,7 @@ class GameHandler(BaseHandler):
             # Add achievements section if available
             if 'achievements' in status:
                 sections.append({
-                    'title': 'Recent Achievements 🏆',
+                    'title': '🏆 Recent Achievements',
                     'items': [
                         {
                             'type': 'achievement',
@@ -150,41 +155,29 @@ class GameHandler(BaseHandler):
             await self._handle_error(update, e)
     
     async def handle_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle /help command: provide a beautiful, emoji-rich help menu with command descriptions and examples."""
-        try:
-            sections = [{
-                'title': '🕹️ <b>Game Commands</b>',
-                'items': [
-                    {'type': 'command', 'name': '🎮 /start', 'description': 'Start the game and create your account', 'example': '/start'},
-                    {'type': 'command', 'name': '📊 /status', 'description': 'View your current game status', 'example': '/status'},
-                    {'type': 'command', 'name': '🏗️ /build', 'description': 'Build and upgrade buildings', 'example': '/build'},
-                    {'type': 'command', 'name': '🪖 /train', 'description': 'Train military units', 'example': '/train'},
-                    {'type': 'command', 'name': '🔬 /research', 'description': 'Research new technologies', 'example': '/research'},
-                    {'type': 'command', 'name': '⚔️ /attack', 'description': 'Attack other players', 'example': '/attack'},
-                    {'type': 'command', 'name': '🎯 /quest', 'description': 'View and complete quests', 'example': '/quest'},
-                    {'type': 'command', 'name': '🏪 /market', 'description': 'Trade resources in the market', 'example': '/market'},
-                    {'type': 'command', 'name': '🏪 /shop', 'description': 'Purchase items and upgrades', 'example': '/shop'},
-                    {'type': 'command', 'name': '🎒 /bag', 'description': 'View your inventory', 'example': '/bag'},
-                    {'type': 'command', 'name': '🕵️‍♂️ /blackmarket', 'description': 'Access the black market', 'example': '/blackmarket'},
-                    {'type': 'command', 'name': '🏆 /achievements', 'description': 'View your achievements', 'example': '/achievements'},
-                    {'type': 'command', 'name': '🎁 /daily', 'description': 'Claim daily rewards', 'example': '/daily'},
-                    {'type': 'command', 'name': '🌟 /prestige', 'description': 'Prestige your account', 'example': '/prestige'},
-                    {'type': 'command', 'name': '👤 /profile', 'description': 'View your profile', 'example': '/profile'},
-                    {'type': 'command', 'name': '🏅 /leaderboard', 'description': 'View the global leaderboard', 'example': '/leaderboard'},
-                    {'type': 'command', 'name': '✏️ /name', 'description': 'Change your display name', 'example': '/name New Name'},
-                    {'type': 'command', 'name': '💬 /chat', 'description': 'Send a message to global chat', 'example': '/chat Hello, world!'},
-                    {'type': 'command', 'name': '🚫 /block', 'description': 'Block a player', 'example': '/block @username'},
-                    {'type': 'command', 'name': '✅ /unblock', 'description': 'Unblock a player', 'example': '/unblock @username'},
-                    {'type': 'command', 'name': '🏆 /level', 'description': 'View your level and XP', 'example': '/level'},
-                    {'type': 'command', 'name': '✨ /skills', 'description': 'View and upgrade your skills', 'example': '/skills'}
-                ]
-            }]
-            keyboard = [[{'text': '🔙 Main Menu', 'callback_data': 'status'}]]
-            message = self.format_message("<b>📖 Help Menu</b>", sections)
-            await self.send_message(update, message, keyboard=keyboard)
-        except Exception as e:
-            logger.error(f"Error in handle_help: {e}", exc_info=True)
-            await self._handle_error(update, e)
+        """Handle /help command"""
+        help_text = (
+            "🔍 *SkyHustle Help* 🔍\n\n"
+            "Here are the available commands:\n\n"
+            "📊 /status - Check your current stats\n"
+            "🏗️ /build - Build new structures\n"
+            "⚔️ /train - Train your army\n"
+            "💰 /market - Trade resources\n"
+            "❓ /help - Show this help message\n\n"
+            "Need more help? Contact support! 📞"
+        )
+        
+        # Inline keyboard with emojis
+        keyboard = [
+            [InlineKeyboardButton("📊 Status", callback_data="status"),
+             InlineKeyboardButton("🏗️ Build", callback_data="build")],
+            [InlineKeyboardButton("⚔️ Train", callback_data="train"),
+             InlineKeyboardButton("💰 Market", callback_data="market")],
+            [InlineKeyboardButton("❓ Help", callback_data="help")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(help_text, reply_markup=reply_markup, parse_mode='Markdown')
 
     async def handle_friends(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /friends command"""
@@ -201,7 +194,7 @@ class GameHandler(BaseHandler):
             
             # Format friends list
             sections = [{
-                'title': 'Friends List 👥',
+                'title': '👥 Friends List',
                 'items': [
                     {
                         'type': 'friend',
@@ -234,7 +227,7 @@ class GameHandler(BaseHandler):
             if not args:
                 await self.send_message(
                     update,
-                    self.formatter.bold("Usage: /add_friend &lt;player_id&gt; 👥")
+                    self.formatter.bold("Usage: /add_friend <player_id> 👥\nAdd a new friend to your friends list!")
                 )
                 return
             
@@ -245,20 +238,21 @@ class GameHandler(BaseHandler):
                 message = self.format_message(
                     "Friend Added",
                     [{
-                        'title': 'Success!',
-                        'content': f"Added {target_id} as a friend! 👥"
+                        'title': '✅ Success!',
+                        'content': f"Added {target_id} as a friend! 👥\n\nYou can now see their status and interact with them."
                     }]
                 )
             else:
                 message = self.format_message(
                     "Error",
                     [{
-                        'title': 'Failed to Add Friend',
-                        'content': result.get('message', 'Could not add friend.')
+                        'title': '❌ Failed to Add Friend',
+                        'content': result.get('message', 'Could not add friend. Please try again later.')
                     }]
                 )
             
-            await self.send_message(update, message)
+            keyboard = [[{'text': '🔙 Back to Friends', 'callback_data': 'friends'}]]
+            await self.send_message(update, message, keyboard=keyboard)
             
         except Exception as e:
             logger.error(f"Error in handle_add_friend: {e}", exc_info=True)
@@ -271,7 +265,7 @@ class GameHandler(BaseHandler):
             if not args:
                 await self.send_message(
                     update,
-                    self.formatter.bold("Usage: /remove_friend &lt;player_id&gt; 👥")
+                    self.formatter.bold("Usage: /remove_friend <player_id> 👥\nRemove a player from your friends list.")
                 )
                 return
             
@@ -282,20 +276,21 @@ class GameHandler(BaseHandler):
                 message = self.format_message(
                     "Friend Removed",
                     [{
-                        'title': 'Success!',
-                        'content': f"Removed {target_id} from friends. 👥"
+                        'title': '✅ Success!',
+                        'content': f"Removed {target_id} from your friends list. 👥\n\nYou will no longer see their status or be able to interact with them."
                     }]
                 )
             else:
                 message = self.format_message(
                     "Error",
                     [{
-                        'title': 'Failed to Remove Friend',
-                        'content': result.get('message', 'Could not remove friend.')
+                        'title': '❌ Failed to Remove Friend',
+                        'content': result.get('message', 'Could not remove friend. Please try again later.')
                     }]
                 )
             
-            await self.send_message(update, message)
+            keyboard = [[{'text': '🔙 Back to Friends', 'callback_data': 'friends'}]]
+            await self.send_message(update, message, keyboard=keyboard)
             
         except Exception as e:
             logger.error(f"Error in handle_remove_friend: {e}", exc_info=True)
@@ -361,7 +356,7 @@ class GameHandler(BaseHandler):
                 )
                 return
             sections = [{
-                'title': 'Player Profile 👤',
+                'title': '👤 Player Profile',
                 'items': []
             }]
             for stat in profile.get('stats', []):
@@ -373,7 +368,7 @@ class GameHandler(BaseHandler):
                 })
             if 'achievements' in profile:
                 sections.append({
-                    'title': 'Achievements 🏆',
+                    'title': '🏆 Achievements',
                     'items': [
                         {
                             'type': 'achievement',
@@ -400,7 +395,7 @@ class GameHandler(BaseHandler):
                 message = self.format_message(
                     "Daily Reward",
                     [{
-                        'title': 'Success!',
+                        'title': '🎁 Success!',
                         'content': f"Claimed daily reward! 🎁\n\n{result.get('message', '')}"
                     }]
                 )
@@ -408,7 +403,7 @@ class GameHandler(BaseHandler):
                 message = self.format_message(
                     "Error",
                     [{
-                        'title': 'Failed to Claim Daily Reward',
+                        'title': '❌ Failed to Claim Daily Reward',
                         'content': result.get('message', 'Could not claim daily reward.')
                     }]
                 )
@@ -436,7 +431,7 @@ class GameHandler(BaseHandler):
                 return
 
             sections = [{
-                'title': 'Quests 🎯',
+                'title': '🎯 Quests',
                 'items': []
             }]
             keyboard = []
@@ -483,7 +478,7 @@ class GameHandler(BaseHandler):
                 )
                 return
             sections = [{
-                'title': 'Global Leaderboard 🏆',
+                'title': '🏆 Global Leaderboard',
                 'items': []
             }]
             for player in leaderboard:
@@ -511,7 +506,7 @@ class GameHandler(BaseHandler):
                 message = self.format_message(
                     "Tutorial",
                     [{
-                        'title': 'Welcome to the Tutorial! 📚',
+                        'title': '📚 Welcome to the Tutorial!',
                         'content': result.get('message', 'Let\'s get started!')
                     }]
                 )
@@ -519,7 +514,7 @@ class GameHandler(BaseHandler):
                 message = self.format_message(
                     "Error",
                     [{
-                        'title': 'Failed to Start Tutorial',
+                        'title': '❌ Failed to Start Tutorial',
                         'content': result.get('message', 'Could not start tutorial.')
                     }]
                 )
@@ -544,7 +539,7 @@ class GameHandler(BaseHandler):
             
             # Format rules
             sections = [{
-                'title': 'Game Rules 📜',
+                'title': '📜 Game Rules',
                 'items': [
                     {
                         'type': 'rule',
@@ -593,11 +588,11 @@ class GameHandler(BaseHandler):
                 return
 
             sections = [{
-                'title': 'Your Buildings 🏗️',
+                'title': '🏗️ Your Buildings',
                 'items': []
             }]
             keyboard = []
-
+            
             for b in available:
                 cost_str = ', '.join(f"{k}: {v}" for k, v in b['cost'].items())
                 can_afford = resource_manager.can_afford(player_id, b['cost'])
@@ -625,7 +620,7 @@ class GameHandler(BaseHandler):
                     for u in queue
                 ])
                 sections.append({
-                    'title': 'Upgrade Queue ⏳',
+                    'title': '⏳ Upgrade Queue',
                     'content': queue_str
                 })
 
@@ -659,7 +654,7 @@ class GameHandler(BaseHandler):
                 return
 
             sections = [{
-                'title': 'Train Units 🪖',
+                'title': '🪖 Train Units',
                 'items': []
             }]
             keyboard = []
@@ -691,7 +686,7 @@ class GameHandler(BaseHandler):
                     for unit_id, count in queue.items()
                 ])
                 sections.append({
-                    'title': 'Training Queue ⏳',
+                    'title': '⏳ Training Queue',
                     'content': queue_str
                 })
 
@@ -745,11 +740,11 @@ class GameHandler(BaseHandler):
                 return
 
             sections = [{
-                'title': 'Research 🔬',
+                'title': '🔬 Research',
                 'items': []
             }]
             keyboard = []
-
+            
             for r in research_list:
                 cost_str = ', '.join(f"{k}: {v}" for k, v in r['cost'].items())
                 status = f"Level {r['level']}/{r['max_level']}"
@@ -780,7 +775,7 @@ class GameHandler(BaseHandler):
                     for research_id, time_left in queue.items()
                 ])
                 sections.append({
-                    'title': 'Research Queue ⏳',
+                    'title': '⏳ Research Queue',
                     'content': queue_str
                 })
 
@@ -812,7 +807,7 @@ class GameHandler(BaseHandler):
                 return
 
             sections = [{
-                'title': 'Attack Targets 🗡️',
+                'title': '🗡️ Attack Targets',
                 'items': []
             }]
             keyboard = []
@@ -858,7 +853,7 @@ class GameHandler(BaseHandler):
                 return
 
             sections = [{
-                'title': 'Market 🏪',
+                'title': '🏪 Market',
                 'items': []
             }]
             keyboard = []
@@ -1128,7 +1123,7 @@ class GameHandler(BaseHandler):
             if not args:
                 await self.send_message(
                     update,
-                    self.formatter.bold("Usage: /chat <message> 💬\nSend a message to global chat.")
+                    self.formatter.bold("Usage: /chat <message> 💬\nSend a message to the global chat.\n\nExample: /chat Hello everyone!")
                 )
                 return
             message = " ".join(args).strip()
@@ -1136,7 +1131,7 @@ class GameHandler(BaseHandler):
             if len(message) < 1 or len(message) > 200:
                 await self.send_message(
                     update,
-                    self.formatter.bold("Message must be between 1 and 200 characters.")
+                    self.formatter.bold("❌ Message must be between 1 and 200 characters.")
                 )
                 return
             # Optionally, add more validation here
@@ -1144,15 +1139,18 @@ class GameHandler(BaseHandler):
             if not player:
                 await self.send_message(
                     update,
-                    self.formatter.bold("Player not found. Try /start first.")
+                    self.formatter.bold("❌ Player not found. Try /start first.")
                 )
                 return
             name = player.get('name', f"Player_{player_id[:8]}")
             chat_manager.add_message(player_id, name, message)
+            
+            # Send confirmation with emoji and formatting
             await self.send_message(
                 update,
-                self.formatter.bold("Message sent to global chat! 💬")
+                self.formatter.bold("✅ Message sent to global chat! 💬\n\nYour message will be visible to all players.")
             )
+            
             # Optionally, broadcast to all players (simulate global chat)
             # for p in player_manager.get_all_players():
             #     if p['player_id'] != player_id:
@@ -1170,14 +1168,14 @@ class GameHandler(BaseHandler):
             if not args:
                 await self.send_message(
                     update,
-                    self.formatter.bold("Usage: /block <player_name_or_id> 🚫\nBlock a player from interacting with you.")
+                    self.formatter.bold("Usage: /block <player_name_or_id> 🚫\nBlock a player from interacting with you.\n\nExample: /block Player123")
                 )
                 return
             target = " ".join(args).strip()
             if target == player_id:
                 await self.send_message(
                     update,
-                    self.formatter.bold("You cannot block yourself.")
+                    self.formatter.bold("❌ You cannot block yourself.")
                 )
                 return
             # Find target by name or id
@@ -1186,7 +1184,7 @@ class GameHandler(BaseHandler):
             if not target_player:
                 await self.send_message(
                     update,
-                    self.formatter.bold("Player not found.")
+                    self.formatter.bold("❌ Player not found. Please check the name or ID and try again.")
                 )
                 return
             # Add to block list (store in player['blocked'] as a set)
@@ -1194,23 +1192,31 @@ class GameHandler(BaseHandler):
             if not player:
                 await self.send_message(
                     update,
-                    self.formatter.bold("Player not found. Try /start first.")
+                    self.formatter.bold("❌ Player not found. Try /start first.")
                 )
                 return
             blocked = set(player.get('blocked', []))
             if target_player['player_id'] in blocked:
                 await self.send_message(
                     update,
-                    self.formatter.bold("Player is already blocked.")
+                    self.formatter.bold("ℹ️ Player is already blocked.")
                 )
                 return
             blocked.add(target_player['player_id'])
             player['blocked'] = list(blocked)
             player_manager.upsert_player(player)
-            await self.send_message(
-                update,
-                self.formatter.bold(f"You have blocked {target_player.get('name', target_player['player_id'])} 🚫")
+            
+            # Send confirmation with emoji and formatting
+            message = self.format_message(
+                "Player Blocked",
+                [{
+                    'title': '✅ Success!',
+                    'content': f"You have blocked {target_player.get('name', target_player['player_id'])} 🚫\n\nThey will no longer be able to interact with you."
+                }]
             )
+            keyboard = [[{'text': '🔙 Back to Settings', 'callback_data': 'settings'}]]
+            await self.send_message(update, message, keyboard=keyboard)
+            
         except Exception as e:
             logger.error(f"Error in handle_block: {e}", exc_info=True)
             await self._handle_error(update, e)
@@ -1224,7 +1230,7 @@ class GameHandler(BaseHandler):
             if not args:
                 await self.send_message(
                     update,
-                    self.formatter.bold("Usage: /unblock <player_name_or_id> ✅\nUnblock a player.")
+                    self.formatter.bold("Usage: /unblock <player_name_or_id> ✅\nUnblock a player from your blocked list.\n\nExample: /unblock Player123")
                 )
                 return
             target = " ".join(args).strip()
@@ -1234,30 +1240,38 @@ class GameHandler(BaseHandler):
             if not target_player:
                 await self.send_message(
                     update,
-                    self.formatter.bold("Player not found.")
+                    self.formatter.bold("❌ Player not found. Please check the name or ID and try again.")
                 )
                 return
             player = player_manager.get_player(player_id)
             if not player:
                 await self.send_message(
                     update,
-                    self.formatter.bold("Player not found. Try /start first.")
+                    self.formatter.bold("❌ Player not found. Try /start first.")
                 )
                 return
             blocked = set(player.get('blocked', []))
             if target_player['player_id'] not in blocked:
                 await self.send_message(
                     update,
-                    self.formatter.bold("Player is not blocked.")
+                    self.formatter.bold("ℹ️ Player is not blocked.")
                 )
                 return
             blocked.remove(target_player['player_id'])
             player['blocked'] = list(blocked)
             player_manager.upsert_player(player)
-            await self.send_message(
-                update,
-                self.formatter.bold(f"You have unblocked {target_player.get('name', target_player['player_id'])} ✅")
+            
+            # Send confirmation with emoji and formatting
+            message = self.format_message(
+                "Player Unblocked",
+                [{
+                    'title': '✅ Success!',
+                    'content': f"You have unblocked {target_player.get('name', target_player['player_id'])} ✅\n\nThey can now interact with you again."
+                }]
             )
+            keyboard = [[{'text': '🔙 Back to Settings', 'callback_data': 'settings'}]]
+            await self.send_message(update, message, keyboard=keyboard)
+            
         except Exception as e:
             logger.error(f"Error in handle_unblock: {e}", exc_info=True)
             await self._handle_error(update, e)
@@ -1276,7 +1290,7 @@ class GameHandler(BaseHandler):
                 if not target_player:
                     await self.send_message(
                         update,
-                        self.formatter.bold("Player not found.")
+                        self.formatter.bold("❌ Player not found.")
                     )
                     return
                 player = target_player
@@ -1286,7 +1300,7 @@ class GameHandler(BaseHandler):
                 if not player:
                     await self.send_message(
                         update,
-                        self.formatter.bold("Player not found. Try /start first.")
+                        self.formatter.bold("❌ Player not found. Try /start first.")
                     )
                     return
             level = player.get('level', 1)
@@ -1297,7 +1311,7 @@ class GameHandler(BaseHandler):
             else:
                 next_xp = 100 * level  # fallback formula
             progress = min(100, int((xp / next_xp) * 100)) if next_xp > 0 else 100
-            bar = '█' * (progress // 10) + '░' * (10 - (progress // 10))
+            bar = '🟩' * (progress // 10) + '⬜' * (10 - (progress // 10))
             name = player.get('name', f"Player_{player.get('player_id', '')[:8]}")
             message = (
                 f"🏅 <b>{name}'s Level</b>\n"
@@ -1322,25 +1336,27 @@ class GameHandler(BaseHandler):
             if not player:
                 await self.send_message(
                     update,
-                    self.formatter.bold("Player not found. Try /start first.")
+                    self.formatter.bold("❌ Player not found. Try /start first.")
                 )
                 return
             # Example skill structure: {'strength': 2, 'agility': 1, 'intellect': 0}
             skills = player.get('skills', {'strength': 0, 'agility': 0, 'intellect': 0})
             skill_points = player.get('skill_points', 0)
+            skill_emojis = {'strength': '💪', 'agility': '🤸', 'intellect': '🧠'}
             sections = [{
-                'title': 'Your Skills 🧠',
+                'title': '🧠 Your Skills',
                 'items': []
             }]
             for skill, value in skills.items():
+                emoji = skill_emojis.get(skill, '✨')
                 sections[0]['items'].append({
                     'type': 'skill',
                     'name': skill.capitalize(),
                     'description': f"Level: {value}",
-                    'emoji': '✨',
+                    'emoji': emoji,
                 })
             message = self.format_message("Skills Menu", sections)
-            message += f"\nSkill Points Available: <b>{skill_points}</b>"
+            message += f"\nSkill Points Available: <b>{skill_points}</b> ✨"
             await self.send_message(update, message)
         except Exception as e:
             logger.error(f"Error in handle_skills: {e}", exc_info=True)
@@ -1356,7 +1372,7 @@ class GameHandler(BaseHandler):
             if not player:
                 await self.send_message(
                     update,
-                    self.formatter.bold("Player not found. Try /start first.")
+                    self.formatter.bold("❌ Player not found. Try /start first.")
                 )
                 return
             prestige_level = player.get('prestige', 0)
@@ -1364,13 +1380,13 @@ class GameHandler(BaseHandler):
             can_prestige = level >= 100  # Example: must reach level 100 to prestige
             message = (
                 f"🌟 <b>Prestige Status</b>\n"
-                f"Current Prestige: <b>{prestige_level}</b>\n"
-                f"Current Level: <b>{level}</b>\n"
+                f"Current Prestige: <b>{prestige_level}</b> ✨\n"
+                f"Current Level: <b>{level}</b> 🏅\n"
             )
             if can_prestige:
-                message += "\nYou are eligible to prestige! Use /prestige confirm to reset your progress for a permanent bonus."
+                message += "\n🎉 You are eligible to prestige! Use <b>/prestige confirm</b> to reset your progress for a permanent bonus."
             else:
-                message += "\nReach level 100 to unlock prestige."
+                message += "\nReach level 100 to unlock prestige. Keep hustling! 💪"
             # Handle confirmation
             args = context.args
             if args and args[0].lower() == 'confirm' and can_prestige:
@@ -1386,8 +1402,8 @@ class GameHandler(BaseHandler):
                 player_manager.upsert_player(player)
                 message = (
                     f"🌟 <b>Prestige Complete!</b>\n"
-                    f"You are now Prestige <b>{player['prestige']}</b>!\n"
-                    f"You received a permanent +5% XP bonus."
+                    f"You are now Prestige <b>{player['prestige']}</b>! 🏆\n"
+                    f"You received a permanent <b>+5% XP</b> bonus. 🎁"
                 )
             await self.send_message(update, message)
         except Exception as e:
@@ -1409,7 +1425,7 @@ class GameHandler(BaseHandler):
                 )
                 return
             sections = [{
-                'title': 'Shop 🏪',
+                'title': '🏪 Shop',
                 'items': []
             }]
             keyboard = []
@@ -1451,7 +1467,7 @@ class GameHandler(BaseHandler):
                 )
                 return
             sections = [{
-                'title': 'Your Bag 🎒',
+                'title': '🎒 Your Bag',
                 'items': []
             }]
             keyboard = []
@@ -1488,7 +1504,7 @@ class GameHandler(BaseHandler):
                 )
                 return
             sections = [{
-                'title': 'Black Market 🏪',
+                'title': '🏪 Black Market',
                 'items': []
             }]
             keyboard = []
@@ -1529,7 +1545,7 @@ class GameHandler(BaseHandler):
                 )
                 return
             sections = [{
-                'title': 'Game Settings ⚙️',
+                'title': '⚙️ Game Settings',
                 'items': [
                     {
                         'type': 'setting',
@@ -1581,7 +1597,7 @@ class GameHandler(BaseHandler):
         """Handle /feedback command: allow players to submit feedback, bug reports, or suggestions."""
         try:
             sections = [{
-                'title': 'Feedback 📝',
+                'title': '📝 Feedback',
                 'items': [
                     {
                         'type': 'text',
@@ -1605,7 +1621,7 @@ class GameHandler(BaseHandler):
         """Handle /about command: display information about the game, version, and credits."""
         try:
             sections = [{
-                'title': 'About SkyHustle 🎮',
+                'title': '🎮 About SkyHustle',
                 'items': [
                     {
                         'type': 'text',
