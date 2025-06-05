@@ -38,7 +38,7 @@ def ensure_players_sheet() -> gspread.Worksheet:
     
     try:
         worksheet = sheet.worksheet("Players")
-    except gspread.exceptions.WorksheetNotFound:
+    except gspread.CellNotFound:
         worksheet = sheet.add_worksheet(
             title="Players",
             rows=1000,
@@ -59,7 +59,7 @@ def get_player_row(user_id: int) -> Optional[int]:
     try:
         cell = worksheet.find(str(user_id))
         return cell.row
-    except gspread.exceptions.CellNotFound:
+    except gspread.CellNotFound:
         return None
 
 def create_new_player(user_id: int, username: str, game_name: str) -> None:
@@ -87,7 +87,7 @@ def is_game_name_taken(game_name: str) -> bool:
     try:
         worksheet.find(game_name)
         return True
-    except gspread.exceptions.CellNotFound:
+    except gspread.CellNotFound:
         return False
 
 def get_player_game_name(user_id: int) -> Optional[str]:
