@@ -10,7 +10,7 @@ load_dotenv()
 async def main() -> None:
     """Start the bot."""
     # Create the Application
-    application = Application.builder().token(os.getenv("TELEGRAM_TOKEN")).build()
+    application = Application.builder().token(os.getenv("BOT_TOKEN")).build()
 
     # Set up registration handlers
     setup_registration(application)
