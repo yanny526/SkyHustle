@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Optional, Tuple
 
 import gspread
+from gspread import CellNotFound, WorksheetNotFound
 from google.oauth2.service_account import Credentials
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -38,7 +39,7 @@ def ensure_players_sheet() -> gspread.Worksheet:
     
     try:
         worksheet = sheet.worksheet("Players")
-    except gspread.CellNotFound:
+    except WorksheetNotFound:
         worksheet = sheet.add_worksheet(
             title="Players",
             rows=1000,
@@ -59,7 +60,7 @@ def get_player_row(user_id: int) -> Optional[int]:
     try:
         cell = worksheet.find(str(user_id))
         return cell.row
-    except gspread.CellNotFound:
+    except CellNotFound:
         return None
 
 def create_new_player(user_id: int, username: str, game_name: str) -> None:
@@ -87,7 +88,7 @@ def is_game_name_taken(game_name: str) -> bool:
     try:
         worksheet.find(game_name)
         return True
-    except gspread.CellNotFound:
+    except CellNotFound:
         return False
 
 def get_player_game_name(user_id: int) -> Optional[str]:
