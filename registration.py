@@ -27,7 +27,8 @@ def get_google_sheets_client() -> gspread.Client:
     """Initialize and return Google Sheets client."""
     creds_json = base64.b64decode(os.getenv("BASE64_CREDS")).decode()
     creds_dict = json.loads(creds_json)
-    credentials = Credentials.from_service_account_info(creds_dict)
+    scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+    credentials = Credentials.from_service_account_info(creds_dict, scopes=scopes)
     return gspread.authorize(credentials)
 
 def ensure_players_sheet() -> gspread.Worksheet:
