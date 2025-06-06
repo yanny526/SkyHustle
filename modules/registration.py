@@ -53,10 +53,9 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     if row:
         player = get_player_data(chat_id)
         game_name = player.get("game_name", "")
-        # Escape the exclamation mark after game_name: "SkyHustle\!" for MarkdownV2
         await update.message.reply_text(
-            f"👋 Welcome back, *{game_name}\\!* Use /base to view your empire\\.",
-            parse_mode=constants.ParseMode.MARKDOWN_V2,
+            f"👋 Welcome back, *{game_name}*! Use /base to view your empire.",
+            parse_mode=constants.ParseMode.MARKDOWN,
         )
         return ConversationHandler.END
 
@@ -65,10 +64,9 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         [InlineKeyboardButton(text="Enter game name 🎮", callback_data=SET_NAME_CALLBACK)]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    # Escape the exclamation mark after "SkyHustle": "SkyHustle\!"
     await update.message.reply_text(
-        "👋 Welcome to *SkyHustle\\!* To begin, please choose your in-game name\\:",
-        parse_mode=constants.ParseMode.MARKDOWN_V2,
+        "👋 Welcome to *SkyHustle*! To begin, please choose your in-game name:",
+        parse_mode=constants.ParseMode.MARKDOWN,
         reply_markup=reply_markup,
     )
     return ConversationHandler.WAITING
@@ -81,7 +79,7 @@ async def set_name_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     query = update.callback_query
     await query.answer()
     await query.edit_message_text(
-        "✏️ Please type your desired in-game name (alphanumeric, no spaces, max 12 characters)\\."
+        "✏️ Please type your desired in-game name (alphanumeric, no spaces, max 12 characters):"
     )
     return TYPING_NAME
 
@@ -98,12 +96,12 @@ async def received_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     # Validate: only letters/numbers, no spaces, ≤12 chars
     if not text.isalnum():
         await update.message.reply_text(
-            "❌ Invalid name\\. Only letters and numbers allowed \\(no spaces\\)\\. Try again\\:"
+            "❌ Invalid name. Only letters and numbers allowed (no spaces). Try again:"
         )
         return TYPING_NAME
     if len(text) > 12:
         await update.message.reply_text(
-            "❌ Name too long\\. Maximum 12 characters\\. Try again\\:"
+            "❌ Name too long. Maximum 12 characters. Try again:"
         )
         return TYPING_NAME
 
@@ -111,7 +109,7 @@ async def received_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     for player in list_all_players():
         if player.get("game_name", "").lower() == text.lower():
             await update.message.reply_text(
-                "❌ That game name is already taken\\. Please choose a different one\\:"
+                "❌ That game name is already taken. Please choose a different one:"
             )
             return TYPING_NAME
 
@@ -119,9 +117,8 @@ async def received_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     try:
         create_new_player(chat_id, username, text)
     except Exception as e:
-        # Escape colon and exclamation: ":" → "\:"; "!" → "\!"
         await update.message.reply_text(
-            f"⚠️ Registration failed\\: {e}\\nPlease try /start again\\."
+            f"⚠️ Registration failed: {e}\nPlease try /start again."
         )
         return ConversationHandler.END
 
@@ -132,15 +129,14 @@ async def received_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     resources_gold = player.get("resources_gold", 0)
     resources_food = player.get("resources_food", 0)
 
-    # Escape the exclamation after "Registration complete!"
     await update.message.reply_text(
-        f"✅ Registration complete\\! Your empire begins now\\.\n\n"
+        f"✅ Registration complete! Your empire begins now.\n\n"
         f"• 🌲 Wood: {resources_wood}\n"
         f"• ⛏️ Stone: {resources_stone}\n"
         f"• 🪙 Gold: {resources_gold}\n"
         f"• 🍗 Food: {resources_food}\n\n"
-        f"Use /base to check your stats\\.",
-        parse_mode=constants.ParseMode.MARKDOWN_V2,
+        f"Use /base to check your stats.",
+        parse_mode=constants.ParseMode.MARKDOWN,
     )
     return ConversationHandler.END
 
@@ -149,9 +145,8 @@ async def cancel_registration(update: Update, context: ContextTypes.DEFAULT_TYPE
     """
     If user sends /cancel, exit registration flow.
     """
-    # Escape exclamation: "Registration canceled. Send /start when you’re ready."
     await update.message.reply_text(
-        "❌ Registration canceled\\. Send /start when you’re ready\\."
+        "❌ Registration canceled. Send /start when you’re ready."
     )
     return ConversationHandler.END
 
