@@ -2,6 +2,7 @@ import os
 from telegram.ext import ApplicationBuilder
 from modules.sheets_helper import initialize_sheets
 from modules.registration import setup_registration
+from modules.base_ui import setup_base_ui
 
 def main():
     BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -22,6 +23,7 @@ def main():
 
     # 3. Register handlers (start/registration, etc.)
     setup_registration(app)
+    setup_base_ui(app)
 
     # 4. Run the bot
     print("🚀 SkyHustle Bot is starting…")
