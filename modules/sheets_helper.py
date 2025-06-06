@@ -7,7 +7,6 @@ from typing import Optional, Dict, Any, List
 import gspread
 from google.oauth2.service_account import Credentials
 
-
 # ------------------------------------------------------------------------------
 # Module-level variables to hold the authenticated sheet and "Players" worksheet
 # ------------------------------------------------------------------------------
@@ -29,43 +28,55 @@ _PLAYERS_HEADERS = [
     "base_level",
 ]
 
+# Required OAuth scopes for reading/writing Google Sheets & Drive
+_SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive"
+]
+
 
 # ------------------------------------------------------------------------------
-# Internal: decode BASE64_CREDS, authenticate to Google Sheets, and open the sheet
+# Internal: decode (if needed) BASE64_CREDS, authenticate to Google Sheets, and open the sheet
 # ------------------------------------------------------------------------------
 def _authenticate_and_open_sheet() -> None:
     """
-    Decode BASE64_CREDS and authenticate via google.oauth2.service_account to gspread.
+    Decode BASE64_CREDS if necessary, authenticate via google.oauth2.service_account to gspread.
     Then open the Google Sheet whose ID is in SHEET_ID and assign to module variables.
     Raises an Exception if any step fails.
     """
     global _gc, _sheet
 
     # 1) Read environment variables
-    b64_creds = os.getenv("BASE64_CREDS")
+    raw_creds = os.getenv("BASE64_CREDS")
     sheet_id = os.getenv("SHEET_ID")
 
-    if not b64_creds:
+    if not raw_creds:
         raise RuntimeError("BASE64_CREDS not found in environment variables.")
     if not sheet_id:
         raise RuntimeError("SHEET_ID not found in environment variables.")
 
+    # 2) Determine if raw_creds is already JSON or needs base64 decoding
     try:
-        # 2) Decode the base64-encoded service-account JSON
-        creds_json = base64.b64decode(b64_creds)
-        info = json.loads(creds_json)
+        raw_creds_stripped = raw_creds.strip()
+        if raw_creds_stripped.startswith("{"):
+            # Looks like plain JSON—parse directly
+            info = json.loads(raw_creds_stripped)
+        else:
+            # Assume base64-encoded JSON
+            decoded = base64.b64decode(raw_creds_stripped)
+            info = json.loads(decoded)
     except Exception as e:
-        raise RuntimeError(f"Failed to decode or parse BASE64_CREDS: {e}")
+        raise RuntimeError(f"Failed to parse BASE64_CREDS as JSON or base64: {e}")
 
+    # 3) Create Credentials object for gspread with proper scopes
     try:
-        # 3) Create Credentials object for gspread
-        credentials = Credentials.from_service_account_info(info)
+        credentials = Credentials.from_service_account_info(info, scopes=_SCOPES)
         _gc = gspread.authorize(credentials)
     except Exception as e:
-        raise RuntimeError(f"Failed to authorize gspread client: {e}")
+        raise RuntimeError(f"Failed to authorize gspread client with scopes {_SCOPES}: {e}")
 
+    # 4) Open the spreadsheet by ID
     try:
-        # 4) Open the spreadsheet by ID
         _sheet = _gc.open_by_key(sheet_id)
     except Exception as e:
         raise RuntimeError(f"Failed to open Google Sheet (ID={sheet_id}): {e}")
@@ -88,14 +99,14 @@ def _ensure_players_worksheet() -> None:
         _players_ws = _sheet.worksheet("Players")
     except gspread.exceptions.WorksheetNotFound:
         # Create a new "Players" worksheet with default rows/cols
-        _players_ws = _sheet.add_worksheet(title="Players", rows="100", cols=str(len(_PLAYERS_HEADERS)))
+        _players_ws = _sheet.add_worksheet(
+            title="Players", rows="100", cols=str(len(_PLAYERS_HEADERS))
+        )
         _players_ws.append_row(_PLAYERS_HEADERS)
         return
 
     # If worksheet exists, check headers
     existing = _players_ws.row_values(1)
-    # Compare existing headers with required headers in order
-    # If any required header is missing or out-of-order, append missing ones at the end
     to_append = []
     for idx, header in enumerate(_PLAYERS_HEADERS):
         if idx < len(existing) and existing[idx] == header:
@@ -104,11 +115,10 @@ def _ensure_players_worksheet() -> None:
             to_append.append(header)
 
     if to_append:
-        # Append missing headers at the end of row 1
         updated_headers = existing + to_append
-        _players_ws.delete_rows(1)                      # Remove old header row
-        _players_ws.insert_row(updated_headers, index=1)  # Insert updated header row
-    # If existing headers contain extras beyond our list, we leave them intact.
+        _players_ws.delete_rows(1)
+        _players_ws.insert_row(updated_headers, index=1)
+    # Any extra columns beyond our list remain intact.
 
 
 # ------------------------------------------------------------------------------
@@ -117,15 +127,14 @@ def _ensure_players_worksheet() -> None:
 def initialize_sheets() -> None:
     """
     Call this once at bot startup. It will:
-      1. Authenticate to Google Sheets using BASE64_CREDS.
+      1. Decode (if needed) BASE64_CREDS and authenticate to Google Sheets using proper scopes.
       2. Open the spreadsheet by SHEET_ID.
       3. Ensure a worksheet named "Players" exists with the correct headers.
     After this, other helper functions (get_player_row, create_new_player, etc.)
     can be used safely.
     """
     if _gc and _sheet and _players_ws:
-        # Already initialized
-        return
+        return  # already done
 
     _authenticate_and_open_sheet()
     _ensure_players_worksheet()
@@ -144,7 +153,6 @@ def get_player_row(user_id: int) -> Optional[int]:
 
     try:
         all_values = _players_ws.get_all_values()
-        # Find user_id in the first column (index 0). Skip header row (row 1).
         for row_idx in range(2, len(all_values) + 1):
             cell_value = all_values[row_idx - 1][0]
             if cell_value and int(cell_value) == user_id:
@@ -169,7 +177,6 @@ def create_new_player(user_id: int, telegram_username: str, game_name: str) -> N
     if _players_ws is None:
         raise RuntimeError("Sheets have not been initialized. Call initialize_sheets() first.")
 
-    # Check if user already exists
     existing_row = get_player_row(user_id)
     if existing_row is not None:
         raise ValueError(f"User ID {user_id} already exists in Players sheet at row {existing_row}.")
@@ -210,7 +217,6 @@ def get_player_data(user_id: int) -> Dict[str, Any]:
         return {}
 
     try:
-        # Read the header row and the player row
         headers = _players_ws.row_values(1)
         values = _players_ws.row_values(row_idx)
         result: Dict[str, Any] = {}
@@ -219,7 +225,6 @@ def get_player_data(user_id: int) -> Dict[str, Any]:
                 result[header] = ""
                 continue
             cell = values[idx]
-            # Try casting to int for numeric columns, leave as str otherwise
             if header in [
                 "user_id",
                 "resources_wood",
@@ -255,12 +260,11 @@ def update_player_data(user_id: int, field: str, new_value: Any) -> None:
     if row_idx is None:
         raise ValueError(f"User ID {user_id} not found in Players sheet.")
 
-    # Fetch headers to determine which column index to update
     try:
         headers = _players_ws.row_values(1)
         if field not in headers:
             raise ValueError(f"Field '{field}' does not exist in Players worksheet.")
-        col_idx = headers.index(field) + 1  # gspread columns are 1-based
+        col_idx = headers.index(field) + 1
         _players_ws.update_cell(row_idx, col_idx, new_value)
     except Exception as e:
         raise RuntimeError(f"Failed to update field '{field}' for user_id {user_id}: {e}")
@@ -280,7 +284,7 @@ def list_all_players() -> List[Dict[str, Any]]:
     try:
         all_values = _players_ws.get_all_values()
         headers = all_values[0]
-        rows = all_values[1:]  # Skip header row
+        rows = all_values[1:]
 
         players_list: List[Dict[str, Any]] = []
         for row in rows:
@@ -313,10 +317,12 @@ def list_all_players() -> List[Dict[str, Any]]:
 
 # ------------------------------------------------------------------------------
 # Cursor Prompt (for future regeneration):
-# “Generate a file modules/sheets_helper.py that decodes BASE64_CREDS,
-#  authenticates to Google Sheets via google-auth and gspread, ensures
-#  a 'Players' worksheet with the specified headers exists, and exposes
-#  helper functions: initialize_sheets(), get_player_row(), create_new_player(),
-#  get_player_data(), update_player_data(), list_all_players(). Use ISO timestamps,
-#  Python types for sheet values, and handle missing-column or missing-sheet cases gracefully.”
+# “Generate a file modules/sheets_helper.py that:
+#  1. Reads BASE64_CREDS from env, detecting if it’s raw JSON or base64-encoded JSON.
+#  2. Authenticates to Google Sheets with scopes 
+#     https://www.googleapis.com/auth/spreadsheets and 
+#     https://www.googleapis.com/auth/drive.
+#  3. Ensures a 'Players' worksheet with headers 
+#     [user_id, telegram_username, game_name, registered_at, resources_wood, resources_stone, resources_gold, resources_food, diamonds, base_level].
+#  4. Exposes helper functions: initialize_sheets(), get_player_row(), create_new_player(), get_player_data(), update_player_data(), list_all_players().”
 # ------------------------------------------------------------------------------
