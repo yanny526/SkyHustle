@@ -19,61 +19,119 @@ from telegram.ext import (
 
 from modules.sheets_helper import get_player_data
 
+def _get_ongoing_activities(user_id: int) -> list:
+    """Stub function for ongoing activities."""
+    return []
+
 async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Triggered by /base. Fetches the calling user's data and displays
     resources, diamonds, base level, and presents "Build New" / "Train Troops" buttons.
     """
     user = update.effective_user
-    chat_id = user.id
-
-    # Fetch player data from Sheets_helper
-    player: Dict[str, Any] = get_player_data(chat_id)
-    if not player:
-        # If no data, prompt them to register
-        await update.message.reply_text(
-            "❌ You aren't registered yet. Send /start to create your empire."
-        )
+    if not user:
         return
 
-    # Extract fields (with defaults if missing)
-    wood = player.get("resources_wood", 0)
-    stone = player.get("resources_stone", 0)
-    gold = player.get("resources_gold", 0)
-    food = player.get("resources_food", 0)
-    diamonds = player.get("diamonds", 0)
-    base_level = player.get("base_level", 1)
-    game_name = player.get("game_name", "")
+    # Fetch player data
+    data = get_player_data(user.id)
+    if not data:
+        await update.message.reply_text("❌ You aren't registered yet. Send /start.")
+        return
 
-    # Build the message text using MarkdownV2
-    text = (
-        f"🏰 *{game_name}\'s Base Overview*\n\n"
-        f"• 🌲 *Wood:* {wood}\n"
-        f"• ⛏️ *Stone:* {stone}\n"
-        f"• 🪙 *Gold:* {gold}\n"
-        f"• 🍗 *Food:* {food}\n"
-        f"• 💎 *Diamonds:* {diamonds}\n\n"
-        f"🔹 *Base Level:* {base_level}\n"
-        f"   — Allows {min(1 + (base_level - 1) // 5, 4)} simultaneous builds\n"
+    # Extract basic info
+    name = data["game_name"]
+    coord_x = data["coord_x"]
+    coord_y = data["coord_y"]
+    power = 0  # TODO: Implement power calculation
+    prestige = 0  # TODO: Implement prestige system
+
+    # Extract resources
+    wood = data["resources_wood"]
+    stone = data["resources_stone"]
+    gold = data["resources_gold"]
+    food = data["resources_food"]
+    diamonds = data["diamonds"]
+
+    # Calculate energy
+    energy_max = data["base_level"] * 200
+    energy = energy_max  # Full energy for now
+
+    # Extract building levels
+    lumber_house_level = data["lumber_house_level"]
+    mine_level = data["mine_level"]
+    warehouse_level = data["warehouse_level"]
+    hospital_level = data["hospital_level"]
+    research_lab_level = data["research_lab_level"]
+    barracks_level = data["barracks_level"]
+    power_plant_level = data["power_plant_level"]
+    workshop_level = data["workshop_level"]
+    jail_level = data["jail_level"]
+
+    # Calculate hourly outputs
+    wood_output = lumber_house_level * 60
+    stone_output = mine_level * 45
+    food_output = warehouse_level * 50
+    gold_output = mine_level * 30
+    energy_output = power_plant_level * 20
+
+    # Build the message
+    message = (
+        f"🏠 [Commander {name}'s Base]\n"
+        f"📍 Coordinates: X:{coord_x}, Y:{coord_y}\n"
+        f"📈 Power: {power}\n"
+        f"🧬 Prestige Level: {prestige}\n"
+        f"🏗️ Base Level: {data['base_level']}\n\n"
+        f"🧱 Building Levels:\n\n"
+        f"🪓 Lumber House: {lumber_house_level} ⛏️ Mine: {mine_level}\n\n"
+        f"🧺 Warehouse: {warehouse_level} 🏥 Hospital: {hospital_level}\n\n"
+        f"🧪 Research Lab: {research_lab_level} 🪖 Barracks: {barracks_level}\n\n"
+        f"🔋 Power Plant: {power_plant_level} 🔧 Workshop: {workshop_level}\n\n"
+        f"🚔 Jail: {jail_level}\n\n"
+        f"📤 Hourly Output:\n\n"
+        f"🪵 Wood: +{wood_output}/hr 🪨 Stone: +{stone_output}/hr\n\n"
+        f"🥖 Food: +{food_output}/hr 💰 Gold: +{gold_output}/hr\n\n"
+        f"🔋 Energy: +{energy_output}/hr\n\n"
+        f"💰 Current Resources:\n"
+        f"🪵 {wood} 🪨 {stone} 🥖 {food} 💰 {gold} 💎 {diamonds}\n"
+        f"🔋 Energy: {energy}/{energy_max}\n\n"
+        f"🛠️ Ongoing Activities:\n\n"
     )
 
-    # Inline buttons: Build New and Train Troops (callbacks to be handled later)
+    # Add ongoing activities
+    activities = _get_ongoing_activities(user.id)
+    if not activities:
+        message += "None\n\n"
+    else:
+        for activity in activities:
+            message += f"• {activity}\n"
+        message += "\n"
+
+    # Add command options
+    message += "🎯 Your Command Options:"
+
+    # Create keyboard
     keyboard = [
         [
-            InlineKeyboardButton(text="🏗 Build New", callback_data="BASE_BUILD"),
-            InlineKeyboardButton(text="⚔️ Train Troops", callback_data="BASE_TRAIN"),
-        ]
+            InlineKeyboardButton("⚒️ Build", callback_data="build"),
+            InlineKeyboardButton("🧪 Research", callback_data="research"),
+            InlineKeyboardButton("🪖 Train", callback_data="train"),
+        ],
+        [
+            InlineKeyboardButton("⚔️ Attack", callback_data="attack"),
+            InlineKeyboardButton("🎖 Quests", callback_data="quests"),
+            InlineKeyboardButton("🛒 Shop", callback_data="shop"),
+        ],
+        [InlineKeyboardButton("🏠 Back to Base", callback_data="base")],
     ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
 
     await update.message.reply_text(
-        text, parse_mode=constants.ParseMode.MARKDOWN_V2, reply_markup=reply_markup
+        message,
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode=constants.ParseMode.MARKDOWN,
     )
-
 
 def setup_base_ui(app: Application) -> None:
     """
     Call this in main.py to register the /base command handler.
     """
-    base_command = CommandHandler("base", base_handler)
-    app.add_handler(base_command) 
+    app.add_handler(CommandHandler("base", base_handler)) 
