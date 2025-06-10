@@ -10,7 +10,10 @@ async def build_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
     data = get_player_data(user.id)
     if not data:
-        await update.message.reply_text("❌ Send /start first.")
+        if update.message:
+            await update.message.reply_text("❌ Send /start first.")
+        elif update.callback_query:
+            await update.callback_query.edit_message_text("❌ Send /start first.")
         return
 
     # Safely get building levels with defaults
@@ -57,11 +60,20 @@ async def build_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         [InlineKeyboardButton("🏠 Back to Base", callback_data="BASE_MENU")],
     ]
 
-    await update.message.reply_text(
-        msg,
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode=constants.ParseMode.MARKDOWN,
-    )
+    if update.message:
+        await update.message.reply_text(
+            msg,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode=constants.ParseMode.MARKDOWN,
+        )
+    elif update.callback_query:
+        query = update.callback_query
+        await query.answer()
+        await query.edit_message_text(
+            msg,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode=constants.ParseMode.MARKDOWN,
+        )
 
 async def build_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
