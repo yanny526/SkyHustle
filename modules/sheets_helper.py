@@ -43,6 +43,15 @@ _PLAYERS_HEADERS = [
     "army_tank",
     "army_artillery",
     "army_destroyer",
+    "army_bm_barrage",
+    "army_venom_reaper",
+    "army_titan_crusher",
+    "items_revive_all",
+    "items_emp_device",
+    "items_infinite_scout",
+    "items_hazmat_mask",
+    "items_speedup_1h",
+    "items_shield_adv",
 ]
 
 # Required OAuth scopes for reading/writing Google Sheets & Drive
@@ -139,6 +148,15 @@ def create_new_player(user_id: int, telegram_username: str, game_name: str) -> N
         0,  # army_tank
         0,  # army_artillery
         0,  # army_destroyer
+        0,  # army_bm_barrage
+        0,  # army_venom_reaper
+        0,  # army_titan_crusher
+        0,  # items_revive_all
+        0,  # items_emp_device
+        0,  # items_infinite_scout
+        0,  # items_hazmat_mask
+        0,  # items_speedup_1h
+        0,  # items_shield_adv
     ]
     _players_ws.append_row(new_row)
 
@@ -160,7 +178,10 @@ def get_player_data(user_id: int) -> Dict[str, Any]:
             "lumber_house_level", "mine_level", "warehouse_level", "hospital_level",
             "research_lab_level", "barracks_level", "power_plant_level",
             "workshop_level", "jail_level",
-            "army_infantry", "army_tank", "army_artillery", "army_destroyer"
+            "army_infantry", "army_tank", "army_artillery", "army_destroyer",
+            "army_bm_barrage", "army_venom_reaper", "army_titan_crusher",
+            "items_revive_all", "items_emp_device", "items_infinite_scout",
+            "items_hazmat_mask", "items_speedup_1h", "items_shield_adv"
         ]:
             try:
                 data[h] = int(val)
