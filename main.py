@@ -9,6 +9,7 @@ from modules.building_system import setup_building_system
 from modules.training_system import setup_training_system
 from modules.research_system import setup_research_system
 from modules.black_market import setup_black_market
+from modules.inventory_system import setup_inventory_system
 
 def main() -> None:
     # Load environment variables
@@ -27,6 +28,7 @@ def main() -> None:
     setup_training_system(app)
     setup_research_system(app)
     setup_black_market(app)
+    setup_inventory_system(app)
     
     # Start the bot
     app.run_polling()
