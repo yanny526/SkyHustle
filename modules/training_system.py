@@ -2,28 +2,12 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, constan
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 from modules.sheets_helper import get_player_data, update_player_data
 
-# Hardcoded unit stats for now
+# Hardcoded unit stats
 _UNIT_STATS = {
-    "infantry": {
-        "name": "Infantry",
-        "cost": {"food": 10, "gold": 5},
-        "time_s": 30, # seconds
-    },
-    "tank": {
-        "name": "Tank",
-        "cost": {"food": 20, "stone": 10},
-        "time_s": 60,
-    },
-    "artillery": {
-        "name": "Artillery",
-        "cost": {"food": 15, "wood": 10},
-        "time_s": 45,
-    },
-    "destroyer": {
-        "name": "Destroyer",
-        "cost": {"gold": 25, "wood": 15},
-        "time_s": 90,
-    },
+    "infantry": {"name": "Infantry",   "food":  10, "gold": 5,  "time": 30},
+    "tank":     {"name": "Tank",       "food":  20, "gold": 10, "time": 60},
+    "artillery":{"name": "Artillery",  "food":  30, "gold": 15, "time": 90},
+    "destroyer":{"name": "Destroyer",  "food":  50, "gold": 25, "time":120},
 }
 
 async def train_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -43,10 +27,10 @@ async def train_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         "🪖 *[TRAIN YOUR ARMY]*",
         "Available Units (by Barracks level):",
         "",
-        f"• 👣 Infantry (Tier 1)", # Barracks level 1
-        f"• 🛡️ Tank (Tier 1)", # Barracks level 1
-        f"• 🎯 Artillery (Tier 1)", # Barracks level 2
-        f"• 🚧 Destroyer (Tier 1)", # Barracks level 3
+        f"• 👣 Infantry (Tier 1)", 
+        f"• 🛡️ Tank (Tier 1)", 
+        f"• 🎯 Artillery (Tier 1)", 
+        f"• 🚧 Destroyer (Tier 1)", 
     ])
 
     keyboard = [
@@ -76,130 +60,88 @@ async def train_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
 
 async def train_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # Acknowledge callback
     query = update.callback_query
     await query.answer()
+    chat_id = update.effective_chat.id
+    user_id = update.effective_user.id
 
-    user = update.effective_user
-    if not user:
-        return
+    # Determine unit type
+    data = get_player_data(user_id)
+    b_lvl = data.get("barracks_level", 1)
+    unit_key = query.data.split("_", 1)[1]  # e.g. "infantry"
 
-    data = get_player_data(user.id)
-    if not data:
-        await query.edit_message_text("❌ Send /start first.")
-        return
+    # Define unit stats
+    stats = {
+        "infantry":   {"name": "Infantry",   "food":  10, "gold": 5,  "time": 30},
+        "tank":       {"name": "Tank",       "food":  20, "gold": 10, "time": 60},
+        "artillery":  {"name": "Artillery",  "food":  30, "gold": 15, "time": 90},
+        "destroyer":  {"name": "Destroyer",  "food":  50, "gold": 25, "time":120},
+    }
+    u = stats[unit_key]
+    # Calculate max by resources
+    max_by_food = data["resources_food"] // u["food"]
+    max_by_gold = data["resources_gold"] // u["gold"]
+    max_qty = min(max_by_food, max_by_gold, b_lvl * 50)
 
-    unit_type = query.data.replace("TRAIN_", "")
-    unit_info = _UNIT_STATS.get(unit_type)
-
-    if not unit_info:
-        await query.edit_message_text("❌ Unknown unit.")
-        return
-
-    unit_name = unit_info["name"]
-    cost = unit_info["cost"]
-    time_s = unit_info["time_s"]
-
-    # Calculate max affordable
-    max_affordable = float('inf')
-    for resource, quantity in cost.items():
-        player_resource = data.get(f"resources_{resource}", 0)
-        if quantity > 0:
-            max_affordable = min(max_affordable, player_resource // quantity)
-        else:
-            # If cost is 0, it's 'free' in terms of this resource, so doesn't limit.
-            # We can skip this or set to max_affordable for this resource to a very high number.
-            pass 
-
-    if max_affordable == float('inf'): # If unit costs nothing or all costs are 0
-        max_affordable = 9999 # Arbitrarily large number
-
-    msg = "\n".join([
-        f"🪖 *How many {unit_name} do you want to train?*",
-        f"_Each: ⏳ {time_s}s, Cost: {', '.join([f'{qty} {res}' for res, qty in cost.items()])}_",
-        f"(Max affordable: {max_affordable})",
-    ])
-
-    keyboard = [
-        [
-            InlineKeyboardButton("➕10", callback_data=f"TRAIN_CONFIRM_{unit_type}_10"),
-            InlineKeyboardButton("➕25", callback_data=f"TRAIN_CONFIRM_{unit_type}_25"),
-            InlineKeyboardButton("➕50", callback_data=f"TRAIN_CONFIRM_{unit_type}_50"),
-        ],
-        [
-            InlineKeyboardButton("❌ Cancel", callback_data="TRAIN_CANCEL"),
-        ],
-    ]
-
-    await query.edit_message_text(
-        msg,
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode=constants.ParseMode.MARKDOWN,
+    # Prompt quantity
+    text = (
+        f"👣 *Train {u['name']}*\n"
+        f"Cost per unit: 🥖 {u['food']}  💰 {u['gold']}\n"
+        f"Time per unit: {u['time']}s\n\n"
+        f"How many {u['name']} do you want to train? (Max {max_qty})"
     )
+    buttons = [
+        [InlineKeyboardButton(f"➕ {n}", callback_data=f"TRAIN_QTY_{unit_key}_{n}")]
+        for n in [10, 25, 50, max_qty] if n > 0 and n <= max_qty # ensure n is positive
+    ]
+    buttons.append([InlineKeyboardButton("❌ Cancel", callback_data="TRAIN_CANCEL")])
+    await context.bot.send_message(chat_id, text, parse_mode=constants.ParseMode.MARKDOWN, reply_markup=InlineKeyboardMarkup(buttons))
 
 async def confirm_train(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
+    chat_id = update.effective_chat.id
+    user_id = update.effective_user.id
 
-    user = update.effective_user
-    if not user:
-        return
+    _, _, unit_key, qty_str = query.data.split("_")
+    qty = int(qty_str)
 
-    data = get_player_data(user.id)
-    if not data:
-        await query.edit_message_text("❌ Send /start first.")
-        return
+    data = get_player_data(user_id)
+    stats = _UNIT_STATS[unit_key]
 
-    parts = query.data.split("_")
-    unit_type = parts[2] # TRAIN_CONFIRM_{unit}_{qty}
-    qty = int(parts[3])
-
-    unit_info = _UNIT_STATS.get(unit_type)
-    if not unit_info:
-        await query.edit_message_text("❌ Unknown unit.")
-        return
-
-    cost = unit_info["cost"]
-    time_s = unit_info["time_s"]
+    cost_food = stats["food"] * qty
+    cost_gold = stats["gold"] * qty
 
     # Check resources
-    can_afford = True
-    for resource, single_cost in cost.items():
-        total_cost = single_cost * qty
-        if data.get(f"resources_{resource}", 0) < total_cost:
-            can_afford = False
-            break
-
-    if not can_afford:
-        await query.edit_message_text("❌ Not enough resources.")
+    if data["resources_food"] < cost_food or data["resources_gold"] < cost_gold:
+        await context.bot.send_message(chat_id, "❌ Not enough resources.")
         return
 
-    # Deduct resources
-    for resource, single_cost in cost.items():
-        total_cost = single_cost * qty
-        update_player_data(user.id, f"resources_{resource}", data[f"resources_{resource}"] - total_cost)
+    # Deduct
+    update_player_data(user_id, "resources_food", data["resources_food"] - cost_food)
+    update_player_data(user_id, "resources_gold", data["resources_gold"] - cost_gold)
 
-    # Add to army
-    army_field = f"army_{unit_type}"
-    current_army = data.get(army_field, 0) # Get current army count, default to 0
-    update_player_data(user.id, army_field, current_army + qty)
+    # Add to army count
+    field = f"army_{unit_key}"
+    current = data.get(field, 0)
+    update_player_data(user_id, field, current + qty)
 
-    # Confirm message
-    msg = (
-        f"✅ Training {qty} {unit_info['name']} started!\n"
-        f"It'll take {qty * time_s}s."
+    await context.bot.send_message(
+        chat_id,
+        f"✅ Training {qty} {stats['name']} started!\n"
+        f"It will take {stats['time'] * qty}s to complete.",
+        parse_mode=constants.ParseMode.MARKDOWN
     )
 
-    await query.edit_message_text(msg, parse_mode=constants.ParseMode.MARKDOWN)
-
 async def cancel_train(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
-    await query.answer()
-    await query.edit_message_text("❌ Training canceled.")
+    await update.callback_query.answer()
+    await context.bot.send_message(update.effective_chat.id, "❌ Training cancelled.")
 
 def setup_training_system(app: Application) -> None:
     """Register training system handlers."""
     app.add_handler(CommandHandler("train", train_menu))
     app.add_handler(CallbackQueryHandler(train_menu, pattern="^TRAIN_MENU$"))
-    app.add_handler(CallbackQueryHandler(train_choice, pattern="^TRAIN_"))
-    app.add_handler(CallbackQueryHandler(confirm_train, pattern="^TRAIN_CONFIRM_"))
+    app.add_handler(CallbackQueryHandler(train_choice, pattern="^TRAIN_[a-z]+$"))
+    app.add_handler(CallbackQueryHandler(confirm_train, pattern="^TRAIN_QTY_"))
     app.add_handler(CallbackQueryHandler(cancel_train, pattern="^TRAIN_CANCEL$")) 
