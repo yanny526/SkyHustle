@@ -30,7 +30,10 @@ async def blackmarket_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     )
     buttons = []
     for item in ITEMS:
-        buttons.append([InlineKeyboardButton(f"{item['name']} — {item['cost']} 💎", callback_data=f"BM_BUY_{item['key']}")])
+        buttons.append([
+            InlineKeyboardButton("Buy", callback_data=f"BM_BUY_{item['key']}"),
+            InlineKeyboardButton("ℹ️ Info", callback_data=f"BM_INFO_{item['key']}"),
+        ])
     buttons.append([InlineKeyboardButton("🏠 Back to Base", callback_data="BM_CANCEL")])
 
     await context.bot.send_message(
@@ -75,8 +78,22 @@ async def cancel_blackmarket(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await update.callback_query.answer()
     await context.bot.send_message(update.effective_chat.id, "🏠 Returning to base…")
 
+async def show_bm_info(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    key = query.data.split("_",2)[2]
+    item = next(i for i in ITEMS if i["key"] == key)
+    text = (
+        f"*{item['name']}*\n"
+        f"{item['desc']}\n\n"
+        f"Cost: {item['cost']} 💎\n"
+        + ("Units received: 5" if item["key"]=="bm_barrage" else "Units received: 10" if item["key"]=="venom_reaper" else "Units received: 2" if item["type"]=="unit" else "")
+    )
+    await query.edit_message_text(text, parse_mode=constants.ParseMode.MARKDOWN)
+
 def setup_black_market(app: Application) -> None:
     app.add_handler(CommandHandler("blackmarket", blackmarket_menu))
     app.add_handler(CallbackQueryHandler(blackmarket_menu,   pattern="^BM_MENU$"))
     app.add_handler(CallbackQueryHandler(blackmarket_buy,    pattern="^BM_BUY_"))
-    app.add_handler(CallbackQueryHandler(cancel_blackmarket,pattern="^BM_CANCEL$")) 
+    app.add_handler(CallbackQueryHandler(cancel_blackmarket,pattern="^BM_CANCEL$"))
+    app.add_handler(CallbackQueryHandler(show_bm_info, pattern="^BM_INFO_")) 
