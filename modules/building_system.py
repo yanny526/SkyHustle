@@ -1,7 +1,7 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, constants
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 from modules.sheets_helper import get_player_data, update_player_data
-import datetime
+
 
 async def build_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
@@ -163,11 +163,6 @@ async def confirm_build(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     # Deduct resources
     update_player_data(user.id, "resources_wood", data["resources_wood"] - cost_wood)
     update_player_data(user.id, "resources_stone", data["resources_stone"] - cost_stone)
-
-    # Set timer end
-    end_time = datetime.datetime.utcnow() + datetime.timedelta(minutes=time_mins)
-    timer_field = f"timers.{field}"
-    update_player_data(user.id, timer_field, end_time.isoformat() + "Z")
 
     # Confirm message
     msg = "\n".join([
