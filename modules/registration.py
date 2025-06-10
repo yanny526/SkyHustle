@@ -1,161 +1,120 @@
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, constants
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
+    Application,
     CommandHandler,
     CallbackQueryHandler,
     MessageHandler,
     ConversationHandler,
-    filters,
     ContextTypes,
-    Application
+    filters,
 )
-from modules.sheets_helper import initialize_sheets, get_player_row, create_new_player, get_player_data, list_all_players
+from modules.sheets_helper import (
+    initialize_sheets,
+    get_player_row,
+    create_new_player,
+    get_player_data,
+    list_all_players,
+)
 from modules.base_ui import base_handler
 
-# Conversation states
+# Conversation state
 ASK_NAME = 0
 
 # Callback data
-DRAMATIC_CONTINUE = "dramatic_continue"
-ENTER_BASE = "enter_base"
-
-# Helper to check if game name is taken
-def _is_game_name_taken(game_name: str) -> bool:
-    """Checks if a game name is already taken by another player."""
-    all_players = list_all_players()
-    for player in all_players:
-        if player.get("game_name", "") == game_name:
-            return True
-    return False
-
+DRAMATIC_CONTINUE = "DRAMATIC_CONTINUE"
+ENTER_BASE = "ENTER_BASE"
 
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Handles the /start command, initiating registration or welcoming back a player."""
     user = update.effective_user
     if not user:
-        await update.message.reply_text("Something went wrong\\. Please try again\\.", parse_mode=constants.ParseMode.MARKDOWN_V2)
         return ConversationHandler.END
 
-    # Ensure sheets are initialized (defensive check)
+    # Initialize Sheets
     try:
         initialize_sheets()
     except Exception as e:
-        await update.message.reply_text(f"❌ Failed to connect to game data\\. Please try again later\\. Error: {e}", parse_mode=constants.ParseMode.MARKDOWN_V2)
+        await update.message.reply_text(
+            f"❌ Failed to connect to game data. Try again later.\nError: {e}"
+        )
         return ConversationHandler.END
 
+    # Returning player?
     if get_player_row(user.id) is not None:
-        player_data = get_player_data(user.id)
-        game_name = player_data.get("game_name", "Commander")
+        player = get_player_data(user.id)
         await update.message.reply_text(
-            f"👋 Welcome back, \*{game_name}\*\\! Use /base to view your empire\\.",
-            parse_mode=constants.ParseMode.MARKDOWN_V2
+            f"👋 Welcome back, *{player['game_name']}*! Use /base to view your empire.",
+            parse_mode="Markdown",
         )
         return ConversationHandler.END
-    else:
-        # New user flow
-        text = (
-            "🪐 \*WELCOME TO SKYHUSTLE\* 🪐\n"
-            "The world is fractured… but YOU are no ordinary commander\\.\n"
-            "👤 Set your \*Commander Name\*\\n"
-            "🔨 Build your base\\n"
-            "🛡️ Train your army\\n"
-            "⚔️ Dominate the zones\\n"
-            "💎 Rule the Black Market\\n\\n"
-            "🎖 Ready to lead\\? Press below\\."
-        )
-        keyboard = [[InlineKeyboardButton("🎖 Begin Your Legacy", callback_data=DRAMATIC_CONTINUE)]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text(
-            text, parse_mode=constants.ParseMode.MARKDOWN_V2, reply_markup=reply_markup
-        )
-        return ASK_NAME # Stay in conversation state for the next input (callback query)
 
+    # New player intro
+    intro = (
+        "🪐 *WELCOME TO SKYHUSTLE* 🪐\n"
+        "The world is fractured. Factions rise. Resources are scarce.\n"
+        "But YOU… you're no ordinary commander.\n\n"
+        "👤 Set your *Commander Name*\n"
+        "🔨 Build your base\n"
+        "🛡️ Train your army\n"
+        "⚔️ Dominate the zones\n"
+        "💎 Rule the Black Market\n\n"
+        "This is not just a game.\n"
+        "It's your *empire*, your *legacy*.\n\n"
+        "🎖 Ready to lead? Press below to begin."
+    )
+    keyboard = [[InlineKeyboardButton("🎖 Begin Your Legacy", callback_data=DRAMATIC_CONTINUE)]]
+    await update.message.reply_text(intro, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+    return ASK_NAME
 
 async def dramatic_continue_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Handles the callback from the 'Begin Your Legacy' button, prompting for name input."""
-    query = update.callback_query
-    await query.answer()
-
-    await query.edit_message_text(
-        "✏️ Please type your desired Commander Name \\(alphanumeric, no spaces, max 12 chars\\):",
-        parse_mode=constants.ParseMode.MARKDOWN_V2
+    await update.callback_query.answer()
+    await update.callback_query.edit_message_text(
+        "✏️ Please type your desired Commander Name (alphanumeric, ≤12 chars):"
     )
     return ASK_NAME
 
-
 async def received_name_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Handles the user's commander name input, validates it, and registers the player."""
     user = update.effective_user
-    game_name = update.message.text.strip()
-    chat_id = user.id
-    username = user.username or ""
+    name = update.message.text.strip()
 
-    # 1. Validate name format
-    if not game_name.isalnum():
+    # Validate
+    if not name.isalnum() or len(name) > 12:
         await update.message.reply_text(
-            "❌ Commander Name must contain only letters and numbers\\. Please try again:",
-            parse_mode=constants.ParseMode.MARKDOWN_V2
+            "❌ Invalid name—use letters/numbers only, max 12 chars. Try again:"
         )
         return ASK_NAME
-    
-    if len(game_name) > 12:
-        await update.message.reply_text(
-            "❌ Commander Name must be 12 characters or less\\. Please try again:",
-            parse_mode=constants.ParseMode.MARKDOWN_V2
-        )
-        return ASK_NAME
-    
-    # 2. Check uniqueness
-    try:
-        if _is_game_name_taken(game_name):
-            await update.message.reply_text(
-                "❌ This Commander Name is already taken\\. Please choose another:",
-                parse_mode=constants.ParseMode.MARKDOWN_V2
-            )
+
+    # Uniqueness check (case-insensitive)
+    for p in list_all_players():
+        if p.get("game_name", "").lower() == name.lower():
+            await update.message.reply_text("❌ That name's taken—choose another:")
             return ASK_NAME
-    except Exception as e:
-        await update.message.reply_text(f"❗ Error checking name uniqueness: {e}\\ . Please try again later\\.", parse_mode=constants.ParseMode.MARKDOWN_V2)
-        return ConversationHandler.END # End on critical error
 
-    # 3. Create new player
-    try:
-        create_new_player(chat_id, username, game_name)
-        player_data = get_player_data(chat_id)
-        coord_x = player_data.get("coord_x", 0)
-        coord_y = player_data.get("coord_y", 0)
+    # Register
+    create_new_player(user.id, user.username or "", name)
+    player = get_player_data(user.id)
+    x, y = player["coord_x"], player["coord_y"]
 
-        text = (
-            f"🎉 Commander \*{game_name}\* has entered SkyHustle\\!\\n"
-            f"📍 Your base is located at \*X:{coord_x}, Y:{coord_y}\*\\n\\n"
-            f"🚀 Tap below to begin your conquest\\!"
-        )
-        keyboard = [[InlineKeyboardButton("🏠 Enter Your Base", callback_data=ENTER_BASE)]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text(
-            text, parse_mode=constants.ParseMode.MARKDOWN_V2, reply_markup=reply_markup
-        )
-        return ConversationHandler.END
-    except Exception as e:
-        await update.message.reply_text(f"❌ Failed to register your empire: {e}\\ . Please try again later\\.", parse_mode=constants.ParseMode.MARKDOWN_V2)
-        return ConversationHandler.END
-
+    welcome = (
+        f"🎉 Commander *{name}* has entered SkyHustle!\n"
+        f"📍 Your base is located at X:{x}, Y:{y}\n\n"
+        "🚀 Tap below to begin your conquest!"
+    )
+    kb = [[InlineKeyboardButton("🏠 Enter Your Base", callback_data=ENTER_BASE)]]
+    await update.message.reply_text(welcome, reply_markup=InlineKeyboardMarkup(kb), parse_mode="Markdown")
+    return ConversationHandler.END
 
 async def enter_base_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Handles the callback from the 'Enter Your Base' button."""
-    query = update.callback_query
-    await query.answer()
+    await update.callback_query.answer()
+    # Directly show base UI
     await base_handler(update, context)
     return ConversationHandler.END
 
-
 async def cancel_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Cancels the conversation flow."""
-    await update.message.reply_text("Registration cancelled\\.", parse_mode=constants.ParseMode.MARKDOWN_V2)
+    await update.message.reply_text("❌ Registration canceled. Send /start to retry.")
     return ConversationHandler.END
 
-
 def setup_registration(app: Application) -> None:
-    """Sets up all registration-related handlers and adds them to the application."""
-    conv_handler = ConversationHandler(
+    conv = ConversationHandler(
         entry_points=[CommandHandler("start", start_handler)],
         states={
             ASK_NAME: [
@@ -165,10 +124,13 @@ def setup_registration(app: Application) -> None:
         },
         fallbacks=[
             CommandHandler("cancel", cancel_handler),
-            CallbackQueryHandler(enter_base_callback, pattern=f"^{ENTER_BASE}$")
+            CallbackQueryHandler(enter_base_callback, pattern=f"^{ENTER_BASE}$"),
         ],
+        per_user=True,
+        per_chat=True,
+        name="registration_flow",
     )
-    app.add_handler(conv_handler)
+    app.add_handler(conv)
 
 
 def setup_base_ui(app: Application) -> None:
