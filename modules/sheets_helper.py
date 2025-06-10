@@ -39,6 +39,10 @@ _PLAYERS_HEADERS = [
     "power_plant_level",
     "workshop_level",
     "jail_level",
+    "army_infantry",
+    "army_tank",
+    "army_artillery",
+    "army_destroyer",
 ]
 
 # Required OAuth scopes for reading/writing Google Sheets & Drive
@@ -131,6 +135,10 @@ def create_new_player(user_id: int, telegram_username: str, game_name: str) -> N
         1,  # power_plant_level
         1,  # workshop_level
         1,  # jail_level
+        0,  # army_infantry
+        0,  # army_tank
+        0,  # army_artillery
+        0,  # army_destroyer
     ]
     _players_ws.append_row(new_row)
 
@@ -151,7 +159,8 @@ def get_player_data(user_id: int) -> Dict[str, Any]:
             "resources_food", "diamonds", "base_level", "coord_x", "coord_y",
             "lumber_house_level", "mine_level", "warehouse_level", "hospital_level",
             "research_lab_level", "barracks_level", "power_plant_level",
-            "workshop_level", "jail_level"
+            "workshop_level", "jail_level",
+            "army_infantry", "army_tank", "army_artillery", "army_destroyer"
         ]:
             try:
                 data[h] = int(val)
