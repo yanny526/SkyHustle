@@ -2,259 +2,191 @@ import os
 import base64
 import json
 import datetime
+import random
 from typing import Optional, Dict, Any, List
 
 import gspread
 from google.oauth2.service_account import Credentials
 from gspread import WorksheetNotFound
 
-# Module-level variables to hold the authenticated sheet and "Players" worksheet
-_gc: Optional[gspread.Client] = None
-_sheet: Optional[gspread.Spreadsheet] = None
-_players_ws: Optional[gspread.Worksheet] = None
+# ------------------------------------------------------------------------------
+# Module-level variables
+# ------------------------------------------------------------------------------
+_gc = None            # type: gspread.Client
+_sheet = None         # type: gspread.Spreadsheet
+_players_ws = None    # type: gspread.Worksheet
 
-# The exact headers (in this order) we require on the "Players" worksheet:
-REQUIRED_HEADERS = [
-    "user_id", "telegram_username", "game_name", "registered_at",
-    "resources_wood", "resources_stone", "resources_gold", "resources_food",
-    "diamonds", "base_level", "coord_x", "coord_y",
-    "town_hall_level", "lumber_mill_level", "quarry_level", "mine_level", "farm_level"
+# The exact headers we require on the "Players" worksheet:
+_PLAYERS_HEADERS = [
+    "user_id",
+    "telegram_username",
+    "game_name",
+    "registered_at",
+    "resources_wood",
+    "resources_stone",
+    "resources_gold",
+    "resources_food",
+    "diamonds",
+    "base_level",
+    "coord_x",
+    "coord_y",
+    "lumber_house_level",
+    "mine_level",
+    "warehouse_level",
+    "hospital_level",
+    "research_lab_level",
+    "barracks_level",
+    "power_plant_level",
+    "workshop_level",
+    "jail_level",
 ]
 
-def _load_credentials_info(base64_creds: str) -> Dict[str, Any]:
-    """Decodes BASE64_CREDS, handling raw JSON or base64-encoded strings."""
-    try:
-        # Try decoding as base64 first
-        creds_json_bytes = base64.b64decode(base64_creds)
-        return json.loads(creds_json_bytes)
-    except (base64.binascii.Error, json.JSONDecodeError):
-        # If base64 decoding fails, try loading as raw JSON
-        if base64_creds.strip().startswith("{"):
-            try:
-                return json.loads(base64_creds)
-            except json.JSONDecodeError as e:
-                raise ValueError(f"Invalid JSON in BASE64_CREDS: {e}")
-        else:
-            raise ValueError("BASE64_CREDS is neither valid base64 nor raw JSON.")
+# Required OAuth scopes for reading/writing Google Sheets & Drive
+_SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive"
+]
 
 def _authenticate_and_open_sheet() -> None:
-    """Authenticates to Google Sheets and opens the target spreadsheet."""
+    """Authenticate to Google Sheets using BASE64_CREDS and open the spreadsheet."""
     global _gc, _sheet
 
-    b64_creds = os.getenv("BASE64_CREDS")
+    raw_creds = os.getenv("BASE64_CREDS")
     sheet_id = os.getenv("SHEET_ID")
-
-    if not b64_creds:
-        raise RuntimeError("BASE64_CREDS environment variable is not set.")
-    if not sheet_id:
-        raise RuntimeError("SHEET_ID environment variable is not set.")
+    if not raw_creds or not sheet_id:
+        raise RuntimeError("BASE64_CREDS and SHEET_ID must be set in environment variables.")
 
     try:
-        info = _load_credentials_info(b64_creds)
-    except ValueError as e:
-        raise RuntimeError(f"Failed to load credentials: {e}") from e
-
-    try:
-        scopes = [
-            "https://www.googleapis.com/auth/spreadsheets",
-            "https://www.googleapis.com/auth/drive"
-        ]
-        credentials = Credentials.from_service_account_info(info, scopes=scopes)
-        _gc = gspread.authorize(credentials)
+        creds_json = json.loads(raw_creds) if raw_creds.strip().startswith("{") else json.loads(base64.b64decode(raw_creds))
     except Exception as e:
-        raise RuntimeError(f"Failed to authorize gspread client: {e}") from e
+        raise RuntimeError(f"Failed to parse BASE64_CREDS as JSON or base64: {e}")
 
-    try:
-        _sheet = _gc.open_by_key(sheet_id)
-    except Exception as e:
-        raise RuntimeError(f"Failed to open Google Sheet (ID='{sheet_id}'): {e}") from e
+    credentials = Credentials.from_service_account_info(creds_json, scopes=_SCOPES)
+    _gc = gspread.authorize(credentials)
+    _sheet = _gc.open_by_key(sheet_id)
 
 def _ensure_players_worksheet() -> None:
-    """Ensures the 'Players' worksheet exists with correct headers."""
+    """Ensure that the "Players" worksheet exists with the correct headers."""
     global _players_ws
 
     try:
         _players_ws = _sheet.worksheet("Players")
-    except WorksheetNotFound:
-        # Create new worksheet if it doesn't exist
-        _players_ws = _sheet.add_worksheet(
-            title="Players", 
-            rows=1000, 
-            cols=len(REQUIRED_HEADERS)
-        )
-        _players_ws.append_row(REQUIRED_HEADERS)
+    except gspread.exceptions.WorksheetNotFound:
+        _players_ws = _sheet.add_worksheet(title="Players", rows="100", cols=str(len(_PLAYERS_HEADERS)))
+        _players_ws.append_row(_PLAYERS_HEADERS)
         return
 
-    # If worksheet exists, check and update headers
-    existing_headers = _players_ws.row_values(1)
-    
-    # Ensure all REQUIRED_HEADERS are present and in the correct order
-    headers_to_append = []
-    for required_header in REQUIRED_HEADERS:
-        if required_header not in existing_headers:
-            headers_to_append.append(required_header)
-    
-    if headers_to_append:
-        # Append missing headers to the end of the first row
-        # Fetch current headers again to ensure we append correctly if sheet changed
-        current_headers = _players_ws.row_values(1)
-        new_headers_row = current_headers + headers_to_append
-        _players_ws.update_cell(1, 1, new_headers_row[0]) # Update first cell to trigger row update
-        for i, header in enumerate(new_headers_row):
-            _players_ws.update_cell(1, i + 1, header)
-
+    existing = _players_ws.row_values(1)
+    to_append = [h for h in _PLAYERS_HEADERS if h not in existing]
+    if to_append:
+        updated_headers = existing + to_append
+        _players_ws.update('A1', [updated_headers])
 
 def initialize_sheets() -> None:
-    """Initializes the Google Sheets connection and ensures the Players worksheet exists."""
-    if _gc and _sheet and _players_ws: # Already initialized
+    """Initialize Google Sheets client and ensure the Players worksheet exists."""
+    if _gc and _sheet and _players_ws:
         return
-
     _authenticate_and_open_sheet()
     _ensure_players_worksheet()
 
 def get_player_row(user_id: int) -> Optional[int]:
-    """Returns the 1-based row index for a given user_id in the Players worksheet.
-    Returns None if the user_id is not found.
-    """
+    """Return the row number where user_id matches, or None if not found."""
     if _players_ws is None:
         raise RuntimeError("Sheets not initialized. Call initialize_sheets() first.")
-
-    try:
-        # Search in the first column (user_id)
-        cell = _players_ws.find(str(user_id), in_column=1)
-        return cell.row
-    except gspread.exceptions.CellNotFound:
-        return None
-    except Exception as e:
-        raise RuntimeError(f"Error finding player row for user_id {user_id}: {e}") from e
+    all_vals = _players_ws.get_all_values()
+    for idx, row in enumerate(all_vals[1:], start=2):
+        if str(row[0]) == str(user_id):
+            return idx
+    return None
 
 def create_new_player(user_id: int, telegram_username: str, game_name: str) -> None:
-    """Appends a new row for a player with default starting values."""
+    """Append a new player row with default resources, levels, and coordinates."""
     if _players_ws is None:
         raise RuntimeError("Sheets not initialized. Call initialize_sheets() first.")
-
     if get_player_row(user_id) is not None:
-        raise ValueError(f"Player with user_id {user_id} already exists.")
+        raise ValueError(f"User ID {user_id} already exists.")
 
-    now_utc_iso = datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
-
-    new_row_values = [
-        str(user_id),
+    coord_x = random.randint(1, 1000)
+    coord_y = random.randint(1, 1000)
+    iso_now = datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+    new_row = [
+        user_id,
         telegram_username or "",
         game_name,
-        now_utc_iso,
+        iso_now,
         1000,  # resources_wood
         1000,  # resources_stone
         500,   # resources_gold
         500,   # resources_food
         0,     # diamonds
         1,     # base_level
-        0,     # coord_x (default)
-        0,     # coord_y (default)
-        1,     # town_hall_level (default)
-        1,     # lumber_mill_level (default)
-        1,     # quarry_level (default)
-        1,     # mine_level (default)
-        1      # farm_level (default)
+        coord_x,
+        coord_y,
+        1,  # lumber_house_level
+        1,  # mine_level
+        1,  # warehouse_level
+        1,  # hospital_level
+        1,  # research_lab_level
+        1,  # barracks_level
+        1,  # power_plant_level
+        1,  # workshop_level
+        1,  # jail_level
     ]
-
-    try:
-        _players_ws.append_row(new_row_values)
-    except Exception as e:
-        raise RuntimeError(f"Failed to create new player entry for user_id {user_id}: {e}") from e
+    _players_ws.append_row(new_row)
 
 def get_player_data(user_id: int) -> Dict[str, Any]:
-    """Retrieves all data for a player as a dictionary, casting numeric values to int.
-    Returns an empty dictionary if the player is not found.
-    """
+    """Return a dict of all player fields, typed (int or str). Empty if not found."""
     if _players_ws is None:
         raise RuntimeError("Sheets not initialized. Call initialize_sheets() first.")
-
-    row_index = get_player_row(user_id)
-    if row_index is None:
+    row_idx = get_player_row(user_id)
+    if row_idx is None:
         return {}
-
-    try:
-        headers = _players_ws.row_values(1)
-        values = _players_ws.row_values(row_index)
-        
-        player_data = {}
-        for i, header in enumerate(headers):
-            value = values[i] if i < len(values) else ""
-            # Attempt to cast numeric values to int
-            if header in [
-                "user_id", "resources_wood", "resources_stone", "resources_gold",
-                "resources_food", "diamonds", "base_level", "coord_x", "coord_y",
-                "town_hall_level", "lumber_mill_level", "quarry_level", "mine_level", "farm_level"
-            ]:
-                try:
-                    player_data[header] = int(value)
-                except ValueError:
-                    player_data[header] = 0 # Default to 0 if cannot convert
-            else:
-                player_data[header] = value
-        return player_data
-    except Exception as e:
-        raise RuntimeError(f"Error retrieving player data for user_id {user_id}: {e}") from e
+    headers = _players_ws.row_values(1)
+    values = _players_ws.row_values(row_idx)
+    data: Dict[str, Any] = {}
+    for i, h in enumerate(headers):
+        val = values[i] if i < len(values) else ""
+        if h in [
+            "user_id", "resources_wood", "resources_stone", "resources_gold",
+            "resources_food", "diamonds", "base_level", "coord_x", "coord_y",
+            "lumber_house_level", "mine_level", "warehouse_level", "hospital_level",
+            "research_lab_level", "barracks_level", "power_plant_level",
+            "workshop_level", "jail_level"
+        ]:
+            try:
+                data[h] = int(val)
+            except:
+                data[h] = 0
+        else:
+            data[h] = val
+    return data
 
 def update_player_data(user_id: int, field: str, new_value: Any) -> None:
-    """Updates a specific field for a player.
-    Raises ValueError if the user is not found or the field/column does not exist.
-    """
+    """Update a specific field for a player."""
     if _players_ws is None:
         raise RuntimeError("Sheets not initialized. Call initialize_sheets() first.")
-
-    row_index = get_player_row(user_id)
-    if row_index is None:
-        raise ValueError(f"Player with user_id {user_id} not found for update.")
-
+    row_idx = get_player_row(user_id)
+    if row_idx is None:
+        raise ValueError(f"User ID {user_id} not found.")
     headers = _players_ws.row_values(1)
-    try:
-        col_index = headers.index(field) + 1 # gspread columns are 1-based
-    except ValueError:
-        raise ValueError(f"Field '{field}' does not exist as a column in the Players worksheet.")
-
-    try:
-        _players_ws.update_cell(row_index, col_index, str(new_value))
-    except Exception as e:
-        raise RuntimeError(f"Failed to update field '{field}' for user_id {user_id}: {e}") from e
+    if field not in headers:
+        raise ValueError(f"Field '{field}' does not exist.")
+    col_idx = headers.index(field) + 1
+    _players_ws.update_cell(row_idx, col_idx, new_value)
 
 def list_all_players() -> List[Dict[str, Any]]:
-    """Lists all players as a list of dictionaries, casting numeric values to int.
-    Each dictionary maps headers to values.
-    """
+    """Return a list of all players as dicts of header→value."""
     if _players_ws is None:
         raise RuntimeError("Sheets not initialized. Call initialize_sheets() first.")
-
-    try:
-        all_values = _players_ws.get_all_values()
-        if not all_values: # Empty sheet or only headers, no data rows
-            return []
-        
-        headers = all_values[0]
-        data_rows = all_values[1:]
-
-        players_list = []
-        for row_values in data_rows:
-            player_data = {}
-            for i, header in enumerate(headers):
-                value = row_values[i] if i < len(row_values) else ""
-                # Attempt to cast numeric values to int
-                if header in [
-                    "user_id", "resources_wood", "resources_stone", "resources_gold",
-                    "resources_food", "diamonds", "base_level", "coord_x", "coord_y",
-                    "town_hall_level", "lumber_mill_level", "quarry_level", "mine_level", "farm_level"
-                ]:
-                    try:
-                        player_data[header] = int(value)
-                    except ValueError:
-                        player_data[header] = 0 # Default to 0 if cannot convert
-                else:
-                    player_data[header] = value
-            players_list.append(player_data)
-        return players_list
-    except Exception as e:
-        raise RuntimeError(f"Error listing all players: {e}") from e
+    all_vals = _players_ws.get_all_values()
+    headers = all_vals[0]
+    players: List[Dict[str, Any]] = []
+    for row in all_vals[1:]:
+        entry = {}
+        for i, h in enumerate(headers):
+            entry[h] = row[i] if i < len(row) else ""
+        players.append(entry)
+    return players
 
 # Cursor Prompt (for future regeneration):
 # "Generate a file modules/sheets_helper.py that decodes BASE64_CREDS,
