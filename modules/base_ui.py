@@ -130,6 +130,9 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             InlineKeyboardButton("🎖 Quests", callback_data="BASE_QUESTS"),
             InlineKeyboardButton("📊 Building Info", callback_data="BASE_INFO"),
         ],
+        [
+            InlineKeyboardButton("🕶️ Black Market", callback_data="BM_MENU"),
+        ]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
