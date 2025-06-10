@@ -121,7 +121,7 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     keyboard = [
         [
-            InlineKeyboardButton("⚒️ Build", callback_data="BASE_BUILD"),
+            InlineKeyboardButton("⚒️ Build", callback_data="BUILD_MENU"),
             InlineKeyboardButton("🧪 Research", callback_data="BASE_RESEARCH"),
             InlineKeyboardButton("🪖 Train", callback_data="BASE_TRAIN"),
         ],

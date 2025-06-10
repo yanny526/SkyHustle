@@ -173,6 +173,10 @@ async def cancel_build(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 def setup_building_system(app: Application) -> None:
     """Register building system handlers."""
     app.add_handler(CommandHandler("build", build_menu))
+
+    # now also catch the inline "⚒️ Build" button
+    app.add_handler(CallbackQueryHandler(build_menu, pattern="^BUILD_MENU$"))
+
     app.add_handler(CallbackQueryHandler(build_choice, pattern="^BUILD_"))
     app.add_handler(CallbackQueryHandler(confirm_build, pattern="^CONFIRM_"))
     app.add_handler(CallbackQueryHandler(cancel_build, pattern="^CANCEL_BUILD$")) 
