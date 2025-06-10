@@ -41,7 +41,9 @@ async def train_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         [InlineKeyboardButton("🏠 Back to Base", callback_data="BASE_MENU")],
     ]
 
-    reply_markup = InlineKeyboardMarkup(keyboard)
+    buttons = keyboard # rename for clarity
+    buttons.append([InlineKeyboardButton("📊 Unit Stats", callback_data="TRAIN_STATS")])
+    reply_markup = InlineKeyboardMarkup(buttons)
 
     if update.message:
         await update.message.reply_text(
@@ -138,10 +140,35 @@ async def cancel_train(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     await update.callback_query.answer()
     await context.bot.send_message(update.effective_chat.id, "❌ Training cancelled.")
 
+async def show_unit_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    chat_id = update.effective_chat.id
+
+    # Define your unit stats
+    stats = {
+        "Infantry":  {"Attack": 4,  "HP": 10,  "Cost": "10🥖,5💰",   "Time": "30s"},
+        "Tank":      {"Attack": 12, "HP": 40,  "Cost": "20🥖,10💰",  "Time": "60s"},
+        "Artillery": {"Attack": 20, "HP": 20,  "Cost": "30🥖,15💰",  "Time": "90s"},
+        "Destroyer": {"Attack": 35, "HP": 80,  "Cost": "50🥖,25💰",  "Time": "120s"},
+    }
+
+    lines = ["📊 *Unit Stats*"]
+    for name, s in stats.items():
+        lines.append(f"*{name}* — ATK: {s['Attack']}  HP: {s['HP']}  Cost: {s['Cost']}  Time: {s['Time']}")
+    text = "\n".join(lines)
+
+    await context.bot.send_message(
+        chat_id,
+        text,
+        parse_mode=constants.ParseMode.MARKDOWN
+    )
+
 def setup_training_system(app: Application) -> None:
     """Register training system handlers."""
     app.add_handler(CommandHandler("train", train_menu))
     app.add_handler(CallbackQueryHandler(train_menu, pattern="^TRAIN_MENU$"))
     app.add_handler(CallbackQueryHandler(train_choice, pattern="^TRAIN_[a-z]+$"))
     app.add_handler(CallbackQueryHandler(confirm_train, pattern="^TRAIN_QTY_"))
-    app.add_handler(CallbackQueryHandler(cancel_train, pattern="^TRAIN_CANCEL$")) 
+    app.add_handler(CallbackQueryHandler(cancel_train, pattern="^TRAIN_CANCEL$"))
+    app.add_handler(CallbackQueryHandler(show_unit_stats, pattern="^TRAIN_STATS$")) 
