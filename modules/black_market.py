@@ -30,10 +30,17 @@ async def blackmarket_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     )
     buttons = []
     for item in ITEMS:
+        # First column: labeled Buy button with name & cost
+        buy_label = f"Buy {item['name']} — {item['cost']} 💎"
+        buy_cb    = f"BM_BUY_{item['key']}"
+        # Second column: Info button
+        info_label = "ℹ️ Info"
+        info_cb    = f"BM_INFO_{item['key']}"
         buttons.append([
-            InlineKeyboardButton("Buy", callback_data=f"BM_BUY_{item['key']}"),
-            InlineKeyboardButton("ℹ️ Info", callback_data=f"BM_INFO_{item['key']}"),
+            InlineKeyboardButton(buy_label, callback_data=buy_cb),
+            InlineKeyboardButton(info_label, callback_data=info_cb),
         ])
+    # Back button
     buttons.append([InlineKeyboardButton("🏠 Back to Base", callback_data="BM_CANCEL")])
 
     await context.bot.send_message(
