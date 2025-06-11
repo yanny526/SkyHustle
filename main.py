@@ -11,6 +11,7 @@ from modules.research_system import setup_research_system
 from modules.black_market import setup_black_market
 from modules.inventory_system import setup_inventory_system
 from modules.alliance_system import setup_alliance_system
+from modules.zone_system import setup_zone_system
 
 def main() -> None:
     # Load environment variables
@@ -31,6 +32,7 @@ def main() -> None:
     setup_black_market(app)
     setup_inventory_system(app)
     setup_alliance_system(app)
+    setup_zone_system(app)
     
     # Start the bot
     app.run_polling()
