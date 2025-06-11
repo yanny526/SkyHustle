@@ -129,16 +129,58 @@ async def alliance_war(update: Update, context: ContextTypes.DEFAULT_TYPE, args:
     await context.bot.send_message(chat_id,f"✅ Zone {zone['name']} attack scheduled for 6h from now.")
 
 async def alliance_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show alliance menu with inline buttons."""
-    keyboard = [
-        [InlineKeyboardButton("🤝 Create Alliance", callback_data=f"{ALLIANCE_CB}CREATE")],
-        [InlineKeyboardButton("🔍 Join Alliance",   callback_data=f"{ALLIANCE_CB}JOIN")],
-        [InlineKeyboardButton("📊 Alliance Info",   callback_data=f"{ALLIANCE_CB}INFO")],
-        [InlineKeyboardButton("⚔️ Declare War",    callback_data=f"{ALLIANCE_CB}WAR")],
-    ]
+    """Show alliance menu with inline buttons based on player's alliance status."""
+    user = update.effective_user
+    player_data = get_player_data(user.id)
+    alliance_name = player_data.get("alliance_name")
+
+    if not alliance_name:
+        # Scenario 1: Not in an alliance
+        msg = (
+            "🤝 *[ ALLIANCE COMMAND CENTER ]*\n\n"
+            "You are not currently a member of any alliance.\n\n"
+            "🔹 *Create a New Alliance*\n"
+            "   Cost: 2000 💰 Gold, 1500 🪵 Wood, 1500 🪨 Stone, 1000 🥖 Food\n"
+            "   [🛠 Create Alliance]\n\n"
+            "🔹 *Join an Existing Alliance*\n"
+            "   Search by name or browse the top alliances\n"
+            "   [🔍 Search Alliance]   [📈 Top Alliances]\n"
+        )
+        keyboard = [
+            [InlineKeyboardButton("🛠 Create Alliance", callback_data=f"{ALLIANCE_CB}CREATE")],
+            [InlineKeyboardButton("🔍 Search Alliance", callback_data=f"{ALLIANCE_CB}SEARCH")],
+            [InlineKeyboardButton("📈 Top Alliances", callback_data=f"{ALLIANCE_CB}TOP")],
+            [InlineKeyboardButton("🏠 Back to Base", callback_data=f"{ALLIANCE_CB}BACK")]
+        ]
+    else:
+        # Scenario 2: In an alliance
+        # Fetch alliance details (stubs for now)
+        alliance_leader = "CommanderYanny" # This needs to be fetched from sheets, likely a separate alliance sheet or by scanning players
+        num_members = 12 # This needs to be calculated
+        total_power = 42100 # This needs to be calculated
+        zones_controlled = 2 # This needs to be fetched
+        war_status = "None" # This needs to be fetched
+
+        msg = (
+            f"🏛️ *[ {alliance_name.upper()} HQ ]*\n"
+            f"👑 Leader: {alliance_leader}\n"
+            f"👥 Members: {num_members} / 20\n"
+            f"🛡️ Total Power: {total_power}\n"
+            f"🌐 Zones Controlled: {zones_controlled}\n"
+            f"⏳ War Status: {war_status}\n\n"
+            f"🎯 *Alliance Actions:*\n"
+        )
+        keyboard = [
+            [InlineKeyboardButton("👥 View Members", callback_data=f"{ALLIANCE_CB}VIEW_MEMBERS"),
+             InlineKeyboardButton("💬 Chat", callback_data=f"{ALLIANCE_CB}CHAT"),
+             InlineKeyboardButton("📊 Info", callback_data=f"{ALLIANCE_CB}INFO")],
+            [InlineKeyboardButton("⚔️ Declare War", callback_data=f"{ALLIANCE_CB}WAR"),
+             InlineKeyboardButton("🗺️ Zones", callback_data=f"{ALLIANCE_CB}ZONES"),
+             InlineKeyboardButton("🏠 Back to Base", callback_data=f"{ALLIANCE_CB}BACK")]
+        ]
+
     await update.message.reply_text(
-        "🤝 *Alliance Center*\n\n"
-        "Choose an action:",
+        msg,
         parse_mode=constants.ParseMode.MARKDOWN,
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
@@ -149,10 +191,11 @@ async def alliance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     
     if not query.data.startswith(ALLIANCE_CB):
-        return
+        return # Ignore callbacks not starting with ALLIANCE_CB
         
     action = query.data[len(ALLIANCE_CB):]  # e.g. "CREATE", "JOIN"...
     
+    # If the user is not in alliance
     if action == "CREATE":
         await query.edit_message_text(
             "🛠️ *Create Alliance*\n\n"
@@ -161,13 +204,40 @@ async def alliance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode=constants.ParseMode.MARKDOWN
         )
         context.user_data["alliance_next"] = "create"
-    elif action == "JOIN":
+    elif action == "SEARCH":
+        await query.edit_message_text(
+            "🔍 *Search Alliance*\n\n"
+            "Please enter the name of the alliance you wish to search for:",
+            parse_mode=constants.ParseMode.MARKDOWN
+        )
+        context.user_data["alliance_next"] = "search"
+    elif action == "TOP":
+        await query.edit_message_text(
+            "📈 *Top Alliances*\n\n"
+            "(This feature is under development. Here you would see a list of top alliances.)",
+            parse_mode=constants.ParseMode.MARKDOWN
+        )
+    elif action == "JOIN": # This was for /alliance join, now it's for button
         await query.edit_message_text(
             "🔍 *Join Alliance*\n\n"
             "Please enter the exact alliance name you wish to join:",
             parse_mode=constants.ParseMode.MARKDOWN
         )
         context.user_data["alliance_next"] = "join"
+    
+    # If the user is in alliance
+    elif action == "VIEW_MEMBERS":
+        await query.edit_message_text(
+            "👥 *Alliance Members*\n\n"
+            "(This feature is under development. Here you would see a list of alliance members.)",
+            parse_mode=constants.ParseMode.MARKDOWN
+        )
+    elif action == "CHAT":
+        await query.edit_message_text(
+            "💬 *Alliance Chat*\n\n"
+            "(This feature is under development. Here you would see alliance chat options.)",
+            parse_mode=constants.ParseMode.MARKDOWN
+        )
     elif action == "INFO":
         await handle_alliance_info(query, context)
     elif action == "WAR":
@@ -177,19 +247,15 @@ async def alliance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode=constants.ParseMode.MARKDOWN
         )
         context.user_data["alliance_next"] = "war"
+    elif action == "ZONES":
+        from modules.zone_system import zones_main
+        await zones_main(query, context)
+    elif action == "BACK":
+        from modules.base_ui import base_handler
+        await base_handler(update, context)
     elif action == "MENU":  # Handle the ALLIANCE_MENU callback from base_ui
-        keyboard = [
-            [InlineKeyboardButton("🤝 Create Alliance", callback_data=f"{ALLIANCE_CB}CREATE")],
-            [InlineKeyboardButton("🔍 Join Alliance",   callback_data=f"{ALLIANCE_CB}JOIN")],
-            [InlineKeyboardButton("📊 Alliance Info",   callback_data=f"{ALLIANCE_CB}INFO")],
-            [InlineKeyboardButton("⚔️ Declare War",    callback_data=f"{ALLIANCE_CB}WAR")],
-        ]
-        await query.edit_message_text(
-            "🤝 *Alliance Center*\n\n"
-            "Choose an action:",
-            parse_mode=constants.ParseMode.MARKDOWN,
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
+        # This action now re-routes to alliance_main to handle the display logic based on alliance status
+        await alliance_main(update, context)
 
 async def alliance_text_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Receive text after a submenu button was pressed."""
