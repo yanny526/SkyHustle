@@ -15,9 +15,16 @@ from telegram.ext import (
 )
 from modules.sheets_helper import get_player_data, update_player_data, list_all_players
 from datetime import datetime, timedelta
+import re
 
 # Callback data prefixes
 ALLIANCE_CB = "ALLIANCE_"
+
+# Function to escape MarkdownV2 special characters
+def escape_markdown_v2(text: str) -> str:
+    # List of characters to escape: _ * [ ] ( ) ~ ` > # + - = | { } . !
+    escape_chars = r'_*[]()~`>#+-=|{}.!'
+    return re.sub(f"([{re.escape(escape_chars)}])", r'\\\1', text)
 
 ZONES = [
     {"id":"greenvale","name":"🌲 Greenvale","def":4000,"bonus":"+10% Wood"},
@@ -127,6 +134,72 @@ async def alliance_war(update: Update, context: ContextTypes.DEFAULT_TYPE, args:
     update_player_data(user.id,"scheduled_zone",zid)
     update_player_data(user.id,"scheduled_time",sched)
     await context.bot.send_message(chat_id,f"✅ Zone {zone['name']} attack scheduled for 6h from now.")
+
+async def alliance_info_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show alliance info based on player's alliance status."""
+    user = update.effective_user
+    player_data = get_player_data(user.id)
+    alliance_name = player_data.get("alliance_name")
+    
+    # Determine if it's a message or callback query
+    is_callback = isinstance(update, CallbackQuery)
+    send_target = update.callback_query if is_callback else update.message
+
+    if not alliance_name:
+        # Scenario 1: Not in an alliance
+        msg = (
+            "🤝 \*[ALLIANCE INFO]*  \n"
+            "You are not currently a member of any alliance."
+        )
+        keyboard = [
+            [InlineKeyboardButton("🛠 Create Alliance", callback_data=f"{ALLIANCE_CB}CREATE")],
+            [InlineKeyboardButton("🔍 Search Alliance", callback_data=f"{ALLIANCE_CB}SEARCH")],
+            [InlineKeyboardButton("🏠 Back to Base", callback_data=f"{ALLIANCE_CB}BACK")]
+        ]
+    else:
+        # Scenario 2: In an alliance
+        alliance_leader = "CommanderYanny" # Placeholder - needs to be fetched
+        alliance_role = player_data.get("alliance_role", "Member")
+        alliance_members_count = player_data.get("alliance_members_count", 0)
+        alliance_power = player_data.get("alliance_power", 0)
+        zones_controlled = player_data.get("zones_controlled", []) # This should be a list now
+
+        zones_str = ", ".join(zones_controlled) if zones_controlled else "None"
+
+        # Escape special characters for MarkdownV2
+        escaped_alliance_name = escape_markdown_v2(alliance_name)
+        escaped_alliance_role = escape_markdown_v2(alliance_role)
+        escaped_zones_str = escape_markdown_v2(zones_str)
+
+        msg = (
+            f"🤝 \*[ALLIANCE INFO]*  \n"
+            f"🛡 Alliance: \*{escaped_alliance_name}\*  \n"
+            f"👤 Role: {escaped_alliance_role}  \n"
+            f"👥 Members: {alliance_members_count}/20  \n"
+            f"📈 Power: {alliance_power}  \n"
+            f"🌐 Zones: {escaped_zones_str}"
+        )
+        keyboard = [
+            [InlineKeyboardButton("✨ Invite Member", callback_data=f"{ALLIANCE_CB}INVITE_MEMBER"),
+             InlineKeyboardButton("⚔️ Declare War", callback_data=f"{ALLIANCE_CB}WAR"),
+             InlineKeyboardButton("❌ Leave Alliance", callback_data=f"{ALLIANCE_CB}LEAVE_ALLIANCE")],
+            [InlineKeyboardButton("🏠 Back to Base", callback_data=f"{ALLIANCE_CB}BACK")]
+        ]
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    if is_callback:
+        await send_target.edit_message_text(
+            msg,
+            parse_mode=constants.ParseMode.MARKDOWN_V2,
+            reply_markup=reply_markup
+        )
+    else:
+        await send_target.reply_text(
+            msg,
+            parse_mode=constants.ParseMode.MARKDOWN_V2,
+            reply_markup=reply_markup
+        )
 
 async def alliance_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show alliance menu with inline buttons based on player's alliance status."""
@@ -239,7 +312,7 @@ async def alliance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode=constants.ParseMode.MARKDOWN
         )
     elif action == "INFO":
-        await handle_alliance_info(query, context)
+        await alliance_info_handler(update, context)
     elif action == "WAR":
         await query.edit_message_text(
             "⚔️ *Declare War*\n\n"
@@ -256,6 +329,18 @@ async def alliance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif action == "MENU":  # Handle the ALLIANCE_MENU callback from base_ui
         # This action now re-routes to alliance_main to handle the display logic based on alliance status
         await alliance_main(update, context)
+    elif action == "INVITE_MEMBER":
+        await query.edit_message_text(
+            "✨ *Invite Member*\n\n"
+            "(This feature is under development. Here you would invite members.)",
+            parse_mode=constants.ParseMode.MARKDOWN
+        )
+    elif action == "LEAVE_ALLIANCE":
+        await query.edit_message_text(
+            "❌ *Leave Alliance*\n\n"
+            "(This feature is under development. Here you would confirm leaving the alliance.)",
+            parse_mode=constants.ParseMode.MARKDOWN
+        )
 
 async def alliance_text_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Receive text after a submenu button was pressed."""
@@ -278,23 +363,9 @@ async def alliance_text_router(update: Update, context: ContextTypes.DEFAULT_TYP
         # Clear the next action regardless of success/failure
         context.user_data.pop("alliance_next", None)
 
-async def handle_alliance_info(query: CallbackQuery, context: ContextTypes.DEFAULT_TYPE):
-    """Handle alliance info display in callback context."""
-    user = query.from_user
-    data = get_player_data(user.id)
-    name = data.get("alliance_name")
-    if not name:
-        await query.edit_message_text("❌ You're not in an alliance.")
-        return
-    members = [p for p in list_all_players() if p.get("alliance_name")==name]
-    total_power = sum(p.get("power",0) for p in members)
-    text = f"🤝 *Alliance: {name}*\nMembers: {len(members)}\nPower: {total_power}\n\n👥 Member list:\n"
-    for p in members:
-        text += f"• {p['game_name']} — {p.get('power',0)}\n"
-    await query.edit_message_text(text, parse_mode=constants.ParseMode.MARKDOWN)
-
 def setup_alliance_system(app: Application) -> None:
     app.add_handler(CommandHandler("alliance", alliance_main))
+    app.add_handler(CommandHandler("alliance_info", alliance_info_handler))
     app.add_handler(CallbackQueryHandler(alliance_callback, pattern=f"^{ALLIANCE_CB}"))
     app.add_handler(MessageHandler(
         filters.TEXT & ~filters.COMMAND & filters.USER, 

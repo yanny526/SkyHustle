@@ -38,6 +38,7 @@ needed_headers = [
     
     # Alliance
     "alliance_name", "alliance_role", "alliance_joined_at",
+    "alliance_members_count", "alliance_power", "zones_controlled",
     
     # Army
     "army_infantry", "army_tank", "army_artillery", "army_destroyer",
@@ -155,6 +156,9 @@ def create_new_player(user_id: int, telegram_username: str, game_name: str) -> N
         0,     # alliance_name
         0,     # alliance_role
         0,     # alliance_joined_at
+        0,     # alliance_members_count
+        0,     # alliance_power
+        "",    # zones_controlled
         0,     # energy
         0,     # energy_max
         0,     # last_daily
@@ -207,6 +211,7 @@ def get_player_data(user_id: int) -> Dict[str, Any]:
             "barracks_level", "power_plant_level", "hospital_level", "research_lab_level",
             "workshop_level", "jail_level", "power", "prestige_level",
             "alliance_name", "alliance_role", "alliance_joined_at",
+            "alliance_members_count", "alliance_power",
             "army_infantry", "army_tank", "army_artillery", "army_destroyer",
             "army_bm_barrage", "army_venom_reaper", "army_titan_crusher",
             "items_hazmat_mask", "items_energy_drink", "items_repair_kit",
@@ -221,6 +226,8 @@ def get_player_data(user_id: int) -> Dict[str, Any]:
                 data[h] = int(val)
             except:
                 data[h] = 0
+        elif h == "zones_controlled":
+            data[h] = val.split(",") if val else []
         else:
             data[h] = val
     return data
