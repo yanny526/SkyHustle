@@ -54,6 +54,29 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     energy_cur   = data.get("energy", base_lvl * 200)
     energy_max   = data.get("energy_max", base_lvl * 200)
 
+    # Army counts
+    inf = data.get("army_infantry", 0)
+    tnk = data.get("army_tank",      0)
+    art = data.get("army_artillery",  0)
+    dst = data.get("army_destroyer",  0)
+    bm1 = data.get("army_bm_barrage",     0)
+    bm2 = data.get("army_venom_reaper",   0)
+    bm3 = data.get("army_titan_crusher",  0)
+
+    army_lines = [
+        f"👣 Infantry: {inf}",
+        f"🛡️ Tanks: {tnk}",
+        f"🎯 Artillery: {art}",
+        f"💥 Destroyers: {dst}",
+    ]
+    bm_lines = [
+        f"🧨 BM Barrage: {bm1}"   if bm1 else None,
+        f"🦂 Venom Reapers: {bm2}" if bm2 else None,
+        f"🦾 Titan Crushers: {bm3}"if bm3 else None,
+    ]
+    # Filter out zero lines
+    bm_lines = [l for l in bm_lines if l is not None]
+
     # Building levels (default to 1)
     lumber_lvl       = data.get("lumber_house_level", 1)
     mine_lvl         = data.get("mine_level", 1)
@@ -118,6 +141,14 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "[⚒️ Build] [🧪 Research] [🪖 Train]",
         "[⚔️ Attack] [🎖 Quests] [📊 Building Info]",
     ])
+
+    # Insert into your message
+    msg += "\n\n🪖 *Army Overview:*  \n"
+    msg += "\n".join(army_lines)
+
+    if bm_lines:
+        msg += "\n\n🛡️ *Black Market Units:*  \n"
+        msg += "\n".join(bm_lines)
 
     keyboard = [
         [
