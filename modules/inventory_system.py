@@ -1,5 +1,5 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, constants
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram.ext import Application, CommandHandler, ContextTypes, CallbackQueryHandler
 from modules.sheets_helper import get_player_data
 
 
@@ -44,4 +44,5 @@ async def inventory_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     )
 
 def setup_inventory_system(app: Application) -> None:
-    app.add_handler(CommandHandler("inventory", inventory_handler)) 
+    app.add_handler(CommandHandler("inventory", inventory_handler))
+    app.add_handler(CallbackQueryHandler(inventory_handler, pattern="^INV_BACK$")) 
