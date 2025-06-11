@@ -177,6 +177,19 @@ async def alliance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode=constants.ParseMode.MARKDOWN
         )
         context.user_data["alliance_next"] = "war"
+    elif action == "MENU":  # Handle the ALLIANCE_MENU callback from base_ui
+        keyboard = [
+            [InlineKeyboardButton("🤝 Create Alliance", callback_data=f"{ALLIANCE_CB}CREATE")],
+            [InlineKeyboardButton("🔍 Join Alliance",   callback_data=f"{ALLIANCE_CB}JOIN")],
+            [InlineKeyboardButton("📊 Alliance Info",   callback_data=f"{ALLIANCE_CB}INFO")],
+            [InlineKeyboardButton("⚔️ Declare War",    callback_data=f"{ALLIANCE_CB}WAR")],
+        ]
+        await query.edit_message_text(
+            "🤝 *Alliance Center*\n\n"
+            "Choose an action:",
+            parse_mode=constants.ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
 
 async def alliance_text_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Receive text after a submenu button was pressed."""
