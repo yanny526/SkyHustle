@@ -30,10 +30,9 @@ ZONES = [
 ]
 
 
-async def alliance_create(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def alliance_create(update: Update, context: ContextTypes.DEFAULT_TYPE, args: list) -> None:
     user = update.effective_user; chat_id = update.effective_chat.id
-    args = context.args
-    if not args:
+    if len(args)!=1:
         return await context.bot.send_message(chat_id, "Usage: /alliance create <name>")
     name = args[0]
     data = get_player_data(user.id)
@@ -51,11 +50,11 @@ async def alliance_create(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     update_player_data(user.id,"alliance_role","leader")
     await context.bot.send_message(chat_id,f"✅ Alliance *{name}* created! You are Leader.", parse_mode=constants.ParseMode.MARKDOWN)
 
-async def alliance_join(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def alliance_join(update: Update, context: ContextTypes.DEFAULT_TYPE, args: list) -> None:
     user=update.effective_user; chat_id=update.effective_chat.id
-    if len(context.args)!=1:
+    if len(args)!=1:
         return await context.bot.send_message(chat_id,"Usage: /alliance join <name>")
-    name=context.args[0]; data=get_player_data(user.id)
+    name=args[0]; data=get_player_data(user.id)
     if data.get("alliance_name"):
         return await context.bot.send_message(chat_id,"❌ Already in an alliance.")
     # Check alliance exists (by scanning all players)
@@ -67,7 +66,7 @@ async def alliance_join(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     update_player_data(user.id,"alliance_role","member")
     await context.bot.send_message(chat_id,f"✅ You joined alliance *{name}*.", parse_mode=constants.ParseMode.MARKDOWN)
 
-async def alliance_info(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def alliance_info(update: Update, context: ContextTypes.DEFAULT_TYPE, args: list) -> None:
     user=update.effective_user; chat_id=update.effective_chat.id
     data=get_player_data(user.id)
     name=data.get("alliance_name")
@@ -91,13 +90,13 @@ async def zones_list(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     buttons=[[InlineKeyboardButton("🏠 Back to Base",callback_data="Z_CANCEL")]]
     await context.bot.send_message(chat_id,text,parse_mode=constants.ParseMode.MARKDOWN,reply_markup=InlineKeyboardMarkup(buttons))
 
-async def zone_attack(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def alliance_war(update: Update, context: ContextTypes.DEFAULT_TYPE, args: list) -> None:
     user=update.effective_user; chat_id=update.effective_chat.id
-    data=get_player_data(user.id); args=context.args
+    data=get_player_data(user.id)
     if data.get("alliance_role")!="leader":
         return await context.bot.send_message(chat_id,"❌ Only alliance leaders can schedule zone attacks.")
     if not args:
-        return await context.bot.send_message(chat_id,"Usage: /zone attack <zone_id>")
+        return await context.bot.send_message(chat_id,"Usage: /alliance war <zone_id>")
     zid=args[0]; zone=next((z for z in ZONES if z["id"]==zid),None)
     if not zone:
         return await context.bot.send_message(chat_id,"❌ Invalid zone ID.")
@@ -114,10 +113,31 @@ async def zone_attack(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     update_player_data(user.id,"scheduled_time",sched)
     await context.bot.send_message(chat_id,f"✅ Zone {zone['name']} attack scheduled for 6h from now.")
 
+async def alliance_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle all /alliance subcommands: create, join, info, war."""
+    if not context.args:
+        return await update.message.reply_text(
+            "Usage: /alliance <create|join|info|war> [args...]"
+        )
+
+    sub = context.args[0].lower()
+    # Shift off the subcommand
+    rest = context.args[1:]
+
+    if sub == "create":
+        return await alliance_create(update, context, rest)
+    if sub == "join":
+        return await alliance_join (update, context, rest)
+    if sub == "info":
+        return await alliance_info (update, context, rest)
+    if sub == "war":
+        return await alliance_war  (update, context, rest)
+    return await update.message.reply_text(
+        f"Unknown alliance command: {sub}\n"
+        "Usage: /alliance <create|join|info|war> [args...]"
+    )
+
 def setup_alliance_system(app: Application) -> None:
-    app.add_handler(CommandHandler("alliance create", alliance_create))
-    app.add_handler(CommandHandler("alliance join",   alliance_join))
-    app.add_handler(CommandHandler("alliance info",   alliance_info))
+    app.add_handler(CommandHandler("alliance", alliance_main))
     app.add_handler(CommandHandler("zones",           zones_list))
-    app.add_handler(CommandHandler("zone attack",     zone_attack))
     app.add_handler(CallbackQueryHandler(lambda u,c: c.bot.send_message(u.effective_chat.id,"🏠 Back to Base"), pattern="^Z_CANCEL$")) 
