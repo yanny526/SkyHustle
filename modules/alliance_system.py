@@ -139,7 +139,7 @@ async def alliance_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🤝 *Alliance Center*\n\n"
         "Choose an action:",
-        parse_mode=constants.ParseMode.MARKDOWN_V2,
+        parse_mode=constants.ParseMode.MARKDOWN,
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -147,28 +147,34 @@ async def alliance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Dispatch the alliance submenu buttons."""
     query = update.callback_query
     await query.answer()
-    action = query.data.split("_", 1)[1]  # e.g. "CREATE", "JOIN"...
+    
+    if not query.data.startswith(ALLIANCE_CB):
+        return
+        
+    action = query.data[len(ALLIANCE_CB):]  # e.g. "CREATE", "JOIN"...
     
     if action == "CREATE":
-        await query.edit_message_text("🛠️ *Create Alliance*\n\n"
+        await query.edit_message_text(
+            "🛠️ *Create Alliance*\n\n"
             "Please enter your desired alliance name:\n"
-            "(50 💰 gold, 1500 🪵 wood, 1500 🪨 stone, 1000 🥖 food)",
-            parse_mode=constants.ParseMode.MARKDOWN_V2
+            "(2000 💰 gold, 1500 🪵 wood, 1500 🪨 stone, 1000 🥖 food)",
+            parse_mode=constants.ParseMode.MARKDOWN
         )
         context.user_data["alliance_next"] = "create"
     elif action == "JOIN":
-        await query.edit_message_text("🔍 *Join Alliance*\n\n"
+        await query.edit_message_text(
+            "🔍 *Join Alliance*\n\n"
             "Please enter the exact alliance name you wish to join:",
-            parse_mode=constants.ParseMode.MARKDOWN_V2
+            parse_mode=constants.ParseMode.MARKDOWN
         )
         context.user_data["alliance_next"] = "join"
     elif action == "INFO":
-        # reuse your alliance_info function but adapt to callback
         await handle_alliance_info(query, context)
     elif action == "WAR":
-        await query.edit_message_text("⚔️ *Declare War*\n\n"
+        await query.edit_message_text(
+            "⚔️ *Declare War*\n\n"
             "Please enter the enemy alliance name to declare war on:",
-            parse_mode=constants.ParseMode.MARKDOWN_V2
+            parse_mode=constants.ParseMode.MARKDOWN
         )
         context.user_data["alliance_next"] = "war"
 
@@ -176,16 +182,22 @@ async def alliance_text_router(update: Update, context: ContextTypes.DEFAULT_TYP
     """Receive text after a submenu button was pressed."""
     user = update.effective_user
     text = update.message.text.strip()
-    next_action = context.user_data.pop("alliance_next", None)
-    if next_action == "create":
-        # call your alliance_create logic:
-        return await alliance_create(update, context, [text])
-    if next_action == "join":
-        return await alliance_join(update, context, [text])
-    if next_action == "war":
-        return await alliance_war(update, context, [text])
-    # fallback
-    await update.message.reply_text("❌ Unexpected input. Please press /alliance to start again.")
+    next_action = context.user_data.get("alliance_next")
+    
+    if not next_action:
+        await update.message.reply_text("❌ Please use /alliance to start.")
+        return
+        
+    try:
+        if next_action == "create":
+            await alliance_create(update, context, [text])
+        elif next_action == "join":
+            await alliance_join(update, context, [text])
+        elif next_action == "war":
+            await alliance_war(update, context, [text])
+    finally:
+        # Clear the next action regardless of success/failure
+        context.user_data.pop("alliance_next", None)
 
 async def handle_alliance_info(query: CallbackQuery, context: ContextTypes.DEFAULT_TYPE):
     """Handle alliance info display in callback context."""
