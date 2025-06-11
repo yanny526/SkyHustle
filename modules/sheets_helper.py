@@ -8,7 +8,7 @@ from typing import Optional, Dict, Any, List
 import gspread
 from google.oauth2.service_account import Credentials
 from gspread import WorksheetNotFound
-from gspread.exceptions import CellNotFound
+from gspread.exceptions import GSpreadException
 
 # ------------------------------------------------------------------------------
 # Module-level variables
@@ -112,11 +112,11 @@ def get_player_row(user_id: int) -> Optional[int]:
     """Return the row number where user_id matches, or None if not found."""
     if _players_ws is None:
         raise RuntimeError("Sheets not initialized. Call initialize_sheets() first.")
-    all_vals = _players_ws.get_all_values()
-    for idx, row in enumerate(all_vals[1:], start=2):
-        if str(row[0]) == str(user_id):
-            return idx
-    return None
+    try:
+        cell = _players_ws.find(str(user_id), in_column=1)
+        return cell.row
+    except GSpreadException:
+        return None
 
 def create_new_player(user_id: int, telegram_username: str, game_name: str) -> None:
     """Append a new player row with default resources, levels, and coordinates."""
@@ -229,14 +229,17 @@ def update_player_data(user_id: int, field: str, new_value: Any) -> None:
     """Update a specific field for a player."""
     if _players_ws is None:
         raise RuntimeError("Sheets not initialized. Call initialize_sheets() first.")
-    row_idx = get_player_row(user_id)
-    if row_idx is None:
-        raise ValueError(f"User ID {user_id} not found.")
-    headers = _players_ws.row_values(1)
-    if field not in headers:
-        raise ValueError(f"Field '{field}' does not exist.")
-    col_idx = headers.index(field) + 1
-    _players_ws.update_cell(row_idx, col_idx, new_value)
+    try:
+        row_idx = get_player_row(user_id)
+        if row_idx is None:
+            raise ValueError(f"User ID {user_id} not found.")
+        headers = _players_ws.row_values(1)
+        if field not in headers:
+            raise ValueError(f"Field '{field}' does not exist.")
+        col_idx = headers.index(field) + 1
+        _players_ws.update_cell(row_idx, col_idx, new_value)
+    except GSpreadException as e:
+        raise RuntimeError(f"Failed to update player data: {e}")
 
 def list_all_players() -> List[Dict[str, Any]]:
     """Return a list of all players as dicts of header→value."""
@@ -254,13 +257,16 @@ def list_all_players() -> List[Dict[str, Any]]:
 
 def ensure_headers(ws: gspread.Worksheet, headers: List[str]) -> None:
     """Ensure all needed headers exist in the first row."""
-    existing_headers = ws.row_values(1)
-    next_col = len(existing_headers) + 1
-    
-    for header in headers:
-        if header not in existing_headers:
-            ws.update_cell(1, next_col, header)
-            next_col += 1
+    try:
+        existing_headers = ws.row_values(1)
+        next_col = len(existing_headers) + 1
+        
+        for header in headers:
+            if header not in existing_headers:
+                ws.update_cell(1, next_col, header)
+                next_col += 1
+    except GSpreadException as e:
+        raise RuntimeError(f"Failed to ensure headers: {e}")
 
 # Cursor Prompt (for future regeneration):
 # "Generate a file modules/sheets_helper.py that decodes BASE64_CREDS,
