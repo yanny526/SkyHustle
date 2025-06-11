@@ -8,6 +8,7 @@ from typing import Optional, Dict, Any, List
 import gspread
 from google.oauth2.service_account import Credentials
 from gspread import WorksheetNotFound
+from gspread.exceptions import CellNotFound
 
 # ------------------------------------------------------------------------------
 # Module-level variables
@@ -16,42 +17,47 @@ _gc = None            # type: gspread.Client
 _sheet = None         # type: gspread.Spreadsheet
 _players_ws = None    # type: gspread.Worksheet
 
-# The exact headers we require on the "Players" worksheet:
-_PLAYERS_HEADERS = [
-    "user_id",
-    "telegram_username",
-    "game_name",
-    "registered_at",
-    "resources_wood",
-    "resources_stone",
-    "resources_gold",
-    "resources_food",
-    "diamonds",
-    "base_level",
-    "coord_x",
-    "coord_y",
-    "lumber_house_level",
-    "mine_level",
-    "warehouse_level",
-    "hospital_level",
-    "research_lab_level",
-    "barracks_level",
-    "power_plant_level",
-    "workshop_level",
+# Define all possible headers that might be needed
+needed_headers = [
+    # Basic player info
+    "user_id", "telegram_username", "game_name",
+    "coord_x", "coord_y",
+    
+    # Resources
+    "resources_wood", "resources_stone", "resources_food", 
+    "resources_gold", "resources_energy", "resources_diamonds",
+    
+    # Buildings
+    "base_level", "mine_level", "lumber_house_level", 
+    "warehouse_level", "barracks_level", "power_plant_level",
+    "hospital_level", "research_lab_level", "workshop_level", 
     "jail_level",
-    "army_infantry",
-    "army_tank",
-    "army_artillery",
-    "army_destroyer",
-    "army_bm_barrage",
-    "army_venom_reaper",
-    "army_titan_crusher",
-    "items_revive_all",
-    "items_emp_device",
-    "items_infinite_scout",
-    "items_hazmat_mask",
-    "items_speedup_1h",
-    "items_shield_adv",
+    
+    # Stats
+    "power", "prestige_level",
+    
+    # Alliance
+    "alliance_name", "alliance_role", "alliance_joined_at",
+    
+    # Army
+    "army_infantry", "army_tank", "army_artillery", "army_destroyer",
+    "army_bm_barrage", "army_venom_reaper", "army_titan_crusher",
+    
+    # Black Market Items
+    "items_hazmat_mask", "items_energy_drink", "items_repair_kit",
+    "items_medkit", "items_radar", "items_shield_generator",
+    
+    # Timers
+    "timers_base_level", "timers_mine_level", "timers_lumber_level",
+    "timers_warehouse_level", "timers_barracks_level", "timers_power_level",
+    "timers_hospital_level", "timers_research_level", "timers_workshop_level",
+    "timers_jail_level",
+    
+    # Zone Control
+    "scheduled_zone", "scheduled_time", "controlled_zone",
+    
+    # Misc
+    "energy", "energy_max", "last_daily", "last_attack"
 ]
 
 # Required OAuth scopes for reading/writing Google Sheets & Drive
@@ -85,12 +91,12 @@ def _ensure_players_worksheet() -> None:
     try:
         _players_ws = _sheet.worksheet("Players")
     except gspread.exceptions.WorksheetNotFound:
-        _players_ws = _sheet.add_worksheet(title="Players", rows="100", cols=str(len(_PLAYERS_HEADERS)))
-        _players_ws.append_row(_PLAYERS_HEADERS)
+        _players_ws = _sheet.add_worksheet(title="Players", rows="100", cols=str(len(needed_headers)))
+        _players_ws.append_row(needed_headers)
         return
 
     existing = _players_ws.row_values(1)
-    to_append = [h for h in _PLAYERS_HEADERS if h not in existing]
+    to_append = [h for h in needed_headers if h not in existing]
     if to_append:
         updated_headers = existing + to_append
         _players_ws.update('A1', [updated_headers])
@@ -126,37 +132,59 @@ def create_new_player(user_id: int, telegram_username: str, game_name: str) -> N
         user_id,
         telegram_username or "",
         game_name,
-        iso_now,
+        coord_x,
+        coord_y,
         1000,  # resources_wood
         1000,  # resources_stone
         500,   # resources_gold
         500,   # resources_food
-        0,     # diamonds
+        0,     # resources_energy
+        0,     # resources_diamonds
         1,     # base_level
-        coord_x,
-        coord_y,
-        1,  # lumber_house_level
-        1,  # mine_level
-        1,  # warehouse_level
-        1,  # hospital_level
-        1,  # research_lab_level
-        1,  # barracks_level
-        1,  # power_plant_level
-        1,  # workshop_level
-        1,  # jail_level
-        0,  # army_infantry
-        0,  # army_tank
-        0,  # army_artillery
-        0,  # army_destroyer
-        0,  # army_bm_barrage
-        0,  # army_venom_reaper
-        0,  # army_titan_crusher
-        0,  # items_revive_all
-        0,  # items_emp_device
-        0,  # items_infinite_scout
-        0,  # items_hazmat_mask
-        0,  # items_speedup_1h
-        0,  # items_shield_adv
+        1,     # mine_level
+        1,     # lumber_house_level
+        1,     # warehouse_level
+        1,     # barracks_level
+        1,     # power_plant_level
+        1,     # hospital_level
+        1,     # research_lab_level
+        1,     # workshop_level
+        1,     # jail_level
+        0,     # power
+        0,     # prestige_level
+        0,     # alliance_name
+        0,     # alliance_role
+        0,     # alliance_joined_at
+        0,     # energy
+        0,     # energy_max
+        0,     # last_daily
+        0,     # last_attack
+        0,     # army_infantry
+        0,     # army_tank
+        0,     # army_artillery
+        0,     # army_destroyer
+        0,     # army_bm_barrage
+        0,     # army_venom_reaper
+        0,     # army_titan_crusher
+        0,     # items_hazmat_mask
+        0,     # items_energy_drink
+        0,     # items_repair_kit
+        0,     # items_medkit
+        0,     # items_radar
+        0,     # items_shield_generator
+        0,     # timers_base_level
+        0,     # timers_mine_level
+        0,     # timers_lumber_level
+        0,     # timers_warehouse_level
+        0,     # timers_barracks_level
+        0,     # timers_power_level
+        0,     # timers_hospital_level
+        0,     # timers_research_level
+        0,     # timers_workshop_level
+        0,     # timers_jail_level
+        0,     # scheduled_zone
+        0,     # scheduled_time
+        0,     # controlled_zone
     ]
     _players_ws.append_row(new_row)
 
@@ -174,14 +202,20 @@ def get_player_data(user_id: int) -> Dict[str, Any]:
         val = values[i] if i < len(values) else ""
         if h in [
             "user_id", "resources_wood", "resources_stone", "resources_gold",
-            "resources_food", "diamonds", "base_level", "coord_x", "coord_y",
-            "lumber_house_level", "mine_level", "warehouse_level", "hospital_level",
-            "research_lab_level", "barracks_level", "power_plant_level",
-            "workshop_level", "jail_level",
+            "resources_food", "resources_energy", "resources_diamonds",
+            "base_level", "mine_level", "lumber_house_level", "warehouse_level",
+            "barracks_level", "power_plant_level", "hospital_level", "research_lab_level",
+            "workshop_level", "jail_level", "power", "prestige_level",
+            "alliance_name", "alliance_role", "alliance_joined_at",
             "army_infantry", "army_tank", "army_artillery", "army_destroyer",
             "army_bm_barrage", "army_venom_reaper", "army_titan_crusher",
-            "items_revive_all", "items_emp_device", "items_infinite_scout",
-            "items_hazmat_mask", "items_speedup_1h", "items_shield_adv"
+            "items_hazmat_mask", "items_energy_drink", "items_repair_kit",
+            "items_medkit", "items_radar", "items_shield_generator",
+            "timers_base_level", "timers_mine_level", "timers_lumber_level",
+            "timers_warehouse_level", "timers_barracks_level", "timers_power_level",
+            "timers_hospital_level", "timers_research_level", "timers_workshop_level",
+            "timers_jail_level", "scheduled_zone", "scheduled_time", "controlled_zone",
+            "energy", "energy_max", "last_daily", "last_attack"
         ]:
             try:
                 data[h] = int(val)
@@ -217,6 +251,16 @@ def list_all_players() -> List[Dict[str, Any]]:
             entry[h] = row[i] if i < len(row) else ""
         players.append(entry)
     return players
+
+def ensure_headers(ws: gspread.Worksheet, headers: List[str]) -> None:
+    """Ensure all needed headers exist in the first row."""
+    existing_headers = ws.row_values(1)
+    next_col = len(existing_headers) + 1
+    
+    for header in headers:
+        if header not in existing_headers:
+            ws.update_cell(1, next_col, header)
+            next_col += 1
 
 # Cursor Prompt (for future regeneration):
 # "Generate a file modules/sheets_helper.py that decodes BASE64_CREDS,
