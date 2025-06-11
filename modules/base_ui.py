@@ -166,6 +166,9 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         ],
         [
             InlineKeyboardButton("🎒 Inventory", callback_data="INV_BACK"),
+        ],
+        [
+            InlineKeyboardButton("🤝 Alliances", callback_data="ALLIANCE_MENU"),
         ]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
