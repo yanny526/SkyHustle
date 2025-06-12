@@ -4,6 +4,7 @@ import json
 import datetime
 import random
 from typing import Optional, Dict, Any, List
+from datetime import datetime, timezone
 
 import gspread
 from google.oauth2.service_account import Credentials
@@ -26,6 +27,13 @@ needed_headers = [
     # Resources
     "resources_wood", "resources_stone", "resources_food", 
     "resources_gold", "resources_energy", "resources_diamonds",
+    "gold_balance", "wood_balance", "research_balance", # New balance fields
+    
+    # Capacities
+    "capacity_gold", "capacity_wood", "capacity_research", # New capacity fields
+    
+    # Rates (per hour)
+    "gold_rate", "wood_rate", "research_rate", # New rate fields
     
     # Buildings
     "base_level", "mine_level", "lumber_house_level", 
@@ -58,7 +66,7 @@ needed_headers = [
     "scheduled_zone", "scheduled_time", "controlled_zone",
     
     # Misc
-    "energy", "energy_max", "last_daily", "last_attack"
+    "energy", "energy_max", "last_daily", "last_attack", "last_collection" # New last_collection field
 ]
 
 # Required OAuth scopes for reading/writing Google Sheets & Drive
@@ -141,6 +149,18 @@ def create_new_player(user_id: int, telegram_username: str, game_name: str) -> N
         500,   # resources_food
         0,     # resources_energy
         0,     # resources_diamonds
+        500,   # gold_balance (initial)
+        1000,  # wood_balance (initial)
+        0,     # research_balance (initial)
+        
+        5000,  # capacity_gold (initial)
+        10000, # capacity_wood (initial)
+        1000,  # capacity_research (initial)
+        
+        10,    # gold_rate (initial per hour)
+        20,    # wood_rate (initial per hour)
+        5,     # research_rate (initial per hour)
+        
         1,     # base_level
         1,     # mine_level
         1,     # lumber_house_level
@@ -163,6 +183,7 @@ def create_new_player(user_id: int, telegram_username: str, game_name: str) -> N
         0,     # energy_max
         0,     # last_daily
         0,     # last_attack
+        iso_now, # last_collection (initial)
         0,     # army_infantry
         0,     # army_tank
         0,     # army_artillery
@@ -207,6 +228,9 @@ def get_player_data(user_id: int) -> Dict[str, Any]:
         if h in [
             "user_id", "resources_wood", "resources_stone", "resources_gold",
             "resources_food", "resources_energy", "resources_diamonds",
+            "gold_balance", "wood_balance", "research_balance", # New balance fields
+            "capacity_gold", "capacity_wood", "capacity_research", # New capacity fields
+            "gold_rate", "wood_rate", "research_rate", # New rate fields
             "base_level", "mine_level", "lumber_house_level", "warehouse_level",
             "barracks_level", "power_plant_level", "hospital_level", "research_lab_level",
             "workshop_level", "jail_level", "power", "prestige_level",
@@ -228,6 +252,12 @@ def get_player_data(user_id: int) -> Dict[str, Any]:
                 data[h] = 0
         elif h == "zones_controlled":
             data[h] = val.split(",") if val else []
+        elif h == "last_collection":
+            # Parse ISO format with timezone. If not present, default to now.
+            try:
+                data[h] = datetime.fromisoformat(val.rstrip("Z")).replace(tzinfo=timezone.utc)
+            except ValueError:
+                data[h] = datetime.now(timezone.utc) # Fallback to current UTC time
         else:
             data[h] = val
     return data
@@ -239,11 +269,24 @@ def update_player_data(user_id: int, field: str, new_value: Any) -> None:
     try:
         row_idx = get_player_row(user_id)
         if row_idx is None:
-            raise ValueError(f"User ID {user_id} not found.")
+            # If user not found, create a new entry with basic data and then update
+            # This might create a sparse row if not all new_player data is used
+            # Consider a more robust way to create partial data or require full creation
+            create_new_player(user_id, "", "New Player") # Placeholder for telegram_username, game_name
+            row_idx = get_player_row(user_id) # Re-fetch row index after creation
+            if row_idx is None: # Should not happen
+                raise ValueError(f"Failed to create or find user ID {user_id} for update.")
+
         headers = _players_ws.row_values(1)
         if field not in headers:
-            raise ValueError(f"Field '{field}' does not exist.")
+            # If field doesn't exist, add it to headers and then update
+            ensure_headers(_players_ws, [field])
+            headers = _players_ws.row_values(1) # Refresh headers after adding new one
+
         col_idx = headers.index(field) + 1
+        # Convert datetime objects to ISO format string before writing to sheet
+        if isinstance(new_value, datetime):
+            new_value = new_value.isoformat() + "Z"
         _players_ws.update_cell(row_idx, col_idx, new_value)
     except GSpreadException as e:
         raise RuntimeError(f"Failed to update player data: {e}")
@@ -274,6 +317,58 @@ def ensure_headers(ws: gspread.Worksheet, headers: List[str]) -> None:
                 next_col += 1
     except GSpreadException as e:
         raise RuntimeError(f"Failed to ensure headers: {e}")
+
+def tick_resources(player_id: int) -> None:
+    """
+    Calculate time-based resource gains since last_collection,
+    cap by capacity, update balances and last_collection timestamp.
+    """
+    # 1. Fetch raw player data from sheet
+    data = get_player_data(player_id)
+    last_ts = data.get("last_collection")
+    if not last_ts:
+        # If no timestamp, just set it now and exit
+        now = datetime.now(timezone.utc)
+        update_player_data(player_id, "last_collection", now.isoformat() + "Z")
+        return
+
+    # 2. Parse timestamps
+    # strip trailing 'Z' if present, then parse as UTC
+    try:
+        # Ensure last_ts is a string before rstrip and fromisoformat
+        if isinstance(last_ts, datetime):
+            last = last_ts # Already a datetime object if from get_player_data
+        else:
+            last = datetime.fromisoformat(str(last_ts).rstrip("Z")).replace(tzinfo=timezone.utc)
+    except Exception:
+        last = datetime.now(timezone.utc)
+
+    now = datetime.now(timezone.utc)
+    elapsed = (now - last).total_seconds()
+
+    # 3. Compute per-second rates (stored in sheet as per-hour)
+    #    (if your sheet stores per-hour, divide by 3600; otherwise they may already be per-sec)
+    gold_rate_per_sec     = data.get("gold_rate", 0)     / 3600
+    wood_rate_per_sec     = data.get("wood_rate", 0)     / 3600
+    research_rate_per_sec = data.get("research_rate", 0) / 3600
+
+    # 4. Calculate gains and cap by capacity
+    def accrue(balance_key, rate_per_sec, cap_key):
+        bal = data.get(balance_key, 0)
+        cap = data.get(cap_key, 0)
+        gain = rate_per_sec * elapsed
+        new_bal = min(bal + gain, cap)
+        return new_bal
+
+    new_gold     = accrue("gold_balance",     gold_rate_per_sec,     "capacity_gold")
+    new_wood     = accrue("wood_balance",     wood_rate_per_sec,     "capacity_wood")
+    new_research = accrue("research_balance", research_rate_per_sec, "capacity_research")
+
+    # 5. Write back updated balances + timestamp
+    update_player_data(player_id, "gold_balance",     round(new_gold))
+    update_player_data(player_id, "wood_balance",     round(new_wood))
+    update_player_data(player_id, "research_balance", round(new_research))
+    update_player_data(player_id, "last_collection",  now.isoformat() + "Z")
 
 # Cursor Prompt (for future regeneration):
 # "Generate a file modules/sheets_helper.py that decodes BASE64_CREDS,

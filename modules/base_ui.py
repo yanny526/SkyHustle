@@ -17,7 +17,7 @@ from telegram.ext import (
     ContextTypes,
 )
 
-from modules.sheets_helper import get_player_data
+from modules.sheets_helper import get_player_data, tick_resources
 
 # Stub for ongoing activities until we build that system
 def _get_ongoing_activities(user_id: int) -> list[str]:
@@ -29,9 +29,13 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     resources, diamonds, base level, and presents "Build New" / "Train Troops" buttons.
     """
     user = update.effective_user
-    uid = user.id
+    if not user:
+        return
+    # TICK all resources up to now
+    tick_resources(user.id)
+    # ... now load get_player_data and build UI
 
-    data: Dict[str, Any] = get_player_data(uid)
+    data: Dict[str, Any] = get_player_data(user.id)
     if not data:
         await update.message.reply_text(
             "❌ You aren't registered yet. Send /start to begin.",
@@ -110,7 +114,7 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     ]
 
     # Ongoing activities
-    activities = _get_ongoing_activities(uid)
+    activities = _get_ongoing_activities(user.id)
     if activities:
         lines_activities = [f"- {act}" for act in activities]
     else:
