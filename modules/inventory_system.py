@@ -4,6 +4,8 @@ from modules.sheets_helper import get_player_data, update_player_data
 import datetime
 from datetime import timezone
 import telegram
+import re
+from typing import Dict, Tuple
 
 # Item definitions
 ITEMS = {
@@ -44,6 +46,97 @@ ITEMS = {
     }
 }
 
+def escape_markdown(text: str) -> str:
+    """Escape special characters for MarkdownV2."""
+    special_chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+    for char in special_chars:
+        text = text.replace(char, f'\\{char}')
+    return text
+
+def build_inventory_ui(inventory: Dict[str, int]) -> Tuple[str, InlineKeyboardMarkup]:
+    """Build the inventory UI with text and keyboard layout.
+    
+    Args:
+        inventory: Dictionary of item keys and their counts
+        
+    Returns:
+        Tuple of (formatted text, keyboard markup)
+    """
+    # Item name mappings
+    item_names = {
+        "revive_all": "Revive All",
+        "emp_field": "EMP Field Device",
+        "infinity_scout": "Infinity Scout",
+        "hazmat_mask": "Hazmat Mask",
+        "speed_up_1h": "1 H Speed-Up",
+        "advanced_shield": "Advanced Shield",
+        "hazmat_drone": "Hazmat Drone",
+        "bm_barrage": "BM Barrage",
+        "venom_reapers": "Venom Reapers",
+        "titan_crushers": "Titan Crushers"
+    }
+    
+    # Build text sections
+    text_parts = ["🎒 *Your Inventory*", "", "*Consumables:*"]
+    
+    # Consumables section
+    consumable_keys = [
+        "revive_all", "emp_field", "infinity_scout", "hazmat_mask",
+        "speed_up_1h", "advanced_shield", "hazmat_drone"
+    ]
+    
+    for key in consumable_keys:
+        count = inventory.get(key, 0)
+        name = item_names[key]
+        if count == 0:
+            text_parts.append(f"• ~{escape_markdown(name)}: 0~")
+        else:
+            text_parts.append(f"• {escape_markdown(name)}: {count}")
+    
+    # Black Market Units section
+    text_parts.extend(["", "*Black Market Units:*"])
+    bm_keys = ["bm_barrage", "venom_reapers", "titan_crushers"]
+    
+    for key in bm_keys:
+        count = inventory.get(key, 0)
+        name = item_names[key]
+        if count == 0:
+            text_parts.append(f"• ~{escape_markdown(name)}: 0~")
+        else:
+            text_parts.append(f"• {escape_markdown(name)}: {count}")
+    
+    # Diamonds section
+    diamonds = inventory.get("diamonds", 0)
+    text_parts.extend(["", f"💎 Diamonds: {diamonds}"])
+    
+    # Build keyboard
+    keyboard = []
+    
+    # Add consumable buttons
+    for key in consumable_keys:
+        count = inventory.get(key, 0)
+        row = [InlineKeyboardButton("ℹ️ Info", callback_data=f"inv_info:{key}")]
+        if count > 0:
+            row.append(InlineKeyboardButton("▶️ Use", callback_data=f"inv_use:{key}"))
+        else:
+            row.append(InlineKeyboardButton("🚫", callback_data="noop"))
+        keyboard.append(row)
+    
+    # Add Black Market Unit buttons
+    for key in bm_keys:
+        count = inventory.get(key, 0)
+        row = [InlineKeyboardButton("ℹ️ Info", callback_data=f"inv_info:{key}")]
+        if count > 0:
+            row.append(InlineKeyboardButton("▶️ Use", callback_data=f"inv_use:{key}"))
+        else:
+            row.append(InlineKeyboardButton("🚫", callback_data="noop"))
+        keyboard.append(row)
+    
+    # Add back button
+    keyboard.append([InlineKeyboardButton("🏠 Back to Base", callback_data="BACK_TO_BASE")])
+    
+    return "\n".join(text_parts), InlineKeyboardMarkup(keyboard)
+
 async def inventory_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Display the player's inventory with grouped items and action buttons."""
     chat_id = update.effective_chat.id
@@ -62,78 +155,45 @@ async def inventory_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         except (ValueError, TypeError):
             return default
 
-    # Fetch data and convert counts to integers
-    consumables = [
-        ("Revive All",    safe_int(data.get("items_revive_all"))),
-        ("EMP Field Device", safe_int(data.get("items_emp_device"))),
-        ("Infinity Scout", safe_int(data.get("items_infinite_scout"))),
-        ("Hazmat Mask",   safe_int(data.get("items_hazmat_mask"))),
-        ("1 H Speed-Up",  safe_int(data.get("items_speedup_1h"))),
-        ("Advanced Shield", safe_int(data.get("items_shield_adv"))),
-        ("Hazmat Drone",  safe_int(data.get("items_hazmat_drone"))),
-    ]
-    bm_units = [
-        ("BM Barrage",    safe_int(data.get("army_bm_barrage"))),
-        ("Venom Reapers", safe_int(data.get("army_venom_reaper"))),
-        ("Titan Crushers",safe_int(data.get("army_titan_crusher"))),
-    ]
-    diamonds = safe_int(data.get("diamonds"))
+    # Build inventory dictionary
+    inventory = {
+        "revive_all": safe_int(data.get("items_revive_all")),
+        "emp_field": safe_int(data.get("items_emp_device")),
+        "infinity_scout": safe_int(data.get("items_infinite_scout")),
+        "hazmat_mask": safe_int(data.get("items_hazmat_mask")),
+        "speed_up_1h": safe_int(data.get("items_speedup_1h")),
+        "advanced_shield": safe_int(data.get("items_shield_adv")),
+        "hazmat_drone": safe_int(data.get("items_hazmat_drone")),
+        "bm_barrage": safe_int(data.get("army_bm_barrage")),
+        "venom_reapers": safe_int(data.get("army_venom_reaper")),
+        "titan_crushers": safe_int(data.get("army_titan_crusher")),
+        "diamonds": safe_int(data.get("diamonds"))
+    }
 
-    # Build message text
-    text = "🎒 *Your Inventory*\n\n"
-    text += "*Consumables:*\n"
-    for name, cnt in consumables:
-        text += f"• {name}: **{cnt}**\n"
-    text += "\n*Black Market Units:*\n"
-    for name, cnt in bm_units:
-        text += f"• {name}: **{cnt}**\n"
-    text += f"\n💎 Diamonds: **{diamonds}**"
-
-    # Generate keyboard
-    keyboard = []
-    for key, (name, cnt) in zip(
-        ["revive_all", "emp_device", "infinite_scout", "hazmat_mask", "speedup_1h", "shield_adv", "hazmat_drone"],
-        consumables
-    ):
-        row = [
-            InlineKeyboardButton("🛈 Info", callback_data=f"inv_info:{key}")
-        ]
-        if cnt > 0:
-            row.append(InlineKeyboardButton("▶️ Use", callback_data=f"inv_use:{key}"))
-        keyboard.append(row)
-
-    for key, (name, cnt) in zip(
-        ["bm_barrage", "venom_reaper", "titan_crusher"],
-        bm_units
-    ):
-        row = [InlineKeyboardButton("🛈 Info", callback_data=f"inv_info:{key}")]
-        if cnt > 0:
-            row.append(InlineKeyboardButton("▶️ Use", callback_data=f"inv_use:{key}"))
-        keyboard.append(row)
-
-    keyboard.append([InlineKeyboardButton("🏠 Back to Base", callback_data="BACK_TO_BASE")])
+    # Build UI
+    text, reply_markup = build_inventory_ui(inventory)
 
     # Send message
     if update.callback_query:
         try:
             await update.callback_query.message.edit_text(
                 text,
-                parse_mode=constants.ParseMode.MARKDOWN,
-                reply_markup=InlineKeyboardMarkup(keyboard)
+                parse_mode=constants.ParseMode.MARKDOWN_V2,
+                reply_markup=reply_markup
             )
         except Exception as e:
             logger.error(f"Failed to edit message: {e}")
             # Fallback to sending new message if edit fails
             await update.callback_query.message.reply_text(
                 text,
-                parse_mode=constants.ParseMode.MARKDOWN,
-                reply_markup=InlineKeyboardMarkup(keyboard)
+                parse_mode=constants.ParseMode.MARKDOWN_V2,
+                reply_markup=reply_markup
             )
     else:
         await update.message.reply_text(
             text,
-            parse_mode=constants.ParseMode.MARKDOWN,
-            reply_markup=InlineKeyboardMarkup(keyboard)
+            parse_mode=constants.ParseMode.MARKDOWN_V2,
+            reply_markup=reply_markup
         )
 
 async def show_item_info(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
