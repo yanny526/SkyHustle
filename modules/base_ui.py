@@ -38,11 +38,28 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if update.callback_query:
         user = update.callback_query.from_user
         message = update.callback_query.message
+        callback_data = update.callback_query.data
     else:
         user = update.effective_user
         message = update.message
+        callback_data = None
 
     if not user:
+        return
+
+    # Handle different menu callbacks
+    if callback_data == "BM_MENU":
+        # Import here to avoid circular imports
+        from modules.black_market import black_market_handler
+        await black_market_handler(update, context)
+        return
+    elif callback_data == "ALLIANCE_MENU":
+        # Import here to avoid circular imports
+        from modules.alliance_system import alliance_handler
+        await alliance_handler(update, context)
+        return
+    elif callback_data in ["BUILD_MENU", "RESEARCH_MENU", "TRAIN_MENU", "BASE_ATTACK", "BASE_QUESTS", "BASE_INFO"]:
+        # These will be handled by their respective modules
         return
 
     # TICK resources up to now
@@ -227,6 +244,11 @@ def setup_base_ui(app: Application) -> None:
     """
     Call this in main.py to register the /base command handler.
     """
+    # Import handlers here to avoid circular imports
+    from modules.black_market import setup_black_market
+    from modules.alliance_system import setup_alliance_system
+
+    # Register base command and callback handlers
     app.add_handler(CommandHandler("base", base_handler))
     app.add_handler(CallbackQueryHandler(base_handler, pattern="^BUILD_MENU$"))
     app.add_handler(CallbackQueryHandler(base_handler, pattern="^RESEARCH_MENU$"))
@@ -234,5 +256,7 @@ def setup_base_ui(app: Application) -> None:
     app.add_handler(CallbackQueryHandler(base_handler, pattern="^BASE_ATTACK$"))
     app.add_handler(CallbackQueryHandler(base_handler, pattern="^BASE_QUESTS$"))
     app.add_handler(CallbackQueryHandler(base_handler, pattern="^BASE_INFO$"))
-    app.add_handler(CallbackQueryHandler(base_handler, pattern="^BM_MENU$"))
-    app.add_handler(CallbackQueryHandler(base_handler, pattern="^ALLIANCE_MENU$")) 
+    
+    # Register black market and alliance handlers
+    setup_black_market(app)
+    setup_alliance_system(app) 
