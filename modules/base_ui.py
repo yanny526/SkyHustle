@@ -40,7 +40,7 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     # TICK resources up to now
     try:
-        tick_resources(user.id)
+        await tick_resources(user.id)
     except Exception as e:
         logger.error(f"Resource tick failed: {e}")
         # Continue with base display even if tick fails
@@ -118,7 +118,7 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     gold_per_minute = mine_lvl * 0.5
     energy_per_minute = powerplant_lvl * 0.3
 
-    # Format resource production block
+    # Format resource production block with proper escaping
     resource_block = (
         "📈 *Resource Production*\n\n"
         f"🌲 *Wood*: *{wood}*  (`*+{wood_per_minute:.1f}*/min*)\n"
@@ -136,7 +136,7 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     else:
         lines_activities = ["None"]
 
-    # Build the message
+    # Build the message with proper escaping
     msg = "\n".join([
         f"🏠 *[Commander {name}'s Base]*",
         f"📍 Coordinates: X:{x}, Y:{y}",
@@ -150,7 +150,7 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         resource_block,
         "",
         "💰 *Current Resources:*",
-        f"🪵 {wood} 🪨 {stone} 🥖 {food} 💰 {gold} 💎 {diamonds}",
+        f"🪵 {wood}  🪨 {stone}  🥖 {food}  💰 {gold}  💎 {diamonds}",
         f"🔋 Energy: {energy_cur}/{energy_max}",
         "",
         "🛠️ *Ongoing Activities:*",
