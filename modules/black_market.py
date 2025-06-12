@@ -51,33 +51,40 @@ async def blackmarket_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 async def blackmarket_buy(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
-    chat_id = update.effective_chat.id
-    user_id = update.effective_user.id
+
+    user_id = query.from_user.id
+    item_key = query.data.split("_", 2)[2]  # Format: "BM_BUY_key"
+
     data = get_player_data(user_id)
-
-    key = query.data.split("_",2)[2]
-    item = next(i for i in ITEMS if i["key"] == key)
-    cost = item["cost"]
-
-    if data["diamonds"] < cost:
-        await query.edit_message_text("❌ Not enough Diamonds.", parse_mode=constants.ParseMode.MARKDOWN)
+    if not data:
+        await query.edit_message_text("❌ You aren't registered yet. Send /start to begin.")
         return
 
-    # Deduct diamonds
-    update_player_data(user_id, "diamonds", data["diamonds"] - cost)
+    # Convert diamonds to int for comparison
+    diamonds = int(data.get("diamonds", 0))
+    item = next(i for i in ITEMS if i["key"] == item_key)
+    cost = item["cost"]
 
-    # Add to inventory or army
+    if diamonds < cost:
+        await query.edit_message_text(
+            f"❌ Not enough diamonds! You need {cost} 💎",
+            parse_mode=constants.ParseMode.MARKDOWN
+        )
+        return
+
+    # Deduct diamonds and add item
+    update_player_data(user_id, "diamonds", diamonds - cost)
+    
     if item["type"] == "unit":
-        field = f"army_{key}"
-        current = data.get(field, 0)
-        update_player_data(user_id, field, current + (5 if key=="bm_barrage" else 10 if key=="venom_reaper" else 2))
+        current = data.get(f"army_{item_key}", 0)
+        update_player_data(user_id, f"army_{item_key}", current + (5 if item_key=="bm_barrage" else 10 if item_key=="venom_reaper" else 2))
     else:
-        # track items in a JSON field or separate columns, e.g. items_revive_all
-        update_player_data(user_id, f"items_{key}", data.get(f"items_{key}", 0) + 1)
+        current = data.get(f"items_{item_key}", 0)
+        update_player_data(user_id, f"items_{item_key}", current + 1)
 
     await query.edit_message_text(
-        f"✅ Purchased *{item['name']}* for {cost} 💎! \n"
-        f"💎 New Balance: *{data['diamonds'] - cost}*",
+        f"✅ Purchased *{item['name']}* for {cost} 💎\n"
+        f"💎 New Balance: *{diamonds - cost}*",
         parse_mode=constants.ParseMode.MARKDOWN
     )
 
