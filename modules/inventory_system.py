@@ -53,22 +53,31 @@ async def inventory_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         await context.bot.send_message(chat_id, "❌ Send /start first.")
         return
 
+    def safe_int(value, default=0):
+        """Safely convert a value to integer, handling empty strings and None."""
+        if value is None or value == '':
+            return default
+        try:
+            return int(value)
+        except (ValueError, TypeError):
+            return default
+
     # Fetch data and convert counts to integers
     consumables = [
-        ("Revive All",    int(data.get("items_revive_all", 0))),
-        ("EMP Field Device", int(data.get("items_emp_device", 0))),
-        ("Infinity Scout", int(data.get("items_infinite_scout", 0))),
-        ("Hazmat Mask",   int(data.get("items_hazmat_mask", 0))),
-        ("1 H Speed-Up",  int(data.get("items_speedup_1h", 0))),
-        ("Advanced Shield", int(data.get("items_shield_adv", 0))),
-        ("Hazmat Drone",  int(data.get("items_hazmat_drone", 0))),
+        ("Revive All",    safe_int(data.get("items_revive_all"))),
+        ("EMP Field Device", safe_int(data.get("items_emp_device"))),
+        ("Infinity Scout", safe_int(data.get("items_infinite_scout"))),
+        ("Hazmat Mask",   safe_int(data.get("items_hazmat_mask"))),
+        ("1 H Speed-Up",  safe_int(data.get("items_speedup_1h"))),
+        ("Advanced Shield", safe_int(data.get("items_shield_adv"))),
+        ("Hazmat Drone",  safe_int(data.get("items_hazmat_drone"))),
     ]
     bm_units = [
-        ("BM Barrage",    int(data.get("army_bm_barrage", 0))),
-        ("Venom Reapers", int(data.get("army_venom_reaper", 0))),
-        ("Titan Crushers",int(data.get("army_titan_crusher", 0))),
+        ("BM Barrage",    safe_int(data.get("army_bm_barrage"))),
+        ("Venom Reapers", safe_int(data.get("army_venom_reaper"))),
+        ("Titan Crushers",safe_int(data.get("army_titan_crusher"))),
     ]
-    diamonds = int(data.get("diamonds", 0))
+    diamonds = safe_int(data.get("diamonds"))
 
     # Build message text
     text = "🎒 *Your Inventory*\n\n"
@@ -169,10 +178,19 @@ async def inventory_use_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await update.message.reply_text("❌ You aren't registered yet. Send /start to begin.")
         return
 
+    def safe_int(value, default=0):
+        """Safely convert a value to integer, handling empty strings and None."""
+        if value is None or value == '':
+            return default
+        try:
+            return int(value)
+        except (ValueError, TypeError):
+            return default
+
     # Build keyboard with available items
     keyboard = []
     for key, item in ITEMS.items():
-        count = int(data.get(f"items_{key}", 0))
+        count = safe_int(data.get(f"items_{key}"))
         if count > 0:
             keyboard.append([
                 InlineKeyboardButton(
@@ -256,9 +274,18 @@ async def confirm_use_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         await query.edit_message_text("❌ You aren't registered yet. Send /start to begin.")
         return
 
+    def safe_int(value, default=0):
+        """Safely convert a value to integer, handling empty strings and None."""
+        if value is None or value == '':
+            return default
+        try:
+            return int(value)
+        except (ValueError, TypeError):
+            return default
+
     # Check item count
     item_field = f"items_{key}"
-    current_count = int(data.get(item_field, 0))
+    current_count = safe_int(data.get(item_field))
     if current_count <= 0:
         await query.edit_message_text("❌ You don't have this item anymore.")
         return
