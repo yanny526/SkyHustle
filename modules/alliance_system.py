@@ -26,10 +26,10 @@ from modules.zone_system import zones_main # Import zones_main for 'Zones' butto
 ALLIANCE_CB = "ALLIANCE_"
 
 # Function to escape MarkdownV2 special characters
-def escape_markdown_v2(text: str) -> str:
-    # List of characters to escape: _ * [ ] ( ) ~ ` > # + - = | { } . !
-    escape_chars = r'_*[]()~`>#+-=|{}.!'
-    return re.sub(f"([{re.escape(escape_chars)}])", r'\\\1', text)
+# def escape_markdown_v2(text: str) -> str:
+#     # List of characters to escape: _ * [ ] ( ) ~ ` > # + - = | { } . !
+#     escape_chars = r'_*[]()~`>#+-=|{}.!'
+#     return re.sub(f"([{re.escape(escape_chars)}])", r'\\\1', text)
 
 async def alliance_create(update: Update, context: ContextTypes.DEFAULT_TYPE, args: list) -> None:
     user = update.effective_user; chat_id = update.effective_chat.id
@@ -112,12 +112,12 @@ async def alliance_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not data.get("alliance_name"):
         # not in any alliance
         text = (
-            "🤝 \*[ ALLIANCE COMMAND CENTER ]*\n\n"
+            "🤝 *[ ALLIANCE COMMAND CENTER ]*\n\n"
             "You are not currently a member of any alliance.\n\n"
-            f"🔹 \*Create a New Alliance\*\n"
-            f"Cost: {escape_markdown_v2('2000 💰, 1500 🪵, 1500 🪨, 1000 🥖')}\n\n"
-            f"🔹 \*Join an Existing Alliance\*\n"
-            f"Search by name or browse the top alliances{escape_markdown_v2(".")}"
+            "🔹 *Create a New Alliance*\n"
+            "Cost: 2000 💰, 1500 🪵, 1500 🪨, 1000 🥖\n\n"
+            "🔹 *Join an Existing Alliance*\n"
+            "Search by name or browse the top alliances."
         )
         buttons = [
             [InlineKeyboardButton("🛠 Create Alliance", callback_data=f"{ALLIANCE_CB}CREATE")],
@@ -136,12 +136,12 @@ async def alliance_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             zones = ", ".join(zones) if zones else "None"
 
         text = (
-            f"🤝 \*[ ALLIANCE INFO ]*\n\n"
-            f"🛡 \*Alliance:\* {escape_markdown_v2(name)}\n"
-            f"👤 \*Your Role:\* {escape_markdown_v2(role)}\n"
-            f"👥 \*Members:\* {members}/20\n"
-            f"📈 \*Power:\* {power}\n"
-            f"🌐 \*Zones Controlled:\* {escape_markdown_v2(zones)}"
+            f"🤝 *[ ALLIANCE INFO ]*\n\n"
+            f"🛡 *Alliance:* {name}\n"
+            f"👤 *Your Role:* {role}\n"
+            f"👥 *Members:* {members}/20\n"
+            f"📈 *Power:* {power}\n"
+            f"🌐 *Zones Controlled:* {zones}"
         )
         buttons = [
             [InlineKeyboardButton("✨ Invite Member", callback_data=f"{ALLIANCE_CB}INVITE")],
@@ -155,13 +155,13 @@ async def alliance_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.callback_query and update.callback_query.message:
         await update.callback_query.message.edit_text(
             text,
-            parse_mode=constants.ParseMode.MARKDOWN_V2,
+            parse_mode=constants.ParseMode.MARKDOWN,
             reply_markup=reply_markup
         )
     elif update.message:
         await update.message.reply_text(
             text,
-            parse_mode=constants.ParseMode.MARKDOWN_V2,
+            parse_mode=constants.ParseMode.MARKDOWN,
             reply_markup=reply_markup
         )
     else:
@@ -183,7 +183,7 @@ async def alliance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "🛠️ *Create Alliance*\n\n"
             "Please enter your desired alliance name:\n"
             "(2000 💰 gold, 1500 🪵 wood, 1500 🪨 stone, 1000 🥖 food)",
-            parse_mode=constants.ParseMode.MARKDOWN # Markdown not V2 for input prompts
+            parse_mode=constants.ParseMode.MARKDOWN
         )
         context.user_data["alliance_next"] = "create"
     elif action == "SEARCH":
