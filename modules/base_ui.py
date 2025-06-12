@@ -118,15 +118,16 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     gold_per_minute = mine_lvl * 0.5
     energy_per_minute = powerplant_lvl * 0.3
 
-    # Resource production rates
-    lines_resources = [
-        f"🪵 Wood: {wood} \\(\\+{wood_per_minute:.1f}/min\\)",
-        f"⛰️ Stone: {stone} \\(\\+{stone_per_minute:.1f}/min\\)",
-        f"🍖 Food: {food} \\(\\+{food_per_minute:.1f}/min\\)",
-        f"💰 Gold: {gold} \\(\\+{gold_per_minute:.1f}/min\\)",
-        f"⚡ Energy: {energy_cur}/{energy_max} \\(\\+{energy_per_minute:.1f}/min\\)",
-        "――――――――――――",
-    ]
+    # Format resource production block
+    resource_block = (
+        "📈 *Resource Production*\n\n"
+        f"🌲 *Wood*: *{wood}*  (`*+{wood_per_minute:.1f}*/min*)\n"
+        f"⛰️ *Stone*: *{stone}*  (`*+{stone_per_minute:.1f}*/min*)\n"
+        f"🍖 *Food*: *{food}*  (`*+{food_per_minute:.1f}*/min*)\n"
+        f"💰 *Gold*: *{gold}*  (`*+{gold_per_minute:.1f}*/min*)\n"
+        f"⚡ *Energy*: *{energy_cur}/{energy_max}*  (`*+{energy_per_minute:.1f}*/min*)\n"
+        "――――――――――――"
+    )
 
     # Ongoing activities
     activities = _get_ongoing_activities(user.id)
@@ -146,8 +147,7 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "🧱 *Building Levels:*",
         *lines_buildings,
         "",
-        "📤 *Resource Production:*",
-        *lines_resources,
+        resource_block,
         "",
         "💰 *Current Resources:*",
         f"🪵 {wood} 🪨 {stone} 🥖 {food} 💰 {gold} 💎 {diamonds}",

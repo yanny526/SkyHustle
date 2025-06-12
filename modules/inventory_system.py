@@ -45,6 +45,7 @@ ITEMS = {
 }
 
 async def inventory_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Display the player's inventory with grouped items and action buttons."""
     chat_id = update.effective_chat.id
     user_id = update.effective_user.id
     data = get_player_data(user_id)
@@ -52,8 +53,12 @@ async def inventory_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         await context.bot.send_message(chat_id, "❌ Send /start first.")
         return
 
-    # Gather counts
-    items = {
+    # Build message text
+    text = "🎒 *YOUR INVENTORY*\n\n"
+    
+    # Consumable Items section
+    text += "🧰 *Consumable Items:*\n"
+    consumable_items = {
         "🧬 Revive All Units": {"key": "revive_all", "count": int(data.get("items_revive_all", 0) or 0)},
         "💥 EMP Field Device": {"key": "emp_device", "count": int(data.get("items_emp_device", 0) or 0)},
         "🔎 Infinity Scout": {"key": "infinite_scout", "count": int(data.get("items_infinite_scout", 0) or 0)},
@@ -62,41 +67,94 @@ async def inventory_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         "🛡️ Advanced Shield": {"key": "shield_adv", "count": int(data.get("items_shield_adv", 0) or 0)},
         "☢️ Hazmat Drone": {"key": "hazmat_drone", "count": int(data.get("items_hazmat_drone", 0) or 0)},
     }
-    units = {
-        "🧨 BM Barrage": int(data.get("army_bm_barrage", 0) or 0),
-        "🦂 Venom Reapers": int(data.get("army_venom_reaper", 0) or 0),
-        "🦾 Titan Crushers": int(data.get("army_titan_crusher", 0) or 0),
-    }
-
-    text = "🎒 *[YOUR INVENTORY]*\n\n"
-    
-    # Consumable Items section
-    text += "🛍️ *Consumable Items:*\n"
-    for name, item_info in items.items():
-        text += f"{name}: {item_info['count']}\n"
     
     # Black Market Units section
-    text += "\n🪖 *Black Market Units:*\n"
-    for name, cnt in units.items():
-        text += f"{name}: {cnt}\n"
+    text += "\n🛡️ *Black Market Units:*\n"
+    black_market_units = {
+        "🧨 BM Barrage": {"key": "bm_barrage", "count": int(data.get("army_bm_barrage", 0) or 0)},
+        "🦂 Venom Reapers": {"key": "venom_reaper", "count": int(data.get("army_venom_reaper", 0) or 0)},
+        "🦾 Titan Crushers": {"key": "titan_crusher", "count": int(data.get("army_titan_crusher", 0) or 0)},
+    }
     
-    # Diamonds
-    text += f"\n💎 *Diamonds:* {int(data.get('diamonds',0))}\n"
-
-    # Buttons for using items
+    # Build keyboard rows
     keyboard = []
-    for name, item_info in items.items():
-        if item_info['count'] > 0:
-            keyboard.append([
-                InlineKeyboardButton("ℹ️ Info", callback_data=f"item_info:{item_info['key']}"),
-                InlineKeyboardButton("▶️ Use", callback_data=f"use_item:{item_info['key']}")
-            ])
     
+    # Add consumable items
+    for name, item_info in consumable_items.items():
+        count = item_info['count']
+        row = [
+            InlineKeyboardButton(
+                f"{name}: {count}",
+                callback_data="noop"  # No-op for the item name
+            ),
+            InlineKeyboardButton(
+                "ℹ️ Info",
+                callback_data=f"item_info:{item_info['key']}"
+            )
+        ]
+        
+        # Add Use button only if count > 0
+        if count > 0:
+            row.append(
+                InlineKeyboardButton(
+                    "▶️ Use",
+                    callback_data=f"use_item_{item_info['key']}"
+                )
+            )
+        else:
+            row.append(
+                InlineKeyboardButton(
+                    "▶️ Use",
+                    callback_data="noop"  # No-op for zero count
+                )
+            )
+        
+        keyboard.append(row)
+    
+    # Add black market units
+    for name, unit_info in black_market_units.items():
+        count = unit_info['count']
+        row = [
+            InlineKeyboardButton(
+                f"{name}: {count}",
+                callback_data="noop"  # No-op for the unit name
+            ),
+            InlineKeyboardButton(
+                "ℹ️ Info",
+                callback_data=f"item_info:{unit_info['key']}"
+            )
+        ]
+        
+        # Add Use button only if count > 0
+        if count > 0:
+            row.append(
+                InlineKeyboardButton(
+                    "▶️ Use",
+                    callback_data=f"use_item_{unit_info['key']}"
+                )
+            )
+        else:
+            row.append(
+                InlineKeyboardButton(
+                    "▶️ Use",
+                    callback_data="noop"  # No-op for zero count
+                )
+            )
+        
+        keyboard.append(row)
+    
+    # Add diamonds
+    text += f"\n💎 *Diamonds:* {int(data.get('diamonds', 0))}\n"
+    
+    # Add back button
     keyboard.append([InlineKeyboardButton("🏠 Back to Base", callback_data="INV_BACK")])
+    
     reply_markup = InlineKeyboardMarkup(keyboard)
-
+    
     await context.bot.send_message(
-        chat_id, text, parse_mode=constants.ParseMode.MARKDOWN,
+        chat_id,
+        text,
+        parse_mode=constants.ParseMode.MARKDOWN,
         reply_markup=reply_markup
     )
 
