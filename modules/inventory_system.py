@@ -1,6 +1,8 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, constants
 from telegram.ext import Application, CommandHandler, ContextTypes, CallbackQueryHandler
-from modules.sheets_helper import get_player_data
+from modules.sheets_helper import get_player_data, update_player_data
+import datetime
+from datetime import timezone
 
 
 async def inventory_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -43,6 +45,72 @@ async def inventory_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         reply_markup=InlineKeyboardMarkup(buttons)
     )
 
+# --- Callbacks for Item Use ---
+
+async def use_item_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Handles callback queries for item usage (use_item:<key>).
+    """
+    query = update.callback_query
+    await query.answer()
+
+    user_id = query.from_user.id
+    _, item_key = query.data.split(':') # Expected format: "use_item:revive_all"
+
+    player_data = get_player_data(user_id)
+    if not player_data:
+        await query.edit_message_text("❌ You aren't registered yet. Send /start to begin.")
+        return
+
+    item_field = f"items_{item_key}"
+    current_item_count = player_data.get(item_field, 0)
+
+    if current_item_count <= 0:
+        await query.edit_message_text(f"You have no *{item_key.replace('_', ' ').title()}* left.",
+                                      parse_mode=constants.ParseMode.MARKDOWN)
+        return
+
+    # Decrement item count
+    update_player_data(user_id, item_field, current_item_count - 1)
+
+    summary_message = f"*Used {item_key.replace('_', ' ').title()}!*\n\n"
+    now = datetime.datetime.now(timezone.utc)
+
+    if item_key == "revive_all":
+        dead_infantry = player_data.get("army_dead_infantry", 0)
+        dead_tanks = player_data.get("army_dead_tanks", 0)
+
+        if dead_infantry > 0:
+            update_player_data(user_id, "army_infantry", player_data.get("army_infantry", 0) + dead_infantry)
+            update_player_data(user_id, "army_dead_infantry", 0)
+            summary_message += f"👣 Revived {dead_infantry} infantry.\n"
+
+        if dead_tanks > 0:
+            update_player_data(user_id, "army_tank", player_data.get("army_tank", 0) + dead_tanks)
+            update_player_data(user_id, "army_dead_tanks", 0)
+            summary_message += f"🛡️ Revived {dead_tanks} tanks.\n"
+
+        if dead_infantry == 0 and dead_tanks == 0:
+            summary_message = "You used *Revive All*, but had no dead troops to revive!\n"
+
+    elif item_key == "emp_device":
+        boost_end_time = now + datetime.timedelta(hours=1)
+        update_player_data(user_id, "timers_emp_boost_end", boost_end_time.isoformat() + "Z")
+        summary_message += "⚡ EMP device activated! Resource production boosted for 1 hour.\n"
+
+    elif item_key == "hazmat_drone":
+        access_end_time = now + datetime.timedelta(hours=24)
+        update_player_data(user_id, "timers_hazmat_access_end", access_end_time.isoformat() + "Z")
+        summary_message += "☢️ Hazmat Drone deployed! You now have access to radiation zones for 24 hours.\n"
+
+    else:
+        summary_message = f"Unknown item: {item_key.replace('_', ' ').title()}.\n"
+
+    await query.edit_message_text(summary_message, parse_mode=constants.ParseMode.MARKDOWN)
+    # Optionally, refresh the inventory view after item use
+    await inventory_handler(update, context) # Call inventory_handler to show updated inventory
+
 def setup_inventory_system(app: Application) -> None:
     app.add_handler(CommandHandler("inventory", inventory_handler))
-    app.add_handler(CallbackQueryHandler(inventory_handler, pattern="^INV_BACK$")) 
+    app.add_handler(CallbackQueryHandler(inventory_handler, pattern="^INV_BACK$"))
+    app.add_handler(CallbackQueryHandler(use_item_callback, pattern="^use_item:")) 

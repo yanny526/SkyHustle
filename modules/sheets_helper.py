@@ -55,18 +55,19 @@ needed_headers = [
     # Black Market Items
     "items_hazmat_mask", "items_energy_drink", "items_repair_kit",
     "items_medkit", "items_radar", "items_shield_generator",
+    "items_revive_all", "items_emp_device", "items_hazmat_drone", # New item fields
     
     # Timers
     "timers_base_level", "timers_mine_level", "timers_lumber_level",
     "timers_warehouse_level", "timers_barracks_level", "timers_power_level",
     "timers_hospital_level", "timers_research_level", "timers_workshop_level",
-    "timers_jail_level",
+    "timers_jail_level", "timers_emp_boost_end", "timers_hazmat_access_end", # New timer fields
     
     # Zone Control
     "scheduled_zone", "scheduled_time", "controlled_zone",
     
     # Misc
-    "energy", "energy_max", "last_daily", "last_attack", "last_collection" # New last_collection field
+    "energy", "energy_max", "last_daily", "last_attack", "last_collection"
 ]
 
 # Required OAuth scopes for reading/writing Google Sheets & Drive
@@ -197,6 +198,9 @@ def create_new_player(user_id: int, telegram_username: str, game_name: str) -> N
         0,     # items_medkit
         0,     # items_radar
         0,     # items_shield_generator
+        0,     # items_revive_all
+        0,     # items_emp_device
+        0,     # items_hazmat_drone
         0,     # timers_base_level
         0,     # timers_mine_level
         0,     # timers_lumber_level
@@ -207,6 +211,8 @@ def create_new_player(user_id: int, telegram_username: str, game_name: str) -> N
         0,     # timers_research_level
         0,     # timers_workshop_level
         0,     # timers_jail_level
+        "",    # timers_emp_boost_end
+        "",    # timers_hazmat_access_end
         0,     # scheduled_zone
         0,     # scheduled_time
         0,     # controlled_zone
@@ -240,10 +246,12 @@ def get_player_data(user_id: int) -> Dict[str, Any]:
             "army_bm_barrage", "army_venom_reaper", "army_titan_crusher",
             "items_hazmat_mask", "items_energy_drink", "items_repair_kit",
             "items_medkit", "items_radar", "items_shield_generator",
+            "items_revive_all", "items_emp_device", "items_hazmat_drone", # New item fields
             "timers_base_level", "timers_mine_level", "timers_lumber_level",
             "timers_warehouse_level", "timers_barracks_level", "timers_power_level",
             "timers_hospital_level", "timers_research_level", "timers_workshop_level",
-            "timers_jail_level", "scheduled_zone", "scheduled_time", "controlled_zone",
+            "timers_jail_level",
+            "scheduled_zone", "scheduled_time", "controlled_zone",
             "energy", "energy_max", "last_daily", "last_attack"
         ]:
             try:
@@ -252,12 +260,12 @@ def get_player_data(user_id: int) -> Dict[str, Any]:
                 data[h] = 0
         elif h == "zones_controlled":
             data[h] = val.split(",") if val else []
-        elif h == "last_collection":
-            # Parse ISO format with timezone. If not present, default to now.
+        elif h in ["last_collection", "timers_emp_boost_end", "timers_hazmat_access_end"]:
+            # Parse ISO format with timezone. If not present, default to None.
             try:
-                data[h] = datetime.fromisoformat(val.rstrip("Z")).replace(tzinfo=timezone.utc)
+                data[h] = datetime.fromisoformat(val.rstrip("Z")).replace(tzinfo=timezone.utc) if val else None
             except ValueError:
-                data[h] = datetime.now(timezone.utc) # Fallback to current UTC time
+                data[h] = None # Fallback to None if parsing fails
         else:
             data[h] = val
     return data
