@@ -31,10 +31,17 @@ def _get_ongoing_activities(user_id: int) -> list[str]:
 
 async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    Triggered by /base. Fetches the calling user's data and displays
+    Triggered by /base or callback queries. Fetches the calling user's data and displays
     resources, diamonds, base level, and presents "Build New" / "Train Troops" buttons.
     """
-    user = update.effective_user
+    # Get user from either message or callback query
+    if update.callback_query:
+        user = update.callback_query.from_user
+        message = update.callback_query.message
+    else:
+        user = update.effective_user
+        message = update.message
+
     if not user:
         return
 
@@ -47,9 +54,10 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     data: Dict[str, Any] = get_player_data(user.id)
     if not data:
-        await update.message.reply_text(
-            "❌ You aren't registered yet. Send /start to begin.",
-        )
+        if message:
+            await message.reply_text(
+                "❌ You aren't registered yet. Send /start to begin.",
+            )
         return
 
     # Safely pull stats with defaults
@@ -192,11 +200,28 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await update.message.reply_text(
-        msg,
-        parse_mode=constants.ParseMode.MARKDOWN,
-        reply_markup=reply_markup,
-    )
+    # Send or edit message based on context
+    if update.callback_query:
+        try:
+            await message.edit_text(
+                msg,
+                parse_mode=constants.ParseMode.MARKDOWN,
+                reply_markup=reply_markup,
+            )
+        except Exception as e:
+            logger.error(f"Failed to edit message: {e}")
+            # Fallback to sending new message if edit fails
+            await message.reply_text(
+                msg,
+                parse_mode=constants.ParseMode.MARKDOWN,
+                reply_markup=reply_markup,
+            )
+    else:
+        await message.reply_text(
+            msg,
+            parse_mode=constants.ParseMode.MARKDOWN,
+            reply_markup=reply_markup,
+        )
 
 def setup_base_ui(app: Application) -> None:
     """
