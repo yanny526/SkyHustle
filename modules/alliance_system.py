@@ -114,10 +114,10 @@ async def alliance_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text = (
             "🤝 \*[ ALLIANCE COMMAND CENTER ]*\n\n"
             "You are not currently a member of any alliance.\n\n"
-            "🔹 \*Create a New Alliance\*\n"
-            "Cost: 2000 💰, 1500 🪵, 1500 🪨, 1000 🥖\n\n"
-            "🔹 \*Join an Existing Alliance\*\n"
-            "Search by name or browse the top alliances."
+            f"🔹 \*Create a New Alliance\*\n"
+            f"Cost: {escape_markdown_v2("2000 💰, 1500 🪵, 1500 🪨, 1000 🥖")}\n\n"
+            f"🔹 \*Join an Existing Alliance\*\n"
+            f"Search by name or browse the top alliances{escape_markdown_v2(".")}"
         )
         buttons = [
             [InlineKeyboardButton("🛠 Create Alliance", callback_data=f"{ALLIANCE_CB}CREATE")],
