@@ -202,4 +202,12 @@ def setup_base_ui(app: Application) -> None:
     """
     Call this in main.py to register the /base command handler.
     """
-    app.add_handler(CommandHandler("base", base_handler)) 
+    app.add_handler(CommandHandler("base", base_handler))
+    app.add_handler(CallbackQueryHandler(base_handler, pattern="^BUILD_MENU$", per_message=True))
+    app.add_handler(CallbackQueryHandler(base_handler, pattern="^RESEARCH_MENU$", per_message=True))
+    app.add_handler(CallbackQueryHandler(base_handler, pattern="^TRAIN_MENU$", per_message=True))
+    app.add_handler(CallbackQueryHandler(base_handler, pattern="^BASE_ATTACK$", per_message=True))
+    app.add_handler(CallbackQueryHandler(base_handler, pattern="^BASE_QUESTS$", per_message=True))
+    app.add_handler(CallbackQueryHandler(base_handler, pattern="^BASE_INFO$", per_message=True))
+    app.add_handler(CallbackQueryHandler(base_handler, pattern="^BM_MENU$", per_message=True))
+    app.add_handler(CallbackQueryHandler(base_handler, pattern="^ALLIANCE_MENU$", per_message=True)) 
