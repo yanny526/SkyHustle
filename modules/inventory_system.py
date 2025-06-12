@@ -15,12 +15,13 @@ async def inventory_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     # Gather counts
     items = {
-        "🧬 Revive All Units": data.get("items_revive_all", 0),
-        "💥 EMP Field Device": data.get("items_emp_device", 0),
-        "🔎 Infinity Scout": data.get("items_infinite_scout", 0),
-        "☢️ Hazmat Mask": data.get("items_hazmat_mask", 0),
-        "⏱️ 1h Speed-Up": data.get("items_speedup_1h", 0),
-        "🛡️ Advanced Shield": data.get("items_shield_adv", 0),
+        "�� Revive All Units": {"key": "revive_all", "count": data.get("items_revive_all", 0)},
+        "💥 EMP Field Device": {"key": "emp_device", "count": data.get("items_emp_device", 0)},
+        "🔎 Infinity Scout": {"key": "infinite_scout", "count": data.get("items_infinite_scout", 0)},
+        "☢️ Hazmat Mask": {"key": "hazmat_mask", "count": data.get("items_hazmat_mask", 0)},
+        "⏱️ 1h Speed-Up": {"key": "speedup_1h", "count": data.get("items_speedup_1h", 0)},
+        "🛡️ Advanced Shield": {"key": "shield_adv", "count": data.get("items_shield_adv", 0)},
+        "☢️ Hazmat Drone": {"key": "hazmat_drone", "count": data.get("items_hazmat_drone", 0)},
     }
     units = {
         "🧨 BM Barrage": data.get("army_bm_barrage", 0),
@@ -29,20 +30,36 @@ async def inventory_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     }
 
     text = "🎒 *[YOUR INVENTORY]*\n\n"
+    
+    # Consumable Items section
     text += "🛍️ *Consumable Items:*\n"
-    for name, cnt in items.items():
-        text += f"{name}: {cnt}\n"
+    for name, item_info in items.items():
+        text += f"{name}: {item_info['count']}\n"
+    
+    # Black Market Units section
     text += "\n🪖 *Black Market Units:*\n"
     for name, cnt in units.items():
         text += f"{name}: {cnt}\n"
-    text += f"\n💎 *Diamonds:* {data.get('diamonds',0)}"
+    
+    # Diamonds
+    text += f"\n💎 *Diamonds:* {data.get('diamonds',0)}\n"
 
-    # Buttons
-    buttons = [[InlineKeyboardButton("🏠 Back to Base", callback_data="INV_BACK")]]
+    # Buttons for using items
+    use_item_buttons = []
+    for name, item_info in items.items():
+        if item_info['count'] > 0:
+            use_item_buttons.append(InlineKeyboardButton(f"Use {name.split(':')[0].strip()}", callback_data=f"use_item:{item_info['key']}"))
+    
+    keyboard = []
+    if use_item_buttons:
+        keyboard.append(use_item_buttons)
+    
+    keyboard.append([InlineKeyboardButton("🏠 Back to Base", callback_data="INV_BACK")])
+    reply_markup = InlineKeyboardMarkup(keyboard)
 
     await context.bot.send_message(
-        chat_id, text, parse_mode=constants.ParseMode.MARKDOWN, 
-        reply_markup=InlineKeyboardMarkup(buttons)
+        chat_id, text, parse_mode=constants.ParseMode.MARKDOWN,
+        reply_markup=reply_markup
     )
 
 # --- Callbacks for Item Use ---
