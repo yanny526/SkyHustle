@@ -51,11 +51,13 @@ needed_headers = [
     # Army
     "army_infantry", "army_tank", "army_artillery", "army_destroyer",
     "army_bm_barrage", "army_venom_reaper", "army_titan_crusher",
+    "army_dead_infantry", "army_dead_tanks",
     
     # Black Market Items
     "items_hazmat_mask", "items_energy_drink", "items_repair_kit",
     "items_medkit", "items_radar", "items_shield_generator",
-    "items_revive_all", "items_emp_device", "items_hazmat_drone", # New item fields
+    "items_revive_all", "items_emp_device", "items_hazmat_drone",
+    "items_infinite_scout", "items_speedup_1h", "items_shield_adv",
     
     # Timers
     "timers_base_level", "timers_mine_level", "timers_lumber_level",
