@@ -3,6 +3,7 @@ from telegram.ext import Application, CommandHandler, ContextTypes, CallbackQuer
 from modules.sheets_helper import get_player_data, update_player_data
 import datetime
 from datetime import timezone
+import telegram
 
 
 async def inventory_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -69,22 +70,47 @@ async def use_item_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     Handles callback queries for item usage (use_item:<key>).
     """
     query = update.callback_query
-    await query.answer()
+    try:
+        await query.answer()
+    except telegram.error.BadRequest as e:
+        if "Query is too old" in str(e):
+            # If the query is too old, we'll still process it but won't try to answer it
+            pass
+        else:
+            # For other BadRequest errors, we should log them
+            print(f"Error answering callback query: {e}")
+            return
 
     user_id = query.from_user.id
     _, item_key = query.data.split(':') # Expected format: "use_item:revive_all"
 
     player_data = get_player_data(user_id)
     if not player_data:
-        await query.edit_message_text("❌ You aren't registered yet. Send /start to begin.")
+        try:
+            await query.edit_message_text("❌ You aren't registered yet. Send /start to begin.")
+        except telegram.error.BadRequest:
+            # If we can't edit the message, try sending a new one
+            await context.bot.send_message(
+                query.message.chat_id,
+                "❌ You aren't registered yet. Send /start to begin."
+            )
         return
 
     item_field = f"items_{item_key}"
     current_item_count = player_data.get(item_field, 0)
 
     if current_item_count <= 0:
-        await query.edit_message_text(f"You have no *{item_key.replace('_', ' ').title()}* left.",
-                                      parse_mode=constants.ParseMode.MARKDOWN)
+        try:
+            await query.edit_message_text(
+                f"You have no *{item_key.replace('_', ' ').title()}* left.",
+                parse_mode=constants.ParseMode.MARKDOWN
+            )
+        except telegram.error.BadRequest:
+            await context.bot.send_message(
+                query.message.chat_id,
+                f"You have no *{item_key.replace('_', ' ').title()}* left.",
+                parse_mode=constants.ParseMode.MARKDOWN
+            )
         return
 
     # Decrement item count
@@ -123,9 +149,21 @@ async def use_item_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     else:
         summary_message = f"Unknown item: {item_key.replace('_', ' ').title()}.\n"
 
-    await query.edit_message_text(summary_message, parse_mode=constants.ParseMode.MARKDOWN)
+    try:
+        await query.edit_message_text(summary_message, parse_mode=constants.ParseMode.MARKDOWN)
+    except telegram.error.BadRequest:
+        # If we can't edit the message, send a new one
+        await context.bot.send_message(
+            query.message.chat_id,
+            summary_message,
+            parse_mode=constants.ParseMode.MARKDOWN
+        )
+
     # Optionally, refresh the inventory view after item use
-    await inventory_handler(update, context) # Call inventory_handler to show updated inventory
+    try:
+        await inventory_handler(update, context)
+    except Exception as e:
+        print(f"Error refreshing inventory: {e}")
 
 def setup_inventory_system(app: Application) -> None:
     app.add_handler(CommandHandler("inventory", inventory_handler))
