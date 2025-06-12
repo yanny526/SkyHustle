@@ -115,7 +115,7 @@ async def alliance_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "🤝 \*[ ALLIANCE COMMAND CENTER ]*\n\n"
             "You are not currently a member of any alliance.\n\n"
             f"🔹 \*Create a New Alliance\*\n"
-            f"Cost: {escape_markdown_v2("2000 💰, 1500 🪵, 1500 🪨, 1000 🥖")}\n\n"
+            f"Cost: {escape_markdown_v2('2000 💰, 1500 🪵, 1500 🪨, 1000 🥖')}\n\n"
             f"🔹 \*Join an Existing Alliance\*\n"
             f"Search by name or browse the top alliances{escape_markdown_v2(".")}"
         )
