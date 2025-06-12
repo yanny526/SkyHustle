@@ -5,6 +5,44 @@ import datetime
 from datetime import timezone
 import telegram
 
+# Item definitions
+ITEMS = {
+    "revive_all": {
+        "name": "🧬 Revive All Units",
+        "description": "Instantly revives all dead troops in your army.",
+        "effect": "All dead troops have been revived!"
+    },
+    "emp_device": {
+        "name": "💥 EMP Field Device",
+        "description": "Boosts resource production by 50% for 1 hour.",
+        "effect": "Resource production boosted for 1 hour!"
+    },
+    "infinite_scout": {
+        "name": "🔎 Infinity Scout",
+        "description": "Allows unlimited scouting without alerting enemies.",
+        "effect": "Infinite scouting activated for 24 hours!"
+    },
+    "hazmat_mask": {
+        "name": "☢️ Hazmat Mask",
+        "description": "Grants access to radiation zones for 24 hours.",
+        "effect": "Radiation zone access granted for 24 hours!"
+    },
+    "speedup_1h": {
+        "name": "⏱️ 1h Speed-Up",
+        "description": "Reduces any active timer by 1 hour.",
+        "effect": "Active timer reduced by 1 hour!"
+    },
+    "shield_adv": {
+        "name": "🛡️ Advanced Shield",
+        "description": "Blocks the next attack on your base.",
+        "effect": "Advanced shield activated! Next attack will be blocked."
+    },
+    "hazmat_drone": {
+        "name": "☢️ Hazmat Drone",
+        "description": "Grants access to radiation zones for 24 hours.",
+        "effect": "Radiation zone access granted for 24 hours!"
+    }
+}
 
 async def inventory_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.effective_chat.id
@@ -46,14 +84,13 @@ async def inventory_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     text += f"\n💎 *Diamonds:* {int(data.get('diamonds',0))}\n"
 
     # Buttons for using items
-    use_item_buttons = []
+    keyboard = []
     for name, item_info in items.items():
         if item_info['count'] > 0:
-            use_item_buttons.append(InlineKeyboardButton(f"Use {name.split(':')[0].strip()}", callback_data=f"use_item:{item_info['key']}"))
-    
-    keyboard = []
-    if use_item_buttons:
-        keyboard.append(use_item_buttons)
+            keyboard.append([
+                InlineKeyboardButton("ℹ️ Info", callback_data=f"item_info:{item_info['key']}"),
+                InlineKeyboardButton("▶️ Use", callback_data=f"use_item:{item_info['key']}")
+            ])
     
     keyboard.append([InlineKeyboardButton("🏠 Back to Base", callback_data="INV_BACK")])
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -63,109 +100,210 @@ async def inventory_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         reply_markup=reply_markup
     )
 
-# --- Callbacks for Item Use ---
-
-async def use_item_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    Handles callback queries for item usage (use_item:<key>).
-    """
+async def show_item_info(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show detailed information about an item."""
     query = update.callback_query
     try:
         await query.answer()
     except telegram.error.BadRequest as e:
         if "Query is too old" in str(e):
-            # If the query is too old, we'll still process it but won't try to answer it
             pass
         else:
-            # For other BadRequest errors, we should log them
             print(f"Error answering callback query: {e}")
             return
 
-    user_id = query.from_user.id
-    _, item_key = query.data.split(':') # Expected format: "use_item:revive_all"
+    item_key = query.data.split(":", 1)[1]
+    
+    # Item descriptions
+    item_descriptions = {
+        "revive_all": "🧬 Revives all dead troops instantly.",
+        "emp_device": "💥 Boosts resource production by 50% for 1 hour.",
+        "infinite_scout": "🔎 Allows unlimited scouting without alerting enemies.",
+        "hazmat_mask": "☢️ Grants access to radiation zones for 24 hours.",
+        "speedup_1h": "⏱️ Reduces any active timer by 1 hour.",
+        "shield_adv": "🛡️ Blocks the next attack on your base.",
+        "hazmat_drone": "☢️ Grants access to radiation zones for 24 hours.",
+    }
 
-    player_data = get_player_data(user_id)
-    if not player_data:
-        try:
-            await query.edit_message_text("❌ You aren't registered yet. Send /start to begin.")
-        except telegram.error.BadRequest:
-            # If we can't edit the message, try sending a new one
-            await context.bot.send_message(
-                query.message.chat_id,
-                "❌ You aren't registered yet. Send /start to begin."
-            )
+    description = item_descriptions.get(item_key, "No description available.")
+    await query.edit_message_text(
+        f"*{item_key.replace('_', ' ').title()}*\n\n{description}",
+        parse_mode=constants.ParseMode.MARKDOWN
+    )
+
+async def inventory_use_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show menu of available items to use."""
+    user = update.effective_user
+    if not user:
         return
 
-    item_field = f"items_{item_key}"
-    current_item_count = player_data.get(item_field, 0)
+    data = get_player_data(user.id)
+    if not data:
+        await update.message.reply_text("❌ You aren't registered yet. Send /start to begin.")
+        return
 
-    if current_item_count <= 0:
-        try:
-            await query.edit_message_text(
-                f"You have no *{item_key.replace('_', ' ').title()}* left.",
-                parse_mode=constants.ParseMode.MARKDOWN
-            )
-        except telegram.error.BadRequest:
-            await context.bot.send_message(
-                query.message.chat_id,
-                f"You have no *{item_key.replace('_', ' ').title()}* left.",
-                parse_mode=constants.ParseMode.MARKDOWN
-            )
+    # Build keyboard with available items
+    keyboard = []
+    for key, item in ITEMS.items():
+        count = data.get(f"items_{key}", 0)
+        if count > 0:
+            keyboard.append([
+                InlineKeyboardButton(
+                    f"{item['name']} x{count}",
+                    callback_data=f"use_item_{key}"
+                )
+            ])
+
+    if not keyboard:
+        await update.message.reply_text("❌ You have no items to use.")
+        return
+
+    keyboard.append([InlineKeyboardButton("🏠 Back to Base", callback_data="INV_BACK")])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await update.message.reply_text(
+        "🛠 *Select an item to use:*",
+        parse_mode=constants.ParseMode.MARKDOWN_V2,
+        reply_markup=reply_markup
+    )
+
+async def use_item_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show confirmation dialog for item usage."""
+    query = update.callback_query
+    try:
+        await query.answer()
+    except telegram.error.BadRequest as e:
+        if "Query is too old" in str(e):
+            pass
+        else:
+            print(f"Error answering callback query: {e}")
+            return
+
+    key = query.data.split("_", 2)[2]
+    item = ITEMS.get(key)
+    if not item:
+        await query.edit_message_text("❌ Invalid item selected.")
+        return
+
+    keyboard = [
+        [
+            InlineKeyboardButton("✅ Yes", callback_data=f"confirm_use_{key}"),
+            InlineKeyboardButton("❌ No", callback_data="cancel")
+        ]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await query.edit_message_text(
+        f"🛠 *Use {item['name']}?*\n\n"
+        f"{item['description']}\n\n"
+        "Confirm?",
+        parse_mode=constants.ParseMode.MARKDOWN_V2,
+        reply_markup=reply_markup
+    )
+
+async def confirm_use_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle item usage confirmation."""
+    query = update.callback_query
+    try:
+        await query.answer()
+    except telegram.error.BadRequest as e:
+        if "Query is too old" in str(e):
+            pass
+        else:
+            print(f"Error answering callback query: {e}")
+            return
+
+    if query.data == "cancel":
+        await inventory_handler(update, context)
+        return
+
+    key = query.data.split("_", 2)[2]
+    item = ITEMS.get(key)
+    if not item:
+        await query.edit_message_text("❌ Invalid item selected.")
+        return
+
+    user_id = query.from_user.id
+    data = get_player_data(user_id)
+    if not data:
+        await query.edit_message_text("❌ You aren't registered yet. Send /start to begin.")
+        return
+
+    # Check item count
+    item_field = f"items_{key}"
+    current_count = data.get(item_field, 0)
+    if current_count <= 0:
+        await query.edit_message_text("❌ You don't have this item anymore.")
         return
 
     # Decrement item count
-    update_player_data(user_id, item_field, current_item_count - 1)
+    update_player_data(user_id, item_field, current_count - 1)
 
-    summary_message = f"*Used {item_key.replace('_', ' ').title()}!*\n\n"
+    # Apply item effect
     now = datetime.datetime.now(timezone.utc)
-
-    if item_key == "revive_all":
-        dead_infantry = player_data.get("army_dead_infantry", 0)
-        dead_tanks = player_data.get("army_dead_tanks", 0)
+    if key == "revive_all":
+        dead_infantry = data.get("army_dead_infantry", 0)
+        dead_tanks = data.get("army_dead_tanks", 0)
 
         if dead_infantry > 0:
-            update_player_data(user_id, "army_infantry", player_data.get("army_infantry", 0) + dead_infantry)
+            update_player_data(user_id, "army_infantry", data.get("army_infantry", 0) + dead_infantry)
             update_player_data(user_id, "army_dead_infantry", 0)
-            summary_message += f"👣 Revived {dead_infantry} infantry.\n"
 
         if dead_tanks > 0:
-            update_player_data(user_id, "army_tank", player_data.get("army_tank", 0) + dead_tanks)
+            update_player_data(user_id, "army_tank", data.get("army_tank", 0) + dead_tanks)
             update_player_data(user_id, "army_dead_tanks", 0)
-            summary_message += f"🛡️ Revived {dead_tanks} tanks.\n"
 
-        if dead_infantry == 0 and dead_tanks == 0:
-            summary_message = "You used *Revive All*, but had no dead troops to revive!\n"
-
-    elif item_key == "emp_device":
+    elif key == "emp_device":
         boost_end_time = now + datetime.timedelta(hours=1)
         update_player_data(user_id, "timers_emp_boost_end", boost_end_time.isoformat() + "Z")
-        summary_message += "⚡ EMP device activated! Resource production boosted for 1 hour.\n"
 
-    elif item_key == "hazmat_drone":
+    elif key == "hazmat_drone":
         access_end_time = now + datetime.timedelta(hours=24)
         update_player_data(user_id, "timers_hazmat_access_end", access_end_time.isoformat() + "Z")
-        summary_message += "☢️ Hazmat Drone deployed! You now have access to radiation zones for 24 hours.\n"
 
-    else:
-        summary_message = f"Unknown item: {item_key.replace('_', ' ').title()}.\n"
+    elif key == "speedup_1h":
+        timer_fields = [
+            "timers_base_level", "timers_mine_level", "timers_lumber_level",
+            "timers_warehouse_level", "timers_barracks_level", "timers_power_level",
+            "timers_hospital_level", "timers_research_level", "timers_workshop_level",
+            "timers_jail_level"
+        ]
+        
+        for field in timer_fields:
+            timer = data.get(field)
+            if timer:
+                try:
+                    if isinstance(timer, datetime.datetime):
+                        timer_dt = timer
+                    else:
+                        timer_dt = datetime.datetime.fromisoformat(str(timer).rstrip("Z")).replace(tzinfo=timezone.utc)
+                    
+                    if timer_dt > now:
+                        new_time = timer_dt - datetime.timedelta(hours=1)
+                        if new_time > now:
+                            update_player_data(user_id, field, new_time.isoformat() + "Z")
+                except (ValueError, TypeError):
+                    continue
 
-    try:
-        await query.edit_message_text(summary_message, parse_mode=constants.ParseMode.MARKDOWN)
-    except telegram.error.BadRequest:
-        # If we can't edit the message, send a new one
-        await context.bot.send_message(
-            query.message.chat_id,
-            summary_message,
-            parse_mode=constants.ParseMode.MARKDOWN
-        )
+    elif key == "shield_adv":
+        shield_end_time = now + datetime.timedelta(days=7)
+        update_player_data(user_id, "timers_shield_end", shield_end_time.isoformat() + "Z")
 
-    # Optionally, refresh the inventory view after item use
-    try:
-        await inventory_handler(update, context)
-    except Exception as e:
-        print(f"Error refreshing inventory: {e}")
+    # Show success message
+    await query.edit_message_text(
+        f"✅ You used {item['name']}\\. {item['effect']}",
+        parse_mode=constants.ParseMode.MARKDOWN_V2
+    )
+
+    # Refresh base UI
+    from modules.base_ui import base_handler
+    await base_handler(update, context)
 
 def setup_inventory_system(app: Application) -> None:
+    """Register inventory system handlers."""
     app.add_handler(CommandHandler("inventory", inventory_handler))
+    app.add_handler(CommandHandler("use", inventory_use_menu))
     app.add_handler(CallbackQueryHandler(inventory_handler, pattern="^INV_BACK$"))
-    app.add_handler(CallbackQueryHandler(use_item_callback, pattern="^use_item:")) 
+    app.add_handler(CallbackQueryHandler(show_item_info, pattern="^item_info:"))
+    app.add_handler(CallbackQueryHandler(use_item_callback, pattern="^use_item_"))
+    app.add_handler(CallbackQueryHandler(confirm_use_callback, pattern="^confirm_use_")) 

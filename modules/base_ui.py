@@ -15,9 +15,15 @@ from telegram.ext import (
     Application,
     CommandHandler,
     ContextTypes,
+    CallbackQueryHandler,
 )
 
-from modules.sheets_helper import get_player_data, tick_resources
+from modules.sheets_helper import get_player_data, tick_resources, update_player_data
+from modules.resource_system import tick_resources
+import logging
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 # Stub for ongoing activities until we build that system
 def _get_ongoing_activities(user_id: int) -> list[str]:
@@ -31,9 +37,13 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     user = update.effective_user
     if not user:
         return
-    # TICK all resources up to now
-    tick_resources(user.id)
-    # ... now load get_player_data and build UI
+
+    # TICK resources up to now
+    try:
+        tick_resources(user.id)
+    except Exception as e:
+        logger.error(f"Resource tick failed: {e}")
+        # Continue with base display even if tick fails
 
     data: Dict[str, Any] = get_player_data(user.id)
     if not data:
@@ -101,16 +111,21 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         f"🚔 Jail: {jail_lvl}",
     ]
 
-    # Hourly outputs
-    wood_out = lumber_lvl * 60
-    stone_out = mine_lvl * 45
-    food_out = warehouse_lvl * 50
-    gold_out = mine_lvl * 30
-    energy_out = powerplant_lvl * 20
-    lines_output = [
-        f"- 🪵 Wood: +{wood_out}/hr 🪨 Stone: +{stone_out}/hr",
-        f"- 🥖 Food: +{food_out}/hr 💰 Gold: +{gold_out}/hr",
-        f"- 🔋 Energy: +{energy_out}/hr",
+    # Calculate per-minute production rates
+    wood_per_minute = lumber_lvl * 1.0
+    stone_per_minute = mine_lvl * 0.8
+    food_per_minute = warehouse_lvl * 0.7
+    gold_per_minute = mine_lvl * 0.5
+    energy_per_minute = powerplant_lvl * 0.3
+
+    # Resource production rates
+    lines_resources = [
+        f"🪵 Wood: {wood} \\(\\+{wood_per_minute:.1f}/min\\)",
+        f"⛰️ Stone: {stone} \\(\\+{stone_per_minute:.1f}/min\\)",
+        f"🍖 Food: {food} \\(\\+{food_per_minute:.1f}/min\\)",
+        f"💰 Gold: {gold} \\(\\+{gold_per_minute:.1f}/min\\)",
+        f"⚡ Energy: {energy_cur}/{energy_max} \\(\\+{energy_per_minute:.1f}/min\\)",
+        "――――――――――――",
     ]
 
     # Ongoing activities
@@ -131,8 +146,8 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "🧱 *Building Levels:*",
         *lines_buildings,
         "",
-        "📤 *Hourly Output:*",
-        *lines_output,
+        "📤 *Resource Production:*",
+        *lines_resources,
         "",
         "💰 *Current Resources:*",
         f"🪵 {wood} 🪨 {stone} 🥖 {food} 💰 {gold} 💎 {diamonds}",
