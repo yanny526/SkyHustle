@@ -121,11 +121,11 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     # Format resource production block with proper escaping
     resource_block = (
         "📈 *Resource Production*\n\n"
-        f"🌲 *Wood*: *{wood}*  (`*+{wood_per_minute:.1f}*/min*)\n"
-        f"⛰️ *Stone*: *{stone}*  (`*+{stone_per_minute:.1f}*/min*)\n"
-        f"🍖 *Food*: *{food}*  (`*+{food_per_minute:.1f}*/min*)\n"
-        f"💰 *Gold*: *{gold}*  (`*+{gold_per_minute:.1f}*/min*)\n"
-        f"⚡ *Energy*: *{energy_cur}/{energy_max}*  (`*+{energy_per_minute:.1f}*/min*)\n"
+        f"🌲 Wood: {wood}  (`+{wood_per_minute:.1f}/min`)\n"
+        f"⛰️ Stone: {stone}  (`+{stone_per_minute:.1f}/min`)\n"
+        f"🍖 Food: {food}  (`+{food_per_minute:.1f}/min`)\n"
+        f"💰 Gold: {gold}  (`+{gold_per_minute:.1f}/min`)\n"
+        f"⚡ Energy: {energy_cur}/{energy_max}  (`+{energy_per_minute:.1f}/min`)\n"
         "――――――――――――"
     )
 
@@ -144,29 +144,29 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         f"🧬 Prestige Level: {prestige}",
         f"🏗️ Base Level: {base_lvl}",
         "",
-        "🧱 *Building Levels:*",
+        "*Building Levels:*",
         *lines_buildings,
         "",
         resource_block,
         "",
-        "💰 *Current Resources:*",
+        "*Current Resources:*",
         f"🪵 {wood}  🪨 {stone}  🥖 {food}  💰 {gold}  💎 {diamonds}",
         f"🔋 Energy: {energy_cur}/{energy_max}",
         "",
-        "🛠️ *Ongoing Activities:*",
+        "*Ongoing Activities:*",
         *lines_activities,
         "",
-        "🎯 *Your Command Options:*",
+        "*Your Command Options:*",
         "[⚒️ Build] [🧪 Research] [🪖 Train]",
         "[⚔️ Attack] [🎖 Quests] [📊 Building Info]",
     ])
 
     # Insert into your message
-    msg += "\n\n🪖 *Army Overview:*  \n"
+    msg += "\n\n*Army Overview:*\n"
     msg += "\n".join(army_lines)
 
     if bm_lines:
-        msg += "\n\n🛡️ *Black Market Units:*  \n"
+        msg += "\n\n*Black Market Units:*\n"
         msg += "\n".join(bm_lines)
 
     keyboard = [
