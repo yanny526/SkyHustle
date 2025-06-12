@@ -15,18 +15,18 @@ async def inventory_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     # Gather counts
     items = {
-        "🧬 Revive All Units": {"key": "revive_all", "count": int(data.get("items_revive_all", 0))},
-        "💥 EMP Field Device": {"key": "emp_device", "count": int(data.get("items_emp_device", 0))},
-        "🔎 Infinity Scout": {"key": "infinite_scout", "count": int(data.get("items_infinite_scout", 0))},
-        "☢️ Hazmat Mask": {"key": "hazmat_mask", "count": int(data.get("items_hazmat_mask", 0))},
-        "⏱️ 1h Speed-Up": {"key": "speedup_1h", "count": int(data.get("items_speedup_1h", 0))},
-        "🛡️ Advanced Shield": {"key": "shield_adv", "count": int(data.get("items_shield_adv", 0))},
-        "☢️ Hazmat Drone": {"key": "hazmat_drone", "count": int(data.get("items_hazmat_drone", 0))},
+        "🧬 Revive All Units": {"key": "revive_all", "count": int(data.get("items_revive_all", 0) or 0)},
+        "💥 EMP Field Device": {"key": "emp_device", "count": int(data.get("items_emp_device", 0) or 0)},
+        "🔎 Infinity Scout": {"key": "infinite_scout", "count": int(data.get("items_infinite_scout", 0) or 0)},
+        "☢️ Hazmat Mask": {"key": "hazmat_mask", "count": int(data.get("items_hazmat_mask", 0) or 0)},
+        "⏱️ 1h Speed-Up": {"key": "speedup_1h", "count": int(data.get("items_speedup_1h", 0) or 0)},
+        "🛡️ Advanced Shield": {"key": "shield_adv", "count": int(data.get("items_shield_adv", 0) or 0)},
+        "☢️ Hazmat Drone": {"key": "hazmat_drone", "count": int(data.get("items_hazmat_drone", 0) or 0)},
     }
     units = {
-        "🧨 BM Barrage": int(data.get("army_bm_barrage", 0)),
-        "🦂 Venom Reapers": int(data.get("army_venom_reaper", 0)),
-        "🦾 Titan Crushers": int(data.get("army_titan_crusher", 0)),
+        "🧨 BM Barrage": int(data.get("army_bm_barrage", 0) or 0),
+        "🦂 Venom Reapers": int(data.get("army_venom_reaper", 0) or 0),
+        "🦾 Titan Crushers": int(data.get("army_titan_crusher", 0) or 0),
     }
 
     text = "🎒 *[YOUR INVENTORY]*\n\n"
