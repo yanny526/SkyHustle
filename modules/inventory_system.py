@@ -53,22 +53,22 @@ async def inventory_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         await context.bot.send_message(chat_id, "❌ Send /start first.")
         return
 
-    # Fetch data
+    # Fetch data and convert counts to integers
     consumables = [
-        ("Revive All",    data.get("items_revive_all", 0)),
-        ("EMP Field Device", data.get("items_emp_device", 0)),
-        ("Infinity Scout", data.get("items_infinite_scout", 0)),
-        ("Hazmat Mask",   data.get("items_hazmat_mask", 0)),
-        ("1 H Speed-Up",  data.get("items_speedup_1h", 0)),
-        ("Advanced Shield", data.get("items_shield_adv", 0)),
-        ("Hazmat Drone",  data.get("items_hazmat_drone", 0)),
+        ("Revive All",    int(data.get("items_revive_all", 0))),
+        ("EMP Field Device", int(data.get("items_emp_device", 0))),
+        ("Infinity Scout", int(data.get("items_infinite_scout", 0))),
+        ("Hazmat Mask",   int(data.get("items_hazmat_mask", 0))),
+        ("1 H Speed-Up",  int(data.get("items_speedup_1h", 0))),
+        ("Advanced Shield", int(data.get("items_shield_adv", 0))),
+        ("Hazmat Drone",  int(data.get("items_hazmat_drone", 0))),
     ]
     bm_units = [
-        ("BM Barrage",    data.get("army_bm_barrage", 0)),
-        ("Venom Reapers", data.get("army_venom_reaper", 0)),
-        ("Titan Crushers",data.get("army_titan_crusher", 0)),
+        ("BM Barrage",    int(data.get("army_bm_barrage", 0))),
+        ("Venom Reapers", int(data.get("army_venom_reaper", 0))),
+        ("Titan Crushers",int(data.get("army_titan_crusher", 0))),
     ]
-    diamonds = data.get("diamonds", 0)
+    diamonds = int(data.get("diamonds", 0))
 
     # Build message text
     text = "🎒 *Your Inventory*\n\n"
@@ -172,7 +172,7 @@ async def inventory_use_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
     # Build keyboard with available items
     keyboard = []
     for key, item in ITEMS.items():
-        count = data.get(f"items_{key}", 0)
+        count = int(data.get(f"items_{key}", 0))
         if count > 0:
             keyboard.append([
                 InlineKeyboardButton(
@@ -258,7 +258,7 @@ async def confirm_use_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
     # Check item count
     item_field = f"items_{key}"
-    current_count = data.get(item_field, 0)
+    current_count = int(data.get(item_field, 0))
     if current_count <= 0:
         await query.edit_message_text("❌ You don't have this item anymore.")
         return

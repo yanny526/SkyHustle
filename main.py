@@ -1,7 +1,10 @@
 # main.py
 import os
+import sys
+import signal
 from dotenv import load_dotenv
 from telegram.ext import Application
+from telegram.error import Conflict
 from modules.sheets_helper import initialize_sheets
 from modules.registration import setup_registration
 from modules.base_ui import setup_base_ui
@@ -13,7 +16,16 @@ from modules.inventory_system import setup_inventory_system
 from modules.alliance_system import setup_alliance_system
 from modules.zone_system import setup_zone_system
 
+def signal_handler(signum, frame):
+    """Handle shutdown signals gracefully."""
+    print("\nShutting down bot gracefully...")
+    sys.exit(0)
+
 def main() -> None:
+    # Set up signal handlers for graceful shutdown
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    
     # Load environment variables
     load_dotenv()
     
@@ -34,8 +46,16 @@ def main() -> None:
     setup_alliance_system(app)
     setup_zone_system(app)
     
-    # Start the bot
-    app.run_polling()
+    # Start the bot with error handling
+    try:
+        app.run_polling()
+    except Conflict as e:
+        print("Error: Another instance of the bot is already running.")
+        print("Please make sure only one instance is running at a time.")
+        sys.exit(1)
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     main() 
