@@ -78,7 +78,7 @@ async def inventory_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     text += "\n*Black Market Units:*\n"
     for name, cnt in bm_units:
         text += f"• {name}: **{cnt}**\n"
-    text += f"\n💎 Diamonds: **{diamonds:,}**"
+    text += f"\n💎 Diamonds: **{diamonds}**"
 
     # Generate keyboard
     keyboard = []
