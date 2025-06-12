@@ -6,6 +6,11 @@ from datetime import timezone
 import telegram
 import re
 from typing import Dict, Tuple
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 # Item definitions
 ITEMS = {
@@ -47,8 +52,10 @@ ITEMS = {
 }
 
 def escape_markdown(text: str) -> str:
-    """Escape special characters for MarkdownV2."""
-    special_chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+    """Escape special characters for MarkdownV2, except '~' for strikethrough."""
+    # List of special characters to escape for MarkdownV2
+    # '~' is excluded as it's used for strikethrough as per the requirement.
+    special_chars = ['_', '*', '[', ']', '(', ')', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
     for char in special_chars:
         text = text.replace(char, f'\\{char}')
     return text
@@ -115,9 +122,10 @@ def build_inventory_ui(inventory: Dict[str, int]) -> Tuple[str, InlineKeyboardMa
     # Add consumable buttons
     for key in consumable_keys:
         count = inventory.get(key, 0)
+        name = item_names[key]
         row = [InlineKeyboardButton("ℹ️ Info", callback_data=f"inv_info:{key}")]
         if count > 0:
-            row.append(InlineKeyboardButton("▶️ Use", callback_data=f"inv_use:{key}"))
+            row.append(InlineKeyboardButton(f"▶️ Use {escape_markdown(name)}", callback_data=f"inv_use:{key}"))
         else:
             row.append(InlineKeyboardButton("🚫", callback_data="noop"))
         keyboard.append(row)
@@ -125,9 +133,10 @@ def build_inventory_ui(inventory: Dict[str, int]) -> Tuple[str, InlineKeyboardMa
     # Add Black Market Unit buttons
     for key in bm_keys:
         count = inventory.get(key, 0)
+        name = item_names[key]
         row = [InlineKeyboardButton("ℹ️ Info", callback_data=f"inv_info:{key}")]
         if count > 0:
-            row.append(InlineKeyboardButton("▶️ Use", callback_data=f"inv_use:{key}"))
+            row.append(InlineKeyboardButton(f"▶️ Use {escape_markdown(name)}", callback_data=f"inv_use:{key}"))
         else:
             row.append(InlineKeyboardButton("🚫", callback_data="noop"))
         keyboard.append(row)
@@ -173,6 +182,11 @@ async def inventory_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     # Build UI
     text, reply_markup = build_inventory_ui(inventory)
 
+    # Debug: Print the generated text to console
+    print("--- Generated Inventory UI Text ---")
+    print(text)
+    print("-----------------------------------")
+
     # Send message
     if update.callback_query:
         try:
@@ -205,7 +219,7 @@ async def show_item_info(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         if "Query is too old" in str(e):
             pass
         else:
-            print(f"Error answering callback query: {e}")
+            logger.error(f"Error answering callback query: {e}")
             return
 
     item_key = query.data.split(":", 1)[1]
@@ -281,7 +295,7 @@ async def use_item_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         if "Query is too old" in str(e):
             pass
         else:
-            print(f"Error answering callback query: {e}")
+            logger.error(f"Error answering callback query: {e}")
             return
 
     key = query.data.split("_", 2)[2]
@@ -299,8 +313,8 @@ async def use_item_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     await query.edit_message_text(
-        f"🛠 *Use {item['name']}?*\n\n"
-        f"{item['description']}\n\n"
+        f"🛠 *Use {escape_markdown(item['name'])}?*\n\n"
+        f"{escape_markdown(item['description'])}\n\n"
         "Confirm?",
         parse_mode=constants.ParseMode.MARKDOWN_V2,
         reply_markup=reply_markup
@@ -315,7 +329,7 @@ async def confirm_use_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         if "Query is too old" in str(e):
             pass
         else:
-            print(f"Error answering callback query: {e}")
+            logger.error(f"Error answering callback query: {e}")
             return
 
     if query.data == "cancel":
