@@ -233,6 +233,7 @@ def get_player_data(user_id: int) -> Dict[str, Any]:
     data: Dict[str, Any] = {}
     for i, h in enumerate(headers):
         val = values[i] if i < len(values) else ""
+        print(f"DEBUG: Processing header '{h}', raw value: '{val}'") # Debug print
         if h in [
             "user_id", "resources_wood", "resources_stone", "resources_gold",
             "resources_food", "resources_energy", "resources_diamonds",
@@ -268,8 +269,11 @@ def get_player_data(user_id: int) -> Dict[str, Any]:
                 data[h] = datetime.fromisoformat(val.rstrip("Z")).replace(tzinfo=timezone.utc) if val else None
             except ValueError:
                 data[h] = None # Fallback to None if parsing fails
+            print(f"DEBUG: Converted '{h}' to datetime: {data[h]}") # Debug print
         else:
             data[h] = val
+            print(f"DEBUG: Converted '{h}' to string: {data[h]}") # Debug print
+    print(f"DEBUG: Final player data: {data}") # Debug print
     return data
 
 def update_player_data(user_id: int, field: str, new_value: Any) -> None:
