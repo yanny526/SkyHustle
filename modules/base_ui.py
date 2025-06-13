@@ -189,11 +189,11 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     # Format resource production block with proper escaping
     resource_block = (
         "📈 *Resource Production*\n\n"
-        f"🌲 Wood: {wood}  (`{escape_markdown(f'+{wood_per_hour:.1f}/hr', version=2)}`)\n"
-        f"⛰️ Stone: {stone}  (`{escape_markdown(f'+{stone_per_hour:.1f}/hr', version=2)}`)\n"
-        f"🍖 Food: {food}  (`{escape_markdown(f'+{food_per_hour:.1f}/hr', version=2)}`)\n"
-        f"💰 Gold: {gold}  (`{escape_markdown(f'+{gold_per_hour:.1f}/hr', version=2)}`)\n"
-        f"⚡ Energy: {energy_cur}/{energy_max}  (`{escape_markdown(f'+{energy_per_hour:.1f}/hr', version=2)}`)\n"
+        f"🌲 Wood: {wood}  \(`{escape_markdown(f'+{wood_per_hour:.1f}/hr')}`\)\n"
+        f"⛰️ Stone: {stone}  \(`{escape_markdown(f'+{stone_per_hour:.1f}/hr')}`\)\n"
+        f"🍖 Food: {food}  \(`{escape_markdown(f'+{food_per_hour:.1f}/hr')}`\)\n"
+        f"💰 Gold: {gold}  \(`{escape_markdown(f'+{gold_per_hour:.1f}/hr')}`\)\n"
+        f"⚡ Energy: {energy_cur}/{energy_max}  \(`{escape_markdown(f'+{energy_per_hour:.1f}/hr')}`\)\n"
         "――――――――――――"
     )
 
