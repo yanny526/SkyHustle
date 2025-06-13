@@ -48,6 +48,14 @@ def main() -> None:
     # Register handlers
     setup_registration(app)
     setup_base_ui(app)
+    # Building system handlers
+    app.add_handler(CommandHandler("build", build_menu))
+    app.add_handler(CallbackQueryHandler(build_menu, pattern="^BUILD_MENU$"))
+    app.add_handler(CallbackQueryHandler(build_choice, pattern="^BUILD_[a-z_]+$"))
+    app.add_handler(CallbackQueryHandler(confirm_build, pattern="^CONFIRM_[a-z_]+$"))
+    app.add_handler(CallbackQueryHandler(cancel_build, pattern="^CANCEL_BUILD$"))
+    app.add_handler(CallbackQueryHandler(show_building_info, pattern="^INFO_[a-z_]+$"))
+    app.add_handler(CallbackQueryHandler(view_queue, pattern="^view_queue$"))
     setup_training_system(app)
     setup_research_system(app)
     setup_black_market(app)
