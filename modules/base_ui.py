@@ -62,6 +62,8 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     Triggered by /base or callback queries. Fetches the calling user's data and displays
     resources, diamonds, base level, and presents "Build New" / "Train Troops" buttons.
     """
+    logger.info("Entering base_handler.")
+
     # Get user from either message or callback query
     if update.callback_query:
         user = update.callback_query.from_user
@@ -73,7 +75,14 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         callback_data = None
 
     if not user:
+        logger.warning("base_handler: User object is None.")
         return
+
+    if not message:
+        logger.warning("base_handler: Message object is None.")
+        return
+
+    logger.info(f"base_handler: User ID: {user.id}, Callback Data: {callback_data}")
 
     # Handle different menu callbacks
     if callback_data == "BM_MENU":
@@ -91,14 +100,19 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
 
     # TICK resources up to now
+    logger.info("base_handler: Calling tick_resources.")
     await tick_resources(context)
+    logger.info("base_handler: tick_resources completed.")
 
     data: Dict[str, Any] = get_player_data(user.id)
+    logger.info(f"base_handler: Player data fetched: {data is not None}")
     if not data:
         if message:
             await message.reply_text(
-                "❌ You aren't registered yet. Send /start to begin.",
+                "❌ You aren't registered yet\. Send /start to begin\.",
+                parse_mode=constants.ParseMode.MARKDOWN_V2
             )
+        logger.warning(f"base_handler: No data for user {user.id}. Sent registration message.")
         return
 
     # Safely pull stats with defaults
@@ -243,26 +257,32 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     # Send or edit message based on context
     if update.callback_query:
+        logger.info("base_handler: Attempting to edit message.")
         try:
             await message.edit_text(
                 msg,
                 parse_mode=constants.ParseMode.MARKDOWN_V2,
                 reply_markup=reply_markup,
             )
+            logger.info("base_handler: Message edited successfully.")
         except Exception as e:
-            logger.error(f"Failed to edit message: {e}")
+            logger.error(f"base_handler: Failed to edit message: {e}")
             # Fallback to sending new message if edit fails
+            logger.info("base_handler: Falling back to sending new message.")
             await message.reply_text(
                 msg,
                 parse_mode=constants.ParseMode.MARKDOWN_V2,
                 reply_markup=reply_markup,
             )
+            logger.info("base_handler: Fallback message sent.")
     else:
+        logger.info("base_handler: Attempting to send new message.")
         await message.reply_text(
             msg,
             parse_mode=constants.ParseMode.MARKDOWN_V2,
             reply_markup=reply_markup,
         )
+        logger.info("base_handler: New message sent successfully.")
 
 def setup_base_ui(app: Application) -> None:
     """

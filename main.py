@@ -3,7 +3,7 @@ import os
 import sys
 import signal
 from dotenv import load_dotenv
-from telegram.ext import Application, JobQueue
+from telegram.ext import Application, JobQueue, ContextTypes, CommandHandler
 from telegram.error import Conflict
 from modules.sheets_helper import initialize_sheets
 from modules.registration import setup_registration
@@ -15,6 +15,12 @@ from modules.black_market import setup_black_market
 from modules.inventory_system import setup_inventory_system
 from modules.alliance_system import setup_alliance_system
 from modules.zone_system import setup_zone_system
+from telegram import Update
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 def signal_handler(signum, frame):
     """Handle shutdown signals gracefully."""
@@ -22,6 +28,7 @@ def signal_handler(signum, frame):
     sys.exit(0)
 
 def main() -> None:
+    logger.info("Bot main function starting...")
     # Set up signal handlers for graceful shutdown
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
@@ -45,7 +52,13 @@ def main() -> None:
     setup_inventory_system(app)
     setup_alliance_system(app)
     setup_zone_system(app)
-    
+
+    # Temporary test command for debugging
+    async def test_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        logger.info("--- /test command received ---")
+        await update.message.reply_text("Test command received successfully!")
+    app.add_handler(CommandHandler("test", test_command))
+
     # schedule resource ticks every minute:
     job_queue = app.job_queue
     job_queue.run_repeating(
@@ -59,11 +72,11 @@ def main() -> None:
     try:
         app.run_polling()
     except Conflict as e:
-        print("Error: Another instance of the bot is already running.")
-        print("Please make sure only one instance is running at a time.")
+        logger.error("Error: Another instance of the bot is already running.")
+        logger.error("Please make sure only one instance is running at a time.")
         sys.exit(1)
     except Exception as e:
-        print(f"An error occurred: {e}")
+        logger.error(f"An error occurred: {e}")
         sys.exit(1)
 
 if __name__ == "__main__":

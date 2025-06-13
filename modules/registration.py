@@ -118,17 +118,18 @@ def setup_registration(app: Application) -> None:
         entry_points=[CommandHandler("start", start_handler)],
         states={
             ASK_NAME: [
-                CallbackQueryHandler(dramatic_continue_callback, pattern=f"^{DRAMATIC_CONTINUE}$"),
-                MessageHandler(filters.TEXT & ~filters.COMMAND, received_name_handler),
+                CallbackQueryHandler(dramatic_continue_callback, pattern=f"^{DRAMATIC_CONTINUE}$", block=False),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, received_name_handler, block=False),
             ],
         },
         fallbacks=[
-            CommandHandler("cancel", cancel_handler),
-            CallbackQueryHandler(enter_base_callback, pattern=f"^{ENTER_BASE}$"),
+            CommandHandler("cancel", cancel_handler, block=False),
+            CallbackQueryHandler(enter_base_callback, pattern=f"^{ENTER_BASE}$", block=False),
         ],
         per_user=True,
         per_chat=True,
         name="registration_flow",
+        block=False,
     )
     app.add_handler(conv)
 
