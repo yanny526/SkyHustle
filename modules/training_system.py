@@ -26,7 +26,7 @@ async def train_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
     msg = "\n".join([
         "🪖 *[TRAIN YOUR ARMY]*",
-        "Available Units (by Barracks level):",
+        "Available Units \(by Barracks level\):",
         "",
         f"• 👣 {escape_markdown(_UNIT_STATS['infantry']['name'])} (Tier 1)", 
         f"• 🛡️ {escape_markdown(_UNIT_STATS['tank']['name'])} (Tier 1)", 
@@ -80,10 +80,15 @@ async def train_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     # Calculate max by resources
     current_food = int(data.get("resources_food", 0))
     current_gold = int(data.get("resources_gold", 0))
+    
+    print(f"DEBUG in train_choice: current_food={current_food}, current_gold={current_gold}") # New debug
+    print(f"DEBUG in train_choice: unit_food_cost={u['food']}, unit_gold_cost={u['gold']}") # New debug
+    print(f"DEBUG in train_choice: barracks_level={b_lvl}") # New debug
 
     max_by_food = current_food // u["food"]
     max_by_gold = current_gold // u["gold"]
     max_qty = min(max_by_food, max_by_gold, b_lvl * 50)
+    print(f"DEBUG in train_choice: max_by_food={max_by_food}, max_by_gold={max_by_gold}, b_lvl*50={b_lvl*50}, final_max_qty={max_qty}") # New debug
 
     # Prompt quantity
     text = (
