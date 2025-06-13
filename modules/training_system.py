@@ -140,13 +140,13 @@ async def confirm_train(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     await context.bot.send_message(
         chat_id,
         f"✅ Training {escape_markdown(str(qty))} {escape_markdown(stats['name'])} started\!\n"
-        f"It will take {escape_markdown(str(stats['time'] * qty))}s to complete.",
+        f"It will take {escape_markdown(str(stats['time'] * qty))}s to complete\.",
         parse_mode=constants.ParseMode.MARKDOWN_V2
     )
 
 async def cancel_train(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.callback_query.answer()
-    await context.bot.send_message(update.effective_chat.id, "❌ Training cancelled.", parse_mode=constants.ParseMode.MARKDOWN_V2)
+    await context.bot.send_message(update.effective_chat.id, "❌ Training cancelled\.", parse_mode=constants.ParseMode.MARKDOWN_V2)
 
 async def show_unit_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
