@@ -97,56 +97,88 @@ def _authenticate_and_open_sheet() -> None:
     """Authenticate to Google Sheets using BASE64_CREDS and open the spreadsheet."""
     global _gc, _sheet
 
-    raw_creds = os.getenv("BASE64_CREDS")
-    sheet_id = os.getenv("SHEET_ID")
-    if not raw_creds or not sheet_id:
-        raise RuntimeError("BASE64_CREDS and SHEET_ID must be set in environment variables.")
+    for _ in range(2): # Retry once
+        try:
+            raw_creds = os.getenv("BASE64_CREDS")
+            sheet_id = os.getenv("SHEET_ID")
+            if not raw_creds or not sheet_id:
+                raise RuntimeError("BASE64_CREDS and SHEET_ID must be set in environment variables.")
 
-    try:
-        creds_json = json.loads(raw_creds) if raw_creds.strip().startswith("{") else json.loads(base64.b64decode(raw_creds))
-    except Exception as e:
-        raise RuntimeError(f"Failed to parse BASE64_CREDS as JSON or base64: {e}")
+            try:
+                creds_json = json.loads(raw_creds) if raw_creds.strip().startswith("{") else json.loads(base64.b64decode(raw_creds))
+            except Exception as e:
+                raise RuntimeError(f"Failed to parse BASE64_CREDS as JSON or base64: {e}")
 
-    credentials = Credentials.from_service_account_info(creds_json, scopes=_SCOPES)
-    _gc = gspread.authorize(credentials)
-    _sheet = _gc.open_by_key(sheet_id)
+            credentials = Credentials.from_service_account_info(creds_json, scopes=_SCOPES)
+            _gc = gspread.authorize(credentials)
+            _sheet = _gc.open_by_key(sheet_id)
+            return # If successful, exit the retry loop
+        except gspread.exceptions.APIError as e:
+            print(f"APIError in _authenticate_and_open_sheet, retrying: {e}")
+            # Clear globals to force re-authentication in the next attempt
+            _gc = None
+            _sheet = None
+        except Exception as e:
+            # Catch other potential errors during setup to avoid infinite retries on unrecoverable errors
+            raise RuntimeError(f"Failed to authenticate or open sheet: {e}")
+    raise RuntimeError("Failed to authenticate and open sheet after multiple retries.")
 
 def _ensure_players_worksheet() -> None:
     """Ensure that the "Players" worksheet exists with the correct headers."""
     global _players_ws
 
-    try:
-        _players_ws = _sheet.worksheet("Players")
-    except gspread.exceptions.WorksheetNotFound:
-        _players_ws = _sheet.add_worksheet(title="Players", rows="100", cols=str(len(needed_headers)))
-        _players_ws.append_row(needed_headers)
-        return
+    for _ in range(2): # Retry once
+        try:
+            _players_ws = _sheet.worksheet("Players")
 
-    existing = _players_ws.row_values(1)
-    to_append = [h for h in needed_headers if h not in existing]
-    if to_append:
-        updated_headers = existing + to_append
-        _players_ws.update('A1', [updated_headers])
+            existing = _players_ws.row_values(1)
+            to_append = [h for h in needed_headers if h not in existing]
+            if to_append:
+                updated_headers = existing + to_append
+                _players_ws.update('A1', [updated_headers])
+            return # Success, exit retry loop
+        except gspread.exceptions.WorksheetNotFound:
+            _players_ws = _sheet.add_worksheet(title="Players", rows="100", cols=str(len(needed_headers)))
+            _players_ws.append_row(needed_headers)
+            return # Success, exit retry loop
+        except gspread.exceptions.APIError as e:
+            print(f"APIError in _ensure_players_worksheet, retrying: {e}")
+            # Clear globals to force re-authentication in the next attempt
+            global _gc, _sheet
+            _gc = None
+            _sheet = None
+        except Exception as e:
+            raise RuntimeError(f"Failed to ensure players worksheet: {e}")
+    raise RuntimeError("Failed to ensure players worksheet after multiple retries.")
 
 def initialize_sheets() -> None:
     """Initialize Google Sheets client and ensure the Players worksheet exists."""
-    if _gc and _sheet and _players_ws:
-        return
     _authenticate_and_open_sheet()
     _ensure_players_worksheet()
 
 def get_player_row(user_id: int) -> Optional[int]:
     """Return the row number where user_id matches, or None if not found."""
-    if _players_ws is None:
-        raise RuntimeError("Sheets not initialized. Call initialize_sheets() first.")
-    try:
-        cell = _players_ws.find(str(user_id), in_column=1)
-        if cell: # Explicitly check if cell is not None
-            return cell.row
-        else:
-            return None # If find returns None, treat as not found
-    except GSpreadException:
-        return None
+    for _ in range(2): # Retry once
+        try:
+            if _players_ws is None:
+                raise RuntimeError("Sheets not initialized. Call initialize_sheets() first.")
+            cell = _players_ws.find(str(user_id), in_column=1)
+            if cell: # Explicitly check if cell is not None
+                return cell.row
+            else:
+                return None # If find returns None, treat as not found
+        except gspread.exceptions.APIError as e:
+            print(f"APIError in get_player_row, retrying: {e}")
+            # Clear globals to force re-initialization
+            global _gc, _sheet, _players_ws
+            _gc = None
+            _sheet = None
+            _players_ws = None
+        except RuntimeError as e:
+            # If sheets aren't initialized, try initializing and then retry the find
+            print(f"RuntimeError in get_player_row, initializing sheets and retrying: {e}")
+            initialize_sheets() # This will now be forced if globals are None
+    return None # Return None after all retries fail
 
 def create_new_player(user_id: int, telegram_username: str, game_name: str) -> None:
     """Append a new player row with default resources, levels, and coordinates."""
@@ -267,58 +299,71 @@ def create_new_player(user_id: int, telegram_username: str, game_name: str) -> N
 
 def get_player_data(user_id: int) -> Dict[str, Any]:
     """Return a dict of all player fields, typed (int or str). Empty if not found."""
-    if _players_ws is None:
-        raise RuntimeError("Sheets not initialized. Call initialize_sheets() first.")
-    row_idx = get_player_row(user_id)
-    if row_idx is None:
-        return {}
-    headers = _players_ws.row_values(1)
-    values = _players_ws.row_values(row_idx)
-    data: Dict[str, Any] = {}
-    for i, h in enumerate(headers):
-        val = values[i] if i < len(values) else ""
-        print(f"DEBUG: Processing header '{h}', raw value: '{val}'") # Debug print
-        if h in [
-            "user_id", "resources_wood", "resources_stone", "resources_gold",
-            "resources_food", "resources_energy", "resources_diamonds",
-            "gold_balance", "wood_balance", "research_balance", # New balance fields
-            "capacity_gold", "capacity_wood", "capacity_research", # New capacity fields
-            "gold_rate", "wood_rate", "research_rate", # New rate fields
-            "base_level", "mine_level", "lumber_house_level", "warehouse_level",
-            "barracks_level", "power_plant_level", "hospital_level", "research_lab_level",
-            "workshop_level", "jail_level", "power", "prestige_level",
-            "alliance_name", "alliance_role", "alliance_joined_at",
-            "alliance_members_count", "alliance_power",
-            "army_infantry", "army_tank", "army_artillery", "army_destroyer",
-            "army_bm_barrage", "army_venom_reaper", "army_titan_crusher",
-            "items_hazmat_mask", "items_energy_drink", "items_repair_kit",
-            "items_medkit", "items_radar", "items_shield_generator",
-            "items_revive_all", "items_emp_device", "items_hazmat_drone", # New item fields
-            "timers_base_level", "timers_mine_level", "timers_lumber_level",
-            "timers_warehouse_level", "timers_barracks_level", "timers_power_level",
-            "timers_hospital_level", "timers_research_level", "timers_workshop_level",
-            "timers_jail_level",
-            "scheduled_zone", "scheduled_time", "controlled_zone",
-            "energy", "energy_max", "last_daily", "last_attack"
-        ]:
-            try:
-                data[h] = int(val)
-            except:
-                data[h] = 0
-        elif h == "zones_controlled":
-            data[h] = val.split(",") if val else []
-        elif h in ["last_collection", "timers_emp_boost_end", "timers_hazmat_access_end"]:
-            # Parse ISO format with timezone. If not present, default to None.
-            try:
-                data[h] = datetime.fromisoformat(val.rstrip("Z")).replace(tzinfo=timezone.utc) if val else None
-            except ValueError:
-                data[h] = None # Fallback to None if parsing fails
-            print(f"DEBUG: Converted '{h}' to datetime: {data[h]}") # Debug print
-        else:
-            data[h] = val
-            print(f"DEBUG: Converted '{h}' to string: {data[h]}") # Debug print
-    print(f"DEBUG: Final player data: {data}") # Debug print
-    return data
+    # Ensure sheets are initialized before any operation, and retry if APIError occurs
+    for _ in range(2): # Retry once
+        try:
+            initialize_sheets()
+
+            if _players_ws is None:
+                raise RuntimeError("Sheets not initialized. Call initialize_sheets() first.")
+            row_idx = get_player_row(user_id)
+            if row_idx is None:
+                return {}
+            headers = _players_ws.row_values(1)
+            values = _players_ws.row_values(row_idx)
+            data: Dict[str, Any] = {}
+            for i, h in enumerate(headers):
+                val = values[i] if i < len(values) else ""
+                print(f"DEBUG: Processing header '{h}', raw value: '{val}'") # Debug print
+                if h in [
+                    "user_id", "resources_wood", "resources_stone", "resources_gold",
+                    "resources_food", "resources_energy", "resources_diamonds",
+                    "gold_balance", "wood_balance", "research_balance", # New balance fields
+                    "capacity_gold", "capacity_wood", "capacity_research", # New capacity fields
+                    "gold_rate", "wood_rate", "research_rate", # New rate fields
+                    "base_level", "mine_level", "lumber_house_level", "warehouse_level",
+                    "barracks_level", "power_plant_level", "hospital_level", "research_lab_level",
+                    "workshop_level", "jail_level", "power", "prestige_level",
+                    "alliance_name", "alliance_role", "alliance_joined_at",
+                    "alliance_members_count", "alliance_power",
+                    "army_infantry", "army_tank", "army_artillery", "army_destroyer",
+                    "army_bm_barrage", "army_venom_reaper", "army_titan_crusher",
+                    "items_hazmat_mask", "items_energy_drink", "items_repair_kit",
+                    "items_medkit", "items_radar", "items_shield_generator",
+                    "items_revive_all", "items_emp_device", "items_hazmat_drone", # New item fields
+                    "timers_base_level", "timers_mine_level",
+                    "timers_warehouse_level", "timers_barracks_level", "timers_power_level",
+                    "timers_hospital_level", "timers_research_level", "timers_workshop_level",
+                    "timers_jail_level",
+                    "scheduled_zone", "scheduled_time", "controlled_zone",
+                    "energy", "energy_max", "last_daily", "last_attack"
+                ]:
+                    try:
+                        data[h] = int(val)
+                    except:
+                        data[h] = 0
+                elif h == "zones_controlled":
+                    data[h] = val.split(",") if val else []
+                elif h in ["last_collection", "timers_emp_boost_end", "timers_hazmat_access_end"]:
+                    # Parse ISO format with timezone. If not present, default to None.
+                    try:
+                        data[h] = datetime.fromisoformat(val.rstrip("Z")).replace(tzinfo=timezone.utc) if val else None
+                    except ValueError:
+                        data[h] = None # Fallback to None if parsing fails
+                    print(f"DEBUG: Converted '{h}' to datetime: {data[h]}") # Debug print
+                else:
+                    data[h] = val
+                    print(f"DEBUG: Converted '{h}' to string: {data[h]}") # Debug print
+            print(f"DEBUG: Final player data: {data}") # Debug print
+            return data
+        except gspread.exceptions.APIError as e:
+            print(f"APIError in get_player_data, retrying: {e}")
+            # Clear globals to force re-initialization
+            global _gc, _sheet, _players_ws
+            _gc = None
+            _sheet = None
+            _players_ws = None
+    raise RuntimeError("Failed to retrieve player data after multiple retries.")
 
 def update_player_data(user_id: int, field: str, new_value: Any) -> None:
     """Update a specific field for a player."""
@@ -351,58 +396,71 @@ def update_player_data(user_id: int, field: str, new_value: Any) -> None:
 
 def list_all_players() -> List[Dict[str, Any]]:
     """Lists all players in the 'Players' worksheet, returning their data as a list of dictionaries."""
-    if _players_ws is None:
-        raise RuntimeError("Sheets not initialized. Call initialize_sheets() first.")
-    
-    headers = _players_ws.row_values(1)
-    all_values = _players_ws.get_all_values()
-    
-    players_data = []
-    # Start from the second row to skip headers
-    for row_values in all_values[1:]:
-        player_data: Dict[str, Any] = {}
-        for i, h in enumerate(headers):
-            val = row_values[i] if i < len(row_values) else ""
-            if h in [
-                "user_id", "resources_wood", "resources_stone", "resources_gold",
-                "resources_food", "resources_energy", "resources_diamonds",
-                "gold_balance", "wood_balance", "research_balance",
-                "capacity_gold", "capacity_wood", "capacity_research",
-                "gold_rate", "wood_rate", "research_rate",
-                "base_level", "mine_level", "lumber_house_level", "warehouse_level",
-                "barracks_level", "power_plant_level", "hospital_level", "research_lab_level",
-                "workshop_level", "jail_level", "power", "prestige_level",
-                "alliance_name", "alliance_role", "alliance_joined_at",
-                "alliance_members_count", "alliance_power",
-                "army_infantry", "army_tank", "army_artillery", "army_destroyer",
-                "army_bm_barrage", "army_venom_reaper", "army_titan_crusher",
-                "army_dead_infantry", "army_dead_tanks",
-                "items_hazmat_mask", "items_energy_drink", "items_repair_kit",
-                "items_medkit", "items_radar", "items_shield_generator",
-                "items_revive_all", "items_emp_device", "items_hazmat_drone",
-                "items_infinite_scout", "items_speedup_1h", "items_shield_adv",
-                "timers_base_level", "timers_mine_level", "timers_lumber_level",
-                "timers_warehouse_level", "timers_barracks_level", "timers_power_level",
-                "timers_hospital_level", "timers_research_level", "timers_workshop_level",
-                "timers_jail_level",
-                "scheduled_zone", "scheduled_time", "controlled_zone",
-                "energy", "energy_max", "last_daily", "last_attack"
-            ]:
-                try:
-                    player_data[h] = int(val)
-                except ValueError:
-                    player_data[h] = 0 # Default to 0 if conversion fails
-            elif h == "zones_controlled":
-                player_data[h] = val.split(",") if val else []
-            elif h in ["last_collection", "timers_emp_boost_end", "timers_hazmat_access_end"]:
-                try:
-                    player_data[h] = datetime.fromisoformat(val.rstrip("Z")).replace(tzinfo=timezone.utc) if val else None
-                except ValueError:
-                    player_data[h] = None
-            else:
-                player_data[h] = val
-        players_data.append(player_data)
-    return players_data
+    # Ensure sheets are initialized before any operation, and retry if APIError occurs
+    for _ in range(2): # Retry once
+        try:
+            initialize_sheets()
+
+            if _players_ws is None:
+                raise RuntimeError("Sheets not initialized. Call initialize_sheets() first.")
+            
+            headers = _players_ws.row_values(1)
+            all_values = _players_ws.get_all_values()
+            
+            players_data = []
+            # Start from the second row to skip headers
+            for row_values in all_values[1:]:
+                player_data: Dict[str, Any] = {}
+                for i, h in enumerate(headers):
+                    val = row_values[i] if i < len(row_values) else ""
+                    if h in [
+                        "user_id", "resources_wood", "resources_stone", "resources_gold",
+                        "resources_food", "resources_energy", "resources_diamonds",
+                        "gold_balance", "wood_balance", "research_balance",
+                        "capacity_gold", "capacity_wood", "capacity_research",
+                        "gold_rate", "wood_rate", "research_rate",
+                        "base_level", "mine_level", "lumber_house_level", "warehouse_level",
+                        "barracks_level", "power_plant_level", "hospital_level", "research_lab_level",
+                        "workshop_level", "jail_level", "power", "prestige_level",
+                        "alliance_name", "alliance_role", "alliance_joined_at",
+                        "alliance_members_count", "alliance_power",
+                        "army_infantry", "army_tank", "army_artillery", "army_destroyer",
+                        "army_bm_barrage", "army_venom_reaper", "army_titan_crusher",
+                        "army_dead_infantry", "army_dead_tanks",
+                        "items_hazmat_mask", "items_energy_drink", "items_repair_kit",
+                        "items_medkit", "items_radar", "items_shield_generator",
+                        "items_revive_all", "items_emp_device", "items_hazmat_drone",
+                        "items_infinite_scout", "items_speedup_1h", "items_shield_adv",
+                        "timers_base_level", "timers_mine_level",
+                        "timers_warehouse_level", "timers_barracks_level", "timers_power_level",
+                        "timers_hospital_level", "timers_research_level", "timers_workshop_level",
+                        "timers_jail_level",
+                        "scheduled_zone", "scheduled_time", "controlled_zone",
+                        "energy", "energy_max", "last_daily", "last_attack"
+                    ]:
+                        try:
+                            player_data[h] = int(val)
+                        except ValueError:
+                            player_data[h] = 0 # Default to 0 if conversion fails
+                    elif h == "zones_controlled":
+                        player_data[h] = val.split(",") if val else []
+                    elif h in ["last_collection", "timers_emp_boost_end", "timers_hazmat_access_end"]:
+                        try:
+                            player_data[h] = datetime.fromisoformat(val.rstrip("Z")).replace(tzinfo=timezone.utc) if val else None
+                        except ValueError:
+                            player_data[h] = None
+                    else:
+                        player_data[h] = val
+                players_data.append(player_data)
+            return players_data
+        except gspread.exceptions.APIError as e:
+            print(f"APIError in list_all_players, retrying: {e}")
+            # Clear globals to force re-initialization
+            global _gc, _sheet, _players_ws
+            _gc = None
+            _sheet = None
+            _players_ws = None
+    raise RuntimeError("Failed to list all players after multiple retries.")
 
 def ensure_headers(ws: gspread.Worksheet, headers: List[str]) -> None:
     """Ensures all specified headers exist in the given worksheet, adding them if missing."""
