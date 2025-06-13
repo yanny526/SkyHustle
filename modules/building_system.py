@@ -4,6 +4,7 @@ from telegram import constants # Required for parse_mode in build_menu, build_ch
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup # For build_menu, build_choice
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes # For setup_building_system
 from telegram.helpers import escape_markdown # For MarkdownV2 escaping
+from datetime import datetime, timedelta
 
 from modules.sheets_helper import get_player_data, update_player_data
 
@@ -322,6 +323,7 @@ def apply_building_effects(player_data: Dict[str, Any]) -> Dict[str, Any]:
 
 
 async def build_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Shows the building menu with current levels and upgrade options."""
     user = update.effective_user
     if not user:
         return
@@ -331,47 +333,68 @@ async def build_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         if update.message:
             await update.message.reply_text("❌ You aren't registered yet\. Send /start to begin\.")
         elif update.callback_query:
-            await update.callback_query.edit_message_text("❌ You aren't registered yet\. Send /start to begin\.")
+            await update.callback_query.answer("❌ You aren't registered yet\. Send /start to begin\.")
         return
 
-    msg_lines = ["⚒️ *[BUILD MENU]*", "Choose a building to upgrade:", ""]
-
+    # Get current building levels
+    buildings = get_player_buildings(user.id)
+    
+    # Build message lines and keyboard buttons
+    msg_lines = ["🏗 *Building Menu*"]
     keyboard_buttons = []
-    # Sort buildings by their display name for consistent order
-    sorted_building_keys = sorted(BUILDING_CONFIG.keys(), key=lambda k: BUILDING_CONFIG[k]["name"])
-
-    for building_key in sorted_building_keys:
-        config = BUILDING_CONFIG[building_key]
-        field_name = _BUILDING_KEY_TO_FIELD.get(building_key)
-        if not field_name:
-            continue
+    
+    for building_key, config in BUILDING_CONFIG.items():
+        current_level = buildings.get(building_key, 1)
+        max_level = config["max_level"]
         
-        current_level = int(data.get(field_name, 1))
+        # Add building info line
+        msg_lines.append(f"\n{config['emoji']} *{escape_markdown(config['name'])}* — Level {current_level}/{max_level}")
         
-        msg_lines.append(f"{config['emoji']} {escape_markdown(config['name'])}: Lv {escape_markdown(str(current_level))}")
-        
-        # Add button for upgrade if not max level
-        if current_level < config['max_level']:
-            keyboard_buttons.append(
-                [InlineKeyboardButton(f"{config['emoji']} {escape_markdown(config['name'])}", callback_data=f"BUILD_{building_key}")]
-            )
+        if current_level < max_level:
+            # Calculate upgrade info
+            upgrade_info = calculate_upgrade(building_key, current_level)
+            if upgrade_info:
+                # Format costs
+                cost_display = []
+                for resource, amount in upgrade_info["cost"].items():
+                    emoji_map = {"wood": "🪵", "stone": "🪨", "food": "🥖", "gold": "💰", "energy": "⚡"}
+                    cost_display.append(f"{emoji_map.get(resource, '')} {amount}")
+                cost_str = " / ".join(cost_display)
+                
+                # Add upgrade info
+                minutes = upgrade_info["duration"] // 60
+                msg_lines.append(f"➡️ Upgrade cost: {cost_str}, time: {minutes}m")
+                
+                # Add upgrade button
+                keyboard_buttons.append([
+                    InlineKeyboardButton(
+                        f"⚒️ Upgrade {config['name']}", 
+                        callback_data=f"BUILD_{building_key}"
+                    )
+                ])
         else:
-            # Indicate max level
-            keyboard_buttons.append(
-                [InlineKeyboardButton(f"✅ {escape_markdown(config['name'])} \\(Max Level\\)", callback_data=f"INFO_{building_key}")]
-            ) # Using INFO_ to avoid triggering build_choice for maxed buildings
+            # Building is at max level
+            keyboard_buttons.append([
+                InlineKeyboardButton(
+                    f"✅ {escape_markdown(config['name'])} \\(Max Level\\)", 
+                    callback_data=f"INFO_{building_key}"
+                )
+            ])
 
-    msg_lines.append("\n🏠 Back to Base") # Add backslash for newline
+    # Add back button
+    msg_lines.append("\n🏠 Back to Base")
     keyboard_buttons.append([InlineKeyboardButton("🏠 Back to Base", callback_data="BASE_MENU")])
 
-    msg = "\n".join(msg_lines) # Use \n for internal joins, Telegram will handle the newlines.
+    # Build message and keyboard
+    msg = "\n".join(msg_lines)
     reply_markup = InlineKeyboardMarkup(keyboard_buttons)
 
+    # Send or edit message
     if update.message:
         await update.message.reply_text(
             msg,
             reply_markup=reply_markup,
-            parse_mode=constants.ParseMode.MARKDOWN_V2, # Use MARKDOWN_V2
+            parse_mode=constants.ParseMode.MARKDOWN_V2
         )
     elif update.callback_query:
         query = update.callback_query
@@ -379,11 +402,12 @@ async def build_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         await query.edit_message_text(
             msg,
             reply_markup=reply_markup,
-            parse_mode=constants.ParseMode.MARKDOWN_V2, # Use MARKDOWN_V2
+            parse_mode=constants.ParseMode.MARKDOWN_V2
         )
 
 
 async def build_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handles the building upgrade choice and shows upgrade details."""
     query = update.callback_query
     await query.answer()
 
@@ -409,78 +433,80 @@ async def build_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
 
     current_level = int(data.get(field_name, 1))
-
-    if current_level >= config["max_level"]:
-        await query.edit_message_text(f"✅ {escape_markdown(config['name'])} is already at max level \({escape_markdown(str(config['max_level']))}\)\.")
+    upgrade_info = calculate_upgrade(building_key, current_level)
+    
+    if not upgrade_info:
+        await query.edit_message_text(f"✅ {escape_markdown(config['name'])} is already at max level \\({escape_markdown(str(config['max_level']))}\\)\.")
         return
 
-    next_level = current_level + 1
-
-    # Calculate costs and time using helper functions
-    costs = calculate_upgrade_cost(data, building_key)
-    time_mins = calculate_upgrade_time(data, building_key)
-
-    # Format costs
+    # Format costs with emojis
     cost_display = []
-    for resource, amount in costs.items():
-        # Add emojis for resources. Assuming resource keys match.
+    for resource, amount in upgrade_info["cost"].items():
         emoji_map = {"wood": "🪵", "stone": "🪨", "food": "🥖", "gold": "💰", "energy": "⚡"}
-        cost_display.append(f"{emoji_map.get(resource, '')} {escape_markdown(str(amount))}") # Escape amount
-    
-    cost_str = " ".join(cost_display)
+        cost_display.append(f"{emoji_map.get(resource, '')} {escape_markdown(str(amount))}")
+    cost_str = " / ".join(cost_display)
 
-    # Determine next level effects
-    effects_lines = []
-    if building_key == "town_hall":
-        reduction = (next_level * config["effects"]["upgrade_time_reduction_per_level"]) * 100
-        effects_lines.append(f"Reduces all upgrade times by {escape_markdown(f'{reduction:.0f}%')}") # Escape %
-        if next_level in config["effects"]["build_slots_unlock_levels"]:
-            effects_lines.append("Unlocks new build slot")
-    elif "wood_production_per_level" in config["effects"] or \
-         "stone_production_per_level" in config["effects"] or \
-         "food_production_per_level" in config["effects"] or \
-         "gold_production_per_level" in config["effects"] or \
-         "energy_production_per_level" in config["effects"]:
-        for effect_type, value in config["effects"].items():
-            if "_production_per_level" in effect_type:
-                resource_name = effect_type.replace("_production_per_level", "").replace("_", " ").capitalize()
-                effects_lines.append(f"\+{escape_markdown(str(value))} {escape_markdown(resource_name)}/hr") # Escape + and / 
-    elif building_key == "barracks":
-        reduction = (next_level * config["effects"]["infantry_training_time_reduction_per_level"]) * 100
-        effects_lines.append(f"Reduces infantry training time by {escape_markdown(f'{reduction:.0f}%')}")
-        for unit, level in config["effects"]["unlocks"].items():
-            if next_level == level:
-                effects_lines.append(f"Unlocks {escape_markdown(unit)}")
-    elif building_key == "research_lab":
-        reduction = (next_level * config["effects"]["research_time_reduction_per_level"]) * 100
-        effects_lines.append(f"Reduces research time by {escape_markdown(f'{reduction:.0f}%')}")
-        if "tech_tiers" in config["effects"]["unlocks"] and next_level in config["effects"]["unlocks"]["tech_tiers"]:
-            effects_lines.append(f"Unlocks Tech Tier {escape_markdown(str(next_level))}")
-    elif building_key == "hospital":
-        reduction = (next_level * config["effects"]["healing_time_reduction_per_level"]) * 100
-        effects_lines.append(f"Reduces healing time by {escape_markdown(f'{reduction:.0f}%')}")
-        effects_lines.append(f"\+{escape_markdown(str(config['effects']['capacity_increase_per_level']))} Hospital capacity") # Escape + 
-    elif building_key == "workshop":
-        reduction = (next_level * config["effects"]["vehicle_training_time_reduction_per_level"]) * 100
-        effects_lines.append(f"Reduces vehicle training time by {escape_markdown(f'{reduction:.0f}%')}")
-        for unit, level in config["effects"]["unlocks"].items():
-            if next_level == level:
-                effects_lines.append(f"Unlocks {escape_markdown(unit)}")
-    
-    effects_str = "\n".join([f"• {line}" for line in effects_lines]) if effects_lines else "No specific effects for next level\." # Escape . and newlines
-
+    # Format duration
+    minutes = upgrade_info["duration"] // 60
+    hours = minutes // 60
+    minutes = minutes % 60
+    duration_str = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
 
     # Build the message
-    msg = "\n".join([
-        f"{config['emoji']} *{escape_markdown(config['name'])}: Level {escape_markdown(str(current_level))} → {escape_markdown(str(next_level))}*",
-        "\-\-\- ", # Escape hyphens for markdown
+    msg_lines = [
+        f"{config['emoji']} *{escape_markdown(config['name'])}: Level {current_level} → {upgrade_info['next_level']}*",
+        "\-\-\-",
         f"💰 Cost: {cost_str}",
-        f"⏱️ Time: {escape_markdown(str(time_mins))}m",
-        "\-\-\- ", # Escape hyphens for markdown
-        "*Next Level Effects:*",
-        effects_str
-    ])
+        f"⏱️ Time: {duration_str}",
+        "\-\-\-",
+        "*Next Level Effects:*"
+    ]
 
+    # Add effects based on building type
+    effects_lines = []
+    if building_key == "town_hall":
+        reduction = (upgrade_info["next_level"] * config["effects"]["upgrade_time_reduction_per_level"]) * 100
+        effects_lines.append(f"Reduces all upgrade times by {escape_markdown(f'{reduction:.0f}%')}")
+        if upgrade_info["next_level"] in config["effects"]["build_slots_unlock_levels"]:
+            effects_lines.append("Unlocks new build slot")
+    elif "wood_production_per_level" in config["effects"]:
+        effects_lines.append(f"\+{escape_markdown(str(config['effects']['wood_production_per_level']))} Wood/hr")
+    elif "stone_production_per_level" in config["effects"]:
+        effects_lines.append(f"\+{escape_markdown(str(config['effects']['stone_production_per_level']))} Stone/hr")
+    elif "food_production_per_level" in config["effects"]:
+        effects_lines.append(f"\+{escape_markdown(str(config['effects']['food_production_per_level']))} Food/hr")
+    elif "gold_production_per_level" in config["effects"]:
+        effects_lines.append(f"\+{escape_markdown(str(config['effects']['gold_production_per_level']))} Gold/hr")
+    elif "energy_production_per_level" in config["effects"]:
+        effects_lines.append(f"\+{escape_markdown(str(config['effects']['energy_production_per_level']))} Energy/hr")
+    elif building_key == "barracks":
+        reduction = (upgrade_info["next_level"] * config["effects"]["infantry_training_time_reduction_per_level"]) * 100
+        effects_lines.append(f"Reduces infantry training time by {escape_markdown(f'{reduction:.0f}%')}")
+        for unit, level in config["effects"]["unlocks"].items():
+            if upgrade_info["next_level"] == level:
+                effects_lines.append(f"Unlocks {escape_markdown(unit)}")
+    elif building_key == "research_lab":
+        reduction = (upgrade_info["next_level"] * config["effects"]["research_time_reduction_per_level"]) * 100
+        effects_lines.append(f"Reduces research time by {escape_markdown(f'{reduction:.0f}%')}")
+        if "tech_tiers" in config["effects"]["unlocks"] and upgrade_info["next_level"] in config["effects"]["unlocks"]["tech_tiers"]:
+            effects_lines.append(f"Unlocks Tech Tier {escape_markdown(str(upgrade_info['next_level']))}")
+    elif building_key == "hospital":
+        reduction = (upgrade_info["next_level"] * config["effects"]["healing_time_reduction_per_level"]) * 100
+        effects_lines.append(f"Reduces healing time by {escape_markdown(f'{reduction:.0f}%')}")
+        effects_lines.append(f"\+{escape_markdown(str(config['effects']['capacity_increase_per_level']))} Hospital capacity")
+    elif building_key == "workshop":
+        reduction = (upgrade_info["next_level"] * config["effects"]["vehicle_training_time_reduction_per_level"]) * 100
+        effects_lines.append(f"Reduces vehicle training time by {escape_markdown(f'{reduction:.0f}%')}")
+        for unit, level in config["effects"]["unlocks"].items():
+            if upgrade_info["next_level"] == level:
+                effects_lines.append(f"Unlocks {escape_markdown(unit)}")
+
+    if effects_lines:
+        msg_lines.extend([f"• {line}" for line in effects_lines])
+    else:
+        msg_lines.append("No specific effects for next level\.")
+
+    # Build keyboard
     keyboard = [
         [
             InlineKeyboardButton("✅ Confirm", callback_data=f"CONFIRM_{building_key}"),
@@ -489,12 +515,13 @@ async def build_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     ]
 
     await query.edit_message_text(
-        msg,
+        "\n".join(msg_lines),
         reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode=constants.ParseMode.MARKDOWN_V2, # Use MARKDOWN_V2
+        parse_mode=constants.ParseMode.MARKDOWN_V2
     )
 
 async def confirm_build(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handles the confirmation of a building upgrade."""
     query = update.callback_query
     await query.answer()
 
@@ -520,59 +547,196 @@ async def confirm_build(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         return
 
     current_level = int(data.get(field_name, 1))
-
-    if current_level >= config["max_level"]:
-        await query.edit_message_text(f"✅ {escape_markdown(config['name'])} is already at max level \({escape_markdown(str(config['max_level']))}\)\.")
+    upgrade_info = calculate_upgrade(building_key, current_level)
+    
+    if not upgrade_info:
+        await query.edit_message_text(f"✅ {escape_markdown(config['name'])} is already at max level \\({escape_markdown(str(config['max_level']))}\\)\.")
         return
-
-    costs = calculate_upgrade_cost(data, building_key)
-    time_mins = calculate_upgrade_time(data, building_key) # This is for timer/display, not for deduction logic here.
 
     # Check if player has enough resources
-    player_resources = {
-        "wood": int(data.get("resources_wood", 0)),
-        "stone": int(data.get("resources_stone", 0)),
-        "food": int(data.get("resources_food", 0)),
-        "gold": int(data.get("resources_gold", 0)),
-        "energy": int(data.get("resources_energy", 0)),
-    }
-
-    not_enough_resources = []
-    for resource, cost in costs.items():
-        if player_resources.get(resource, 0) < cost:
-            not_enough_resources.append(resource.capitalize())
-
-    if not_enough_resources:
-        await query.edit_message_text(f"❌ Not enough resources: {escape_markdown(', '.join(not_enough_resources))}\.") # Escape comma and dot
+    if not can_afford(user.id, upgrade_info["cost"]):
+        await query.edit_message_text("❌ Not enough resources\.")
         return
 
-    # Deduct resources
-    for resource, cost in costs.items():
-        update_player_data(user.id, f"resources_{resource}", player_resources[resource] - cost)
+    # Deduct resources and set timer
+    deduct_resources(user.id, upgrade_info["cost"])
+    end_time = datetime.utcnow() + timedelta(seconds=upgrade_info["duration"])
+    timer_field = f"timers_{building_key}_level"
+    update_player_data(user.id, timer_field, end_time.isoformat() + "Z")
 
-    # Increment building level
-    update_player_data(user.id, field_name, current_level + 1)
+    # Format duration for display
+    hours = upgrade_info["duration"] // 3600
+    minutes = (upgrade_info["duration"] % 3600) // 60
+    duration_str = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
 
     # Confirm message
     msg = "\n".join([
-        "✔️ Upgrade started\!", # Escape !
-        f"🕒 Complete in {escape_markdown(str(time_mins))} minutes\." # Escape .
+        "✔️ Upgrade started\!",
+        f"🕒 Complete in {duration_str}\.",
+        "\n🏠 Back to Base"
     ])
 
-    await query.edit_message_text(msg, parse_mode=constants.ParseMode.MARKDOWN_V2)
+    keyboard = [[InlineKeyboardButton("🏠 Back to Base", callback_data="BASE_MENU")]]
+    
+    await query.edit_message_text(
+        msg,
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode=constants.ParseMode.MARKDOWN_V2
+    )
 
 async def cancel_build(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
     await query.edit_message_text("❌ Build cancelled\.", parse_mode=constants.ParseMode.MARKDOWN_V2) # Escape .
 
+def get_player_buildings(user_id: int) -> Dict[str, int]:
+    """Fetches all current building levels for a player."""
+    data = get_player_data(user_id)
+    if not data:
+        return {}
+    
+    buildings = {}
+    for building_key, field_name in _BUILDING_KEY_TO_FIELD.items():
+        level = int(data.get(field_name, 1))
+        buildings[building_key] = level
+    return buildings
+
+def calculate_upgrade(building_key: str, current_level: int) -> Dict[str, Any]:
+    """Calculates upgrade details for a building."""
+    config = get_building_config(building_key)
+    if not config:
+        return None
+    
+    if current_level >= config["max_level"]:
+        return None
+    
+    next_level = current_level + 1
+    costs = {}
+    for resource, base_cost in config["base_costs"].items():
+        costs[resource] = math.ceil(base_cost * (config["cost_multiplier"] ** current_level))
+    
+    duration = math.ceil(config["base_time"] * (config["time_multiplier"] ** current_level))
+    
+    return {
+        "cost": costs,
+        "duration": duration * 60,  # Convert to seconds
+        "next_level": next_level
+    }
+
+def can_afford(user_id: int, cost: Dict[str, int]) -> bool:
+    """Checks if a player can afford the upgrade cost."""
+    data = get_player_data(user_id)
+    if not data:
+        return False
+    
+    for resource, amount in cost.items():
+        current = int(data.get(f"resources_{resource}", 0))
+        if current < amount:
+            return False
+    return True
+
+def deduct_resources(user_id: int, cost: Dict[str, int]) -> None:
+    """Deducts resources from a player's inventory."""
+    data = get_player_data(user_id)
+    if not data:
+        return
+    
+    for resource, amount in cost.items():
+        current = int(data.get(f"resources_{resource}", 0))
+        update_player_data(user_id, f"resources_{resource}", current - amount)
+
+async def start_upgrade(update: Update, context: ContextTypes.DEFAULT_TYPE, building_key: str) -> None:
+    """Starts a building upgrade."""
+    user = update.effective_user
+    if not user:
+        return
+    
+    data = get_player_data(user.id)
+    if not data:
+        await update.callback_query.answer("❌ You aren't registered yet. Send /start to begin.")
+        return
+    
+    field_name = _BUILDING_KEY_TO_FIELD.get(building_key)
+    if not field_name:
+        await update.callback_query.answer("❌ Invalid building selected.")
+        return
+    
+    current_level = int(data.get(field_name, 1))
+    upgrade_info = calculate_upgrade(building_key, current_level)
+    
+    if not upgrade_info:
+        await update.callback_query.answer("🏗 Already at max level!")
+        return
+    
+    if not can_afford(user.id, upgrade_info["cost"]):
+        await update.callback_query.answer("❌ Not enough resources!")
+        return
+    
+    # Deduct resources and set timer
+    deduct_resources(user.id, upgrade_info["cost"])
+    end_time = datetime.utcnow() + timedelta(seconds=upgrade_info["duration"])
+    timer_field = f"timers_{building_key}_level"
+    update_player_data(user.id, timer_field, end_time.isoformat() + "Z")
+    
+    # Format duration for display
+    hours = upgrade_info["duration"] // 3600
+    minutes = (upgrade_info["duration"] % 3600) // 60
+    duration_str = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
+    
+    config = get_building_config(building_key)
+    await update.callback_query.answer(
+        f"⚙️ Upgrading {config['emoji']} {config['name']} to Level {upgrade_info['next_level']}!\n⏱ ETA: {duration_str}"
+    )
+
+async def complete_upgrades_for(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Completes any pending upgrades for a player."""
+    data = get_player_data(user_id)
+    if not data:
+        return
+    
+    now = datetime.utcnow()
+    completed_upgrades = []
+    
+    for building_key, field_name in _BUILDING_KEY_TO_FIELD.items():
+        timer_field = f"timers_{building_key}_level"
+        timer_str = data.get(timer_field)
+        
+        if not timer_str:
+            continue
+        
+        try:
+            end_time = datetime.fromisoformat(timer_str.replace("Z", "+00:00"))
+            if end_time <= now:
+                # Upgrade is complete
+                current_level = int(data.get(field_name, 1))
+                new_level = current_level + 1
+                update_player_data(user_id, field_name, new_level)
+                update_player_data(user_id, timer_field, None)  # Clear timer
+                
+                config = get_building_config(building_key)
+                completed_upgrades.append(f"✅ {config['emoji']} {config['name']} upgraded to Level {new_level}!")
+        except (ValueError, TypeError):
+            continue
+    
+    if completed_upgrades:
+        # Send notification about completed upgrades
+        message = "Base stats updated:\n" + "\n".join(completed_upgrades)
+        try:
+            await context.bot.send_message(chat_id=user_id, text=message)
+        except Exception:
+            pass  # Ignore if we can't send the message
+
 def setup_building_system(app: Application) -> None:
-    """Register building system handlers."""
+    """Sets up the building system handlers and scheduler."""
+    # Add handlers
     app.add_handler(CommandHandler("build", build_menu))
-
-    # now also catch the inline "⚒️ Build" button
-    app.add_handler(CallbackQueryHandler(build_menu, pattern="^BUILD_MENU$"))
-
-    app.add_handler(CallbackQueryHandler(build_choice, pattern="^BUILD_"))
-    app.add_handler(CallbackQueryHandler(confirm_build, pattern="^CONFIRM_"))
-    app.add_handler(CallbackQueryHandler(cancel_build, pattern="^CANCEL_BUILD$")) 
+    app.add_handler(CallbackQueryHandler(build_choice, pattern="^BUILD_[a-z_]+$"))
+    app.add_handler(CallbackQueryHandler(confirm_build, pattern="^CONFIRM_[a-z_]+$"))
+    app.add_handler(CallbackQueryHandler(cancel_build, pattern="^CANCEL_BUILD$"))
+    
+    # Add scheduler job to check for completed upgrades
+    app.job_queue.run_repeating(
+        lambda context: complete_upgrades_for(context.user_data.get('user_id'), context),
+        interval=60,  # Check every minute
+        first=10  # Start after 10 seconds
+    ) 
