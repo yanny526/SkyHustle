@@ -210,7 +210,7 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     # Build the message with proper escaping
     msg = "\n".join([
-        f"🏠 *[Commander {name}'s Base]*",
+        f"🏠 *[Commander {escape_markdown(name)}\'s Base]*",
         f"📍 Coordinates: X:{x}, Y:{y}",
         f"📈 Power: {power}",
         f"🧬 Prestige Level: {prestige}",
@@ -228,9 +228,7 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "*Ongoing Activities:*",
         *lines_activities,
         "",
-        "*Your Command Options:*",
-        "[⚒️ Build] [🧪 Research] [🪖 Train]",
-        "[⚔️ Attack] [🎖 Quests] [📊 Building Info]",
+        f"*Your Command Options:*"
     ])
 
     # Insert into your message
@@ -250,48 +248,31 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         [
             InlineKeyboardButton("⚔️ Attack", callback_data="BASE_ATTACK"),
             InlineKeyboardButton("🎖 Quests", callback_data="BASE_QUESTS"),
-            InlineKeyboardButton("📊 Building Info", callback_data="BASE_INFO"),
+            InlineKeyboardButton("📊 Building Info", callback_data="BUILD_MENU"),
         ],
         [
-            InlineKeyboardButton("🕶️ Black Market", callback_data="BM_MENU"),
+            InlineKeyboardButton("💰 Black Market", callback_data="BM_MENU"),
+            InlineKeyboardButton("🤝 Alliance", callback_data="ALLIANCE_MENU"),
+            InlineKeyboardButton("🗺 Zones", callback_data="ZONE_MENU"),
         ],
-        [
-            InlineKeyboardButton("🎒 Inventory", callback_data="SHOW_INVENTORY"),
-        ],
-        [
-            InlineKeyboardButton("🤝 Alliances", callback_data="ALLIANCE_MENU"),
-        ]
+        [InlineKeyboardButton("🏠 Back to Base", callback_data="base")]
     ]
+
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    # Send or edit message based on context
-    if update.callback_query:
-        logger.info("base_handler: Attempting to edit message.")
-        try:
-            await message.edit_text(
-                msg,
-                parse_mode=constants.ParseMode.MARKDOWN_V2,
-                reply_markup=reply_markup,
-            )
-            logger.info("base_handler: Message edited successfully.")
-        except Exception as e:
-            logger.error(f"base_handler: Failed to edit message: {e}")
-            # Fallback to sending new message if edit fails
-            logger.info("base_handler: Falling back to sending new message.")
-            await message.reply_text(
-                msg,
-                parse_mode=constants.ParseMode.MARKDOWN_V2,
-                reply_markup=reply_markup,
-            )
-            logger.info("base_handler: Fallback message sent.")
-    else:
-        logger.info("base_handler: Attempting to send new message.")
+    # Send or edit message
+    if update.message:
         await message.reply_text(
             msg,
-            parse_mode=constants.ParseMode.MARKDOWN_V2,
             reply_markup=reply_markup,
+            parse_mode=constants.ParseMode.MARKDOWN_V2,
         )
-        logger.info("base_handler: New message sent successfully.")
+    elif update.callback_query:
+        await update.callback_query.edit_message_text(
+            msg,
+            reply_markup=reply_markup,
+            parse_mode=constants.ParseMode.MARKDOWN_V2,
+        )
 
 def setup_base_ui(app: Application) -> None:
     """

@@ -18,6 +18,21 @@ _gc = None            # type: gspread.Client
 _sheet = None         # type: gspread.Spreadsheet
 _players_ws = None    # type: gspread.Worksheet
 
+def get_sheet(sheet_title: str) -> Optional[gspread.Worksheet]:
+    """Retrieves a worksheet by its title, creating it if it doesn't exist."""
+    global _sheet # Ensure _sheet is accessible
+    if _sheet is None:
+        raise RuntimeError("Spreadsheet not initialized. Call initialize_sheets() first.")
+    try:
+        return _sheet.worksheet(sheet_title)
+    except gspread.exceptions.WorksheetNotFound:
+        # Create the worksheet if it doesn't exist
+        new_ws = _sheet.add_worksheet(title=sheet_title, rows="100", cols="20") # Default size
+        # Add a header row for basic identification if needed, or leave empty
+        if sheet_title == "pending_upgrades":
+            new_ws.append_row(["id", "user_id", "building_key", "new_level", "finish_at"])
+        return new_ws
+
 # Define all possible headers that might be needed
 needed_headers = [
     # Basic player info
@@ -320,99 +335,124 @@ def list_all_players() -> List[Dict[str, Any]]:
     # Start from the second row to skip headers
     for row_values in all_values[1:]:
         player_data: Dict[str, Any] = {}
-        for i, header in enumerate(headers):
+        for i, h in enumerate(headers):
             val = row_values[i] if i < len(row_values) else ""
-            player_data[header] = val # Store as string, convert when reading specific fields
+            if h in [
+                "user_id", "resources_wood", "resources_stone", "resources_gold",
+                "resources_food", "resources_energy", "resources_diamonds",
+                "gold_balance", "wood_balance", "research_balance",
+                "capacity_gold", "capacity_wood", "capacity_research",
+                "gold_rate", "wood_rate", "research_rate",
+                "base_level", "mine_level", "lumber_house_level", "warehouse_level",
+                "barracks_level", "power_plant_level", "hospital_level", "research_lab_level",
+                "workshop_level", "jail_level", "power", "prestige_level",
+                "alliance_name", "alliance_role", "alliance_joined_at",
+                "alliance_members_count", "alliance_power",
+                "army_infantry", "army_tank", "army_artillery", "army_destroyer",
+                "army_bm_barrage", "army_venom_reaper", "army_titan_crusher",
+                "army_dead_infantry", "army_dead_tanks",
+                "items_hazmat_mask", "items_energy_drink", "items_repair_kit",
+                "items_medkit", "items_radar", "items_shield_generator",
+                "items_revive_all", "items_emp_device", "items_hazmat_drone",
+                "items_infinite_scout", "items_speedup_1h", "items_shield_adv",
+                "timers_base_level", "timers_mine_level", "timers_lumber_level",
+                "timers_warehouse_level", "timers_barracks_level", "timers_power_level",
+                "timers_hospital_level", "timers_research_level", "timers_workshop_level",
+                "timers_jail_level",
+                "scheduled_zone", "scheduled_time", "controlled_zone",
+                "energy", "energy_max", "last_daily", "last_attack"
+            ]:
+                try:
+                    player_data[h] = int(val)
+                except ValueError:
+                    player_data[h] = 0 # Default to 0 if conversion fails
+            elif h == "zones_controlled":
+                player_data[h] = val.split(",") if val else []
+            elif h in ["last_collection", "timers_emp_boost_end", "timers_hazmat_access_end"]:
+                try:
+                    player_data[h] = datetime.fromisoformat(val.rstrip("Z")).replace(tzinfo=timezone.utc) if val else None
+                except ValueError:
+                    player_data[h] = None
+            else:
+                player_data[h] = val
         players_data.append(player_data)
     return players_data
 
 def ensure_headers(ws: gspread.Worksheet, headers: List[str]) -> None:
-    """Ensure a worksheet has all required headers, adding missing ones."""
-    existing_headers = ws.row_values(1)
-    missing_headers = [h for h in headers if h not in existing_headers]
-    if missing_headers:
-        ws.append_row(missing_headers)
+    """Ensures all specified headers exist in the given worksheet, adding them if missing."""
+    existing = ws.row_values(1)
+    to_add = [h for h in headers if h not in existing]
+    if to_add:
+        updated_headers = existing + to_add
+        ws.update('A1', [updated_headers])
 
 def _accrue_player_resources_in_sheet(player_id: int) -> None:
-    """Accrue resources for a player based on their production rates and last collection time.
-    This function is intended for internal use by the resource ticking mechanism.
-    """
+    """Accrue resources for a single player by updating their sheet data."""
     player_data = get_player_data(player_id)
     if not player_data:
-        print(f"Player {player_id} not found for resource accrual.")
+        print(f"Warning: Player {player_id} not found for resource accrual.")
         return
 
-    # Get current time in UTC
-    now_utc = datetime.now(timezone.utc)
-
-    # Get last collection time
+    now_utc = datetime.utcnow().replace(tzinfo=timezone.utc)
     last_collection_str = player_data.get("last_collection")
-    if last_collection_str and isinstance(last_collection_str, str):
+
+    if isinstance(last_collection_str, str):
         try:
-            last_collection_dt = datetime.fromisoformat(last_collection_str.replace("Z", "")).replace(tzinfo=timezone.utc)
+            last_collection = datetime.fromisoformat(last_collection_str.rstrip("Z")).replace(tzinfo=timezone.utc)
         except ValueError:
-            last_collection_dt = now_utc  # Fallback if format is bad
+            last_collection = now_utc # Default if parsing fails
+    elif isinstance(last_collection_str, datetime):
+        last_collection = last_collection_str
     else:
-        last_collection_dt = now_utc
+        last_collection = now_utc
 
-    # Calculate elapsed time in seconds
-    elapsed_seconds = (now_utc - last_collection_dt).total_seconds()
+    time_since_last_collection = (now_utc - last_collection).total_seconds()
+    if time_since_last_collection < 0: # Handle potential clock skew or future time
+        time_since_last_collection = 0
 
-    if elapsed_seconds <= 0:
-        # No time has passed, or time went backwards (shouldn't happen)
-        return
+    # Production rates are per hour, convert to per second
+    wood_rate_per_sec = player_data.get("wood_rate", 0) / 3600.0
+    stone_rate_per_sec = player_data.get("stone_rate", 0) / 3600.0
+    food_rate_per_sec = player_data.get("food_rate", 0) / 3600.0
+    gold_rate_per_sec = player_data.get("gold_rate", 0) / 3600.0
+    research_rate_per_sec = player_data.get("research_rate", 0) / 3600.0
+    energy_rate_per_sec = player_data.get("energy_rate", 0) / 3600.0
 
-    # Get current resources and production rates (per hour)
-    wood = int(player_data.get("resources_wood", 0))
-    stone = int(player_data.get("resources_stone", 0))
-    food = int(player_data.get("resources_food", 0))
-    gold = int(player_data.get("resources_gold", 0))
-    energy = int(player_data.get("resources_energy", 0))
+    # Current resources and capacities
+    current_wood = player_data.get("resources_wood", 0)
+    current_stone = player_data.get("resources_stone", 0)
+    current_food = player_data.get("resources_food", 0)
+    current_gold = player_data.get("resources_gold", 0)
+    current_research = player_data.get("research_balance", 0)
+    current_energy = player_data.get("resources_energy", 0)
 
-    # Get building levels to determine rates
-    lumber_lvl = int(player_data.get("lumber_house_level", 1))
-    mine_lvl = int(player_data.get("mine_level", 1))
-    warehouse_lvl = int(player_data.get("warehouse_level", 1))
-    powerplant_lvl = int(player_data.get("power_plant_level", 1))
-    base_lvl = int(player_data.get("base_level", 1))
+    wood_capacity = player_data.get("capacity_wood", 10000) # Default capacity
+    stone_capacity = player_data.get("capacity_stone", 10000) # Assuming stone also has capacity
+    food_capacity = player_data.get("capacity_food", 10000) # Assuming food also has capacity
+    gold_capacity = player_data.get("capacity_gold", 5000) # Default capacity
+    research_capacity = player_data.get("capacity_research", 1000) # Default capacity
+    energy_capacity = player_data.get("energy_max", 2000) # Assuming energy has capacity
 
-    # Production rates per hour based on levels (simplified for now)
-    wood_per_hour = lumber_lvl * 60.0 # Example: 60 wood per hour per level
-    stone_per_hour = mine_lvl * 50.0  # Example: 50 stone per hour per level
-    food_per_hour = warehouse_lvl * 40.0 # Example: 40 food per hour per level
-    gold_per_hour = mine_lvl * 30.0  # Example: 30 gold per hour per level
-    energy_per_hour = powerplant_lvl * 20.0 # Example: 20 energy per hour per level
-    energy_max = base_lvl * 200 # Example: Max energy tied to base level
+    # Calculate accrued resources, capped by capacity
+    accrued_wood = min(current_wood + (wood_rate_per_sec * time_since_last_collection), wood_capacity)
+    accrued_stone = min(current_stone + (stone_rate_per_sec * time_since_last_collection), stone_capacity)
+    accrued_food = min(current_food + (food_rate_per_sec * time_since_last_collection), food_capacity)
+    accrued_gold = min(current_gold + (gold_rate_per_sec * time_since_last_collection), gold_capacity)
+    accrued_research = min(current_research + (research_rate_per_sec * time_since_last_collection), research_capacity)
+    accrued_energy = min(current_energy + (energy_rate_per_sec * time_since_last_collection), energy_capacity)
 
-    # Calculate accrued resources
-    wood_delta = (wood_per_hour / 3600) * elapsed_seconds
-    stone_delta = (stone_per_hour / 3600) * elapsed_seconds
-    food_delta = (food_per_hour / 3600) * elapsed_seconds
-    gold_delta = (gold_per_hour / 3600) * elapsed_seconds
-    energy_delta = (energy_per_hour / 3600) * elapsed_seconds
-
-    # Add to current balance (only integer part)
-    wood += int(wood_delta)
-    stone += int(stone_delta)
-    food += int(food_delta)
-    gold += int(gold_delta)
-    energy = min(energy + int(energy_delta), energy_max) # Cap energy at max
-
-    # Update player data in Sheets
-    updates = {
-        "resources_wood": wood,
-        "resources_stone": stone,
-        "resources_food": food,
-        "resources_gold": gold,
-        "resources_energy": energy,
-        "last_collection": now_utc.isoformat() + "Z" # Update last tick time
-    }
-    
-    for field, value in updates.items():
-        update_player_data(player_id, field, value)
+    # Update sheet
+    update_player_data(player_id, "resources_wood", int(accrued_wood))
+    update_player_data(player_id, "resources_stone", int(accrued_stone))
+    update_player_data(player_id, "resources_food", int(accrued_food))
+    update_player_data(player_id, "resources_gold", int(accrued_gold))
+    update_player_data(player_id, "research_balance", int(accrued_research))
+    update_player_data(player_id, "resources_energy", int(accrued_energy))
+    update_player_data(player_id, "last_collection", now_utc.isoformat() + "Z")
 
 def accrue(balance_key, rate_per_sec, cap_key):
-    """This function is now obsolete and will be removed."""
+    # This function seems to be unused or a placeholder. 
+    # The logic is handled directly in _accrue_player_resources_in_sheet.
     pass # No operation, function will be removed or commented out. 
 
 def get_pending_upgrades() -> List[Dict[str, Any]]:
