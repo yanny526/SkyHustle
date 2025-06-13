@@ -600,7 +600,7 @@ async def confirm_build(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         return
 
     current_level = int(data.get(field_name, 1))
-    upgrade_info = calculate_upgrade(building_key, current_level)
+    upgrade_info = get_upgrade_info(building_key, current_level)
     
     if not upgrade_info:
         await query.edit_message_text(f"✅ {escape_markdown(config['name'])} is already at max level \\({escape_markdown(str(config['max_level']))}\\)\.")
@@ -622,14 +622,23 @@ async def confirm_build(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     minutes = (upgrade_info["duration"] % 3600) // 60
     duration_str = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
 
+    # Format end time for display
+    end_time_str = end_time.strftime("%Y-%m-%d %H:%M UTC")
+
     # Confirm message
     msg = "\n".join([
-        "✔️ Upgrade started\!",
-        f"🕒 Complete in {duration_str}\.",
+        "⏳ *Upgrade started\!*",
+        f"🚧 Level {upgrade_info['next_level']} in progress…",
+        f"🕒 Completion: {end_time_str}",
         "\n🏠 Back to Base"
     ])
 
-    keyboard = [[InlineKeyboardButton("🏠 Back to Base", callback_data="BASE_MENU")]]
+    keyboard = [
+        [
+            InlineKeyboardButton("🏗 View Build Queue", callback_data="BUILD_MENU"),
+            InlineKeyboardButton("🏠 Back to Base", callback_data="BASE_MENU")
+        ]
+    ]
     
     await query.edit_message_text(
         msg,
