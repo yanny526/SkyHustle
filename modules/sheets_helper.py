@@ -158,85 +158,111 @@ def create_new_player(user_id: int, telegram_username: str, game_name: str) -> N
     coord_x = random.randint(1, 1000)
     coord_y = random.randint(1, 1000)
     iso_now = datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
-    new_row = [
-        user_id,
-        telegram_username or "",
-        game_name,
-        coord_x,
-        coord_y,
-        1000,  # resources_wood
-        1000,  # resources_stone
-        500,   # resources_gold
-        500,   # resources_food
-        1000,     # resources_energy
-        0,     # resources_diamonds
-        500,   # gold_balance (initial)
-        1000,  # wood_balance (initial)
-        0,     # research_balance (initial)
+    default_player_data = {
+        "user_id": user_id,
+        "telegram_username": telegram_username or "",
+        "game_name": game_name,
+        "coord_x": coord_x,
+        "coord_y": coord_y,
+        # Resources
+        "resources_wood": 1000,
+        "resources_stone": 1000,
+        "resources_food": 500,
+        "resources_gold": 500,
+        "resources_energy": 1000,
+        "resources_diamonds": 0,
+        "gold_balance": 500,
+        "wood_balance": 1000,
+        "research_balance": 0,
         
-        5000,  # capacity_gold (initial)
-        10000, # capacity_wood (initial)
-        1000,  # capacity_research (initial)
+        # Capacities
+        "capacity_gold": 5000,
+        "capacity_wood": 10000,
+        "capacity_research": 1000,
         
-        10,    # gold_rate (initial per hour)
-        20,    # wood_rate (initial per hour)
-        5,     # research_rate (initial per hour)
+        # Rates (per hour)
+        "gold_rate": 10,
+        "wood_rate": 20,
+        "research_rate": 5,
         
-        1,     # base_level
-        1,     # mine_level
-        1,     # lumber_house_level
-        1,     # warehouse_level
-        1,     # barracks_level
-        1,     # power_plant_level
-        1,     # hospital_level
-        1,     # research_lab_level
-        1,     # workshop_level
-        1,     # jail_level
-        0,     # power
-        0,     # prestige_level
-        0,     # alliance_name
-        0,     # alliance_role
-        0,     # alliance_joined_at
-        0,     # alliance_members_count
-        0,     # alliance_power
-        "",    # zones_controlled
-        0,     # energy
-        0,     # energy_max
-        0,     # last_daily
-        0,     # last_attack
-        iso_now, # last_collection (initial)
-        0,     # army_infantry
-        0,     # army_tank
-        0,     # army_artillery
-        0,     # army_destroyer
-        0,     # army_bm_barrage
-        0,     # army_venom_reaper
-        0,     # army_titan_crusher
-        0,     # items_hazmat_mask
-        0,     # items_energy_drink
-        0,     # items_repair_kit
-        0,     # items_medkit
-        0,     # items_radar
-        0,     # items_shield_generator
-        0,     # items_revive_all
-        0,     # items_emp_device
-        0,     # items_hazmat_drone
-        0,     # timers_base_level
-        0,     # timers_mine_level
-        0,     # timers_lumber_level
-        0,     # timers_warehouse_level
-        0,     # timers_barracks_level
-        0,     # timers_power_level
-        0,     # timers_hospital_level
-        0,     # timers_research_level
-        0,     # timers_workshop_level
-        0,     # timers_jail_level
-        "",    # timers_emp_boost_end
-        "",    # timers_hazmat_access_end
-        0,     # scheduled_zone
-        0,     # scheduled_time
-        0,     # controlled_zone
-    ]
+        # Buildings
+        "base_level": 1,
+        "mine_level": 1,
+        "lumber_house_level": 1,
+        "warehouse_level": 1,
+        "barracks_level": 1,
+        "power_plant_level": 1,
+        "hospital_level": 1,
+        "research_lab_level": 1,
+        "workshop_level": 1,
+        "jail_level": 1,
+        
+        # Stats
+        "power": 0,
+        "prestige_level": 0,
+        
+        # Alliance
+        "alliance_name": 0,
+        "alliance_role": 0,
+        "alliance_joined_at": 0,
+        "alliance_members_count": 0,
+        "alliance_power": 0,
+        "zones_controlled": "",
+        
+        # Army
+        "army_infantry": 0,
+        "army_tank": 0,
+        "army_artillery": 0,
+        "army_destroyer": 0,
+        "army_bm_barrage": 0,
+        "army_venom_reaper": 0,
+        "army_titan_crusher": 0,
+        "army_dead_infantry": 0,
+        "army_dead_tanks": 0,
+        
+        # Black Market Items
+        "items_hazmat_mask": 0,
+        "items_energy_drink": 0,
+        "items_repair_kit": 0,
+        "items_medkit": 0,
+        "items_radar": 0,
+        "items_shield_generator": 0,
+        "items_revive_all": 0,
+        "items_emp_device": 0,
+        "items_hazmat_drone": 0,
+        "items_infinite_scout": 0,
+        "items_speedup_1h": 0,
+        "items_shield_adv": 0,
+        
+        # Timers
+        "timers_base_level": 0,
+        "timers_mine_level": 0,
+        "timers_lumber_level": 0,
+        "timers_warehouse_level": 0,
+        "timers_barracks_level": 0,
+        "timers_power_level": 0,
+        "timers_hospital_level": 0,
+        "timers_research_level": 0,
+        "timers_workshop_level": 0,
+        "timers_jail_level": 0,
+        "timers_emp_boost_end": "",
+        "timers_hazmat_access_end": "",
+        
+        # Zone Control
+        "scheduled_zone": 0,
+        "scheduled_time": 0,
+        "controlled_zone": 0,
+        
+        # Misc
+        "energy": 1000,
+        "energy_max": 1000,
+        "last_daily": 0,
+        "last_attack": 0,
+        "last_collection": iso_now,
+    }
+    
+    new_row = [default_player_data.get(header, '') for header in needed_headers]
+    print(f"DEBUG: New player row being appended: {new_row}")
     _players_ws.append_row(new_row)
 
 def get_player_data(user_id: int) -> Dict[str, Any]:
