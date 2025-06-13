@@ -139,7 +139,7 @@ async def confirm_train(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     await context.bot.send_message(
         chat_id,
-        f"✅ Training {escape_markdown(str(qty))} {escape_markdown(stats['name'])} started!\n"
+        f"✅ Training {escape_markdown(str(qty))} {escape_markdown(stats['name'])} started\!\n"
         f"It will take {escape_markdown(str(stats['time'] * qty))}s to complete.",
         parse_mode=constants.ParseMode.MARKDOWN_V2
     )
