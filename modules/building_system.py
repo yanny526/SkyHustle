@@ -360,11 +360,14 @@ def apply_building_effects(player_data: Dict[str, Any]) -> Dict[str, Any]:
         # Apply unlocks
         if "unlocks" in config["effects"]:
             for unlock_type, unlock_level in config["effects"]["unlocks"].items():
-                if current_level >= unlock_level:
-                    if unlock_type == "artillery" or unlock_type == "tank" or unlock_type == "destroyer":
-                        calculated_effects["unlocked_units"].append(unlock_type)
-                    elif unlock_type == "tech_tiers":
-                        calculated_effects["unlocked_tech_tiers"].append(f"Tier {unlock_level}")
+                if unlock_type == "tech_tiers":
+                    for level in unlock_level:
+                        if current_level >= level:
+                            calculated_effects["unlocked_tech_tiers"].append(f"Tier {level}")
+                else:
+                    if current_level >= unlock_level:
+                        if unlock_type == "artillery" or unlock_type == "tank" or unlock_type == "destroyer" or unlock_type == "helicopter" or unlock_type == "jet" or unlock_type == "cruiser" or unlock_type == "battleship" or unlock_type == "carrier":
+                            calculated_effects["unlocked_units"].append(unlock_type)
         
         # Build slots unlock for Town Hall
         if building_key == "town_hall" and "build_slots_unlock_levels" in config["effects"]:
