@@ -246,7 +246,7 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         try:
             await message.edit_text(
                 msg,
-                parse_mode=constants.ParseMode.MARKDOWN,
+                parse_mode=constants.ParseMode.MARKDOWN_V2,
                 reply_markup=reply_markup,
             )
         except Exception as e:
@@ -254,13 +254,13 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             # Fallback to sending new message if edit fails
             await message.reply_text(
                 msg,
-                parse_mode=constants.ParseMode.MARKDOWN,
+                parse_mode=constants.ParseMode.MARKDOWN_V2,
                 reply_markup=reply_markup,
             )
     else:
         await message.reply_text(
             msg,
-            parse_mode=constants.ParseMode.MARKDOWN,
+            parse_mode=constants.ParseMode.MARKDOWN_V2,
             reply_markup=reply_markup,
         )
 
