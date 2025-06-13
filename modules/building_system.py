@@ -9,8 +9,18 @@ from datetime import datetime, timedelta
 from modules.sheets_helper import (
     get_player_data, update_player_data, get_player_buildings,
     add_pending_upgrade, get_due_upgrades, remove_pending_upgrade,
-    apply_building_level
+    apply_building_level, get_pending_upgrades
 )
+
+__all__ = [
+    "build_menu",
+    "build_choice",
+    "confirm_build",
+    "cancel_build",
+    "show_building_info",
+    "start_upgrade_worker",
+    "view_queue"
+]
 
 # Mapping from BUILDING_CONFIG keys to sheet field names
 _BUILDING_KEY_TO_FIELD = {
@@ -933,4 +943,45 @@ async def show_building_info(update: Update, context: ContextTypes.DEFAULT_TYPE,
         "\n".join(msg_lines),
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode=constants.ParseMode.MARKDOWN_V2
-    ) 
+    )
+
+async def view_queue(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Handler for /view_queue or VIEW_QUEUE callback:
+    Fetch the player's pending building-upgrade timers and display them.
+    """
+    query = update.callback_query
+    if query:
+        await query.answer()
+        user_id = query.from_user.id
+    else:
+        user_id = update.effective_user.id
+    
+    # Get all pending upgrades for this user
+    upgrades = get_pending_upgrades()
+    user_upgrades = [u for u in upgrades if u["user_id"] == user_id]
+    
+    if not user_upgrades:
+        message = "🕒 You have no buildings currently upgrading."
+    else:
+        message = "🕒 Your Upgrade Queue:\n\n"
+        for upgrade in user_upgrades:
+            building_name = BUILDING_CONFIG[upgrade["building_key"]]["name"]
+            end_time = upgrade["finish_at"].strftime("%Y-%m-%d %H:%M UTC")
+            message += f"🔨 {building_name} to level {upgrade['new_level']}\n"
+            message += f"⏲️ Completes at: {end_time}\n\n"
+    
+    keyboard = [[InlineKeyboardButton("Back to Base", callback_data="base")]]
+    
+    if query:
+        await query.edit_message_text(
+            message,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode=None
+        )
+    else:
+        await update.message.reply_text(
+            message,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode=None
+        ) 
