@@ -3,7 +3,7 @@
 # Implements the /base command to show a player's resources and base level,
 # with inline buttons to "Build New" or "Train Troops".
 
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 from telegram import (
     Update,
@@ -31,7 +31,7 @@ def _get_ongoing_activities(user_id: int) -> list[str]:
     return []
 
 
-async def tick_resources(context: ContextTypes.DEFAULT_TYPE) -> None:
+async def tick_resources(context: ContextTypes.DEFAULT_TYPE, user_id: Optional[int] = None) -> None:
     """Accrue resources for players based on their last collection time and production rates.
 
     This function can be called for a specific user (e.g., from /base command)
@@ -39,26 +39,26 @@ async def tick_resources(context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     user_ids_to_tick = []
 
-    if context.job:
+    if user_id:
+        # Single user tick (e.g., from /base command with explicit user_id)
+        user_ids_to_tick = [user_id]
+        logger.info(f"Ticking resources for explicit user {user_id} from command/update.")
+    elif context.job:
         # Global tick (from JobQueue)
         logger.info("Performing global resource tick from JobQueue...")
         all_players = list_all_players()
         user_ids_to_tick = [int(player["user_id"]) for player in all_players if player.get("user_id")]
         logger.info(f"Found {len(user_ids_to_tick)} players for global tick.")
-    elif context.update and context.update.effective_user:
-        # Single user tick (e.g., from /base command)
-        user_ids_to_tick = [context.update.effective_user.id]
-        logger.info(f"Ticking resources for user {context.update.effective_user.id} from command/update.")
     else:
-        logger.warning("tick_resources called without a valid context (neither job nor effective_user in update).")
+        logger.warning("tick_resources called without a valid context (neither explicit user_id nor job).")
         return
 
-    for user_id in user_ids_to_tick:
+    for uid in user_ids_to_tick:
         try:
-            _accrue_player_resources_in_sheet(user_id)
-            logger.debug(f"Successfully ticked resources for user {user_id}.")
+            _accrue_player_resources_in_sheet(uid)
+            logger.debug(f"Successfully ticked resources for user {uid}.")
         except Exception as e:
-            logger.error(f"Failed to tick resources for user {user_id}: {e}")
+            logger.error(f"Failed to tick resources for user {uid}: {e}")
 
 
 async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -105,7 +105,7 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     # TICK resources up to now
     logger.info("base_handler: Calling tick_resources.")
-    await tick_resources(context)
+    await tick_resources(context, user.id)
     logger.info("base_handler: tick_resources completed.")
 
     data: Dict[str, Any] = get_player_data(user.id)
