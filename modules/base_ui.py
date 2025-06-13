@@ -305,6 +305,7 @@ def setup_base_ui(app: Application) -> None:
     app.add_handler(CallbackQueryHandler(base_handler, pattern="^BASE_ATTACK$"))
     app.add_handler(CallbackQueryHandler(base_handler, pattern="^BASE_QUESTS$"))
     app.add_handler(CallbackQueryHandler(base_handler, pattern="^BASE_INFO$"))
+    app.add_handler(CallbackQueryHandler(base_handler, pattern="^BACK_TO_BASE$"))
     
     # Register black market and alliance handlers
     setup_black_market(app)
