@@ -37,17 +37,21 @@ async def tick_resources(context: ContextTypes.DEFAULT_TYPE) -> None:
     This function can be called for a specific user (e.g., from /base command)
     or as a repeating job for all active players.
     """
-    # Determine if this is a single-user tick or a global tick
-    if context.effective_user:
-        # Single user tick (e.g., from /base command)
-        user_ids_to_tick = [context.effective_user.id]
-        logger.info(f"Ticking resources for user {context.effective_user.id} from command.")
-    else:
+    user_ids_to_tick = []
+
+    if context.job:
         # Global tick (from JobQueue)
-        logger.info("Performing global resource tick...")
+        logger.info("Performing global resource tick from JobQueue...")
         all_players = list_all_players()
-        user_ids_to_tick = [int(player.get("user_id")) for player in all_players if player.get("user_id")]
+        user_ids_to_tick = [int(player["user_id"]) for player in all_players if player.get("user_id")]
         logger.info(f"Found {len(user_ids_to_tick)} players for global tick.")
+    elif context.update and context.update.effective_user:
+        # Single user tick (e.g., from /base command)
+        user_ids_to_tick = [context.update.effective_user.id]
+        logger.info(f"Ticking resources for user {context.update.effective_user.id} from command/update.")
+    else:
+        logger.warning("tick_resources called without a valid context (neither job nor effective_user in update).")
+        return
 
     for user_id in user_ids_to_tick:
         try:
