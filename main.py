@@ -3,12 +3,15 @@ import os
 import sys
 import signal
 from dotenv import load_dotenv
-from telegram.ext import Application, JobQueue, ContextTypes, CommandHandler
+from telegram.ext import Application, JobQueue, ContextTypes, CommandHandler, CallbackQueryHandler
 from telegram.error import Conflict
 from modules.sheets_helper import initialize_sheets
 from modules.registration import setup_registration
 from modules.base_ui import setup_base_ui, tick_resources
-from modules.building_system import setup_building_system
+from modules.building_system import (
+    setup_building_system, build_menu, build_choice, confirm_build, cancel_build,
+    show_building_info, start_upgrade_worker
+)
 from modules.training_system import setup_training_system
 from modules.research_system import setup_research_system
 from modules.black_market import setup_black_market
@@ -67,6 +70,9 @@ def main() -> None:
         first=0,               # run immediately on startup
         name="resource_tick"
     )
+    
+    # Start the upgrade worker
+    job_queue.run_once(start_upgrade_worker, when=0)
     
     # Start the bot with error handling
     try:

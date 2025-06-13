@@ -412,6 +412,104 @@ def accrue(balance_key, rate_per_sec, cap_key):
     """This function is now obsolete and will be removed."""
     pass # No operation, function will be removed or commented out. 
 
+def get_pending_upgrades() -> List[Dict[str, Any]]:
+    """Fetches all pending upgrades from the sheet."""
+    try:
+        sheet = get_sheet("pending_upgrades")
+        if not sheet:
+            return []
+        
+        # Get all rows except header
+        rows = sheet.get_all_records()
+        upgrades = []
+        
+        for row in rows:
+            try:
+                upgrades.append({
+                    "id": row["id"],
+                    "user_id": int(row["user_id"]),
+                    "building_key": row["building_key"],
+                    "new_level": int(row["new_level"]),
+                    "finish_at": datetime.fromisoformat(row["finish_at"].replace("Z", "+00:00"))
+                })
+            except (ValueError, KeyError):
+                continue
+        
+        return upgrades
+    except Exception as e:
+        print(f"Error fetching pending upgrades: {e}")
+        return []
+
+def add_pending_upgrade(user_id: int, building_key: str, new_level: int, finish_at: datetime) -> bool:
+    """Adds a new pending upgrade to the sheet."""
+    try:
+        sheet = get_sheet("pending_upgrades")
+        if not sheet:
+            return False
+        
+        # Get next ID
+        rows = sheet.get_all_records()
+        next_id = max([int(row["id"]) for row in rows], default=0) + 1
+        
+        # Add new row
+        sheet.append_row([
+            str(next_id),
+            str(user_id),
+            building_key,
+            str(new_level),
+            finish_at.isoformat() + "Z"
+        ])
+        return True
+    except Exception as e:
+        print(f"Error adding pending upgrade: {e}")
+        return False
+
+def remove_pending_upgrade(upgrade_id: int) -> bool:
+    """Removes a pending upgrade from the sheet."""
+    try:
+        sheet = get_sheet("pending_upgrades")
+        if not sheet:
+            return False
+        
+        # Find row with matching ID
+        rows = sheet.get_all_records()
+        for i, row in enumerate(rows, start=2):  # start=2 because sheet is 1-indexed and has header
+            if int(row["id"]) == upgrade_id:
+                sheet.delete_row(i)
+                return True
+        return False
+    except Exception as e:
+        print(f"Error removing pending upgrade: {e}")
+        return False
+
+def get_due_upgrades(now: datetime) -> List[Dict[str, Any]]:
+    """Fetches all upgrades that are due to complete."""
+    upgrades = get_pending_upgrades()
+    return [u for u in upgrades if u["finish_at"] <= now]
+
+def apply_building_level(user_id: int, building_key: str, new_level: int) -> bool:
+    """Applies a building level upgrade to the player's data."""
+    try:
+        field_name = _BUILDING_KEY_TO_FIELD.get(building_key)
+        if not field_name:
+            return False
+        
+        # Update the building level
+        update_player_data(user_id, field_name, new_level)
+        
+        # Recalculate and update player stats
+        data = get_player_data(user_id)
+        if data:
+            updated_data = apply_building_effects(data)
+            for key, value in updated_data.items():
+                if key.startswith("resources_") or key.endswith("_level"):
+                    update_player_data(user_id, key, value)
+        
+        return True
+    except Exception as e:
+        print(f"Error applying building level: {e}")
+        return False
+
 # Cursor Prompt (for future regeneration):
 # "Generate a file modules/sheets_helper.py that decodes BASE64_CREDS,
 #  authenticates to Google Sheets via google-auth and gspread, ensures

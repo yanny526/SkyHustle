@@ -1,12 +1,16 @@
 import math # For ceil in cost/time calculation
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from telegram import constants # Required for parse_mode in build_menu, build_choice
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup # For build_menu, build_choice
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes # For setup_building_system
 from telegram.helpers import escape_markdown # For MarkdownV2 escaping
 from datetime import datetime, timedelta
 
-from modules.sheets_helper import get_player_data, update_player_data
+from modules.sheets_helper import (
+    get_player_data, update_player_data, get_player_buildings,
+    add_pending_upgrade, get_due_upgrades, remove_pending_upgrade,
+    apply_building_level
+)
 
 # Mapping from BUILDING_CONFIG keys to sheet field names
 _BUILDING_KEY_TO_FIELD = {
@@ -574,76 +578,95 @@ async def build_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     )
 
 async def confirm_build(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handles the confirmation of a building upgrade."""
+    """Handles building upgrade confirmation."""
     query = update.callback_query
     await query.answer()
-
-    user = update.effective_user
-    if not user:
-        return
-
-    data = get_player_data(user.id)
-    if not data:
-        await query.edit_message_text("❌ You aren't registered yet\. Send /start to begin\.")
-        return
-
-    # Extract building key and recalculate costs/time
-    building_key = query.data.replace("CONFIRM_", "")
-    config = get_building_config(building_key)
-    if not config:
-        await query.edit_message_text("❌ Invalid building selected\.")
-        return
-
-    field_name = _BUILDING_KEY_TO_FIELD.get(building_key)
-    if not field_name:
-        await query.edit_message_text("❌ Building mapping not found\.")
-        return
-
-    current_level = int(data.get(field_name, 1))
-    upgrade_info = get_upgrade_info(building_key, current_level)
     
+    if not query.from_user:
+        return
+    
+    # Check if user is registered
+    user_data = get_player_data(query.from_user.id)
+    if not user_data:
+        await query.edit_message_text(
+            "❌ You need to register first! Use /start to begin.",
+            parse_mode=None
+        )
+        return
+    
+    # Extract building key from callback data
+    building_key = query.data.split("_")[1]
+    if building_key not in BUILDING_CONFIG:
+        await query.edit_message_text(
+            "❌ Invalid building selected.",
+            parse_mode=None
+        )
+        return
+    
+    # Get upgrade info
+    upgrade_info = get_upgrade_info(query.from_user.id, building_key)
     if not upgrade_info:
-        await query.edit_message_text(f"✅ {escape_markdown(config['name'])} is already at max level \\({escape_markdown(str(config['max_level']))}\\)\.")
+        await query.edit_message_text(
+            "❌ Could not calculate upgrade information.",
+            parse_mode=None
+        )
         return
-
-    # Check if player has enough resources
-    if not can_afford(user.id, upgrade_info["cost"]):
-        await query.edit_message_text("❌ Not enough resources\.")
+    
+    # Check if user can afford the upgrade
+    if not can_afford(user_data, upgrade_info["costs"]):
+        await query.edit_message_text(
+            "❌ You don't have enough resources for this upgrade!",
+            parse_mode=None
+        )
         return
-
-    # Deduct resources and set timer
-    deduct_resources(user.id, upgrade_info["cost"])
-    end_time = datetime.utcnow() + timedelta(seconds=upgrade_info["duration"])
-    timer_field = f"timers_{building_key}_level"
-    update_player_data(user.id, timer_field, end_time.isoformat() + "Z")
-
-    # Format duration for display
-    hours = upgrade_info["duration"] // 3600
-    minutes = (upgrade_info["duration"] % 3600) // 60
-    duration_str = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
-
+    
+    # Deduct resources
+    if not deduct_resources(query.from_user.id, upgrade_info["costs"]):
+        await query.edit_message_text(
+            "❌ Failed to deduct resources. Please try again.",
+            parse_mode=None
+        )
+        return
+    
+    # Calculate finish time
+    finish_at = datetime.utcnow() + timedelta(seconds=upgrade_info["duration"])
+    
+    # Add to pending upgrades
+    if not add_pending_upgrade(
+        query.from_user.id,
+        building_key,
+        upgrade_info["next_level"],
+        finish_at
+    ):
+        await query.edit_message_text(
+            "❌ Failed to start upgrade. Please try again.",
+            parse_mode=None
+        )
+        return
+    
     # Format end time for display
-    end_time_str = end_time.strftime("%Y-%m-%d %H:%M UTC")
-
-    # Confirm message
-    msg = "\n".join([
-        "⏳ *Upgrade started\!*",
-        f"🚧 Level {upgrade_info['next_level']} in progress…",
-        f"🕒 Completion: {end_time_str}",
-        "\n🏠 Back to Base"
-    ])
-
+    end_time = finish_at.strftime("%H:%M UTC")
+    
+    # Send confirmation message
+    building_name = BUILDING_CONFIG[building_key]["name"]
+    message = (
+        f"🔨 {building_name} upgrade started!\n\n"
+        f"📈 Target Level: {upgrade_info['next_level']}\n"
+        f"⏲️ Completes at: {end_time}\n\n"
+        f"Your resources have been deducted and the upgrade is in progress."
+    )
+    
     keyboard = [
         [
-            InlineKeyboardButton("🏗 View Build Queue", callback_data="BUILD_MENU"),
-            InlineKeyboardButton("🏠 Back to Base", callback_data="BASE_MENU")
+            InlineKeyboardButton("View Build Queue", callback_data="view_queue"),
+            InlineKeyboardButton("Back to Base", callback_data="base")
         ]
     ]
     
     await query.edit_message_text(
-        msg,
+        message,
         reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode=constants.ParseMode.MARKDOWN_V2
+        parse_mode=None
     )
 
 async def cancel_build(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -697,180 +720,112 @@ def can_afford(user_id: int, cost: Dict[str, int]) -> bool:
             return False
     return True
 
-def deduct_resources(user_id: int, cost: Dict[str, int]) -> None:
+def deduct_resources(user_id: int, cost: Dict[str, int]) -> bool:
     """Deducts resources from a player's inventory."""
     data = get_player_data(user_id)
     if not data:
-        return
+        return False
     
     for resource, amount in cost.items():
         current = int(data.get(f"resources_{resource}", 0))
+        if current < amount:
+            return False
         update_player_data(user_id, f"resources_{resource}", current - amount)
+    return True
 
-async def start_upgrade(update: Update, context: ContextTypes.DEFAULT_TYPE, building_key: str) -> None:
-    """Starts a building upgrade."""
-    user = update.effective_user
-    if not user:
-        return
-    
-    data = get_player_data(user.id)
-    if not data:
-        await update.callback_query.answer("❌ You aren't registered yet. Send /start to begin.")
-        return
-    
-    field_name = _BUILDING_KEY_TO_FIELD.get(building_key)
-    if not field_name:
-        await update.callback_query.answer("❌ Invalid building selected.")
-        return
-    
-    current_level = int(data.get(field_name, 1))
-    upgrade_info = calculate_upgrade(building_key, current_level)
-    
-    if not upgrade_info:
-        await update.callback_query.answer("🏗 Already at max level!")
-        return
-    
-    if not can_afford(user.id, upgrade_info["cost"]):
-        await update.callback_query.answer("❌ Not enough resources!")
-        return
-    
-    # Deduct resources and set timer
-    deduct_resources(user.id, upgrade_info["cost"])
-    end_time = datetime.utcnow() + timedelta(seconds=upgrade_info["duration"])
-    timer_field = f"timers_{building_key}_level"
-    update_player_data(user.id, timer_field, end_time.isoformat() + "Z")
-    
-    # Format duration for display
-    hours = upgrade_info["duration"] // 3600
-    minutes = (upgrade_info["duration"] % 3600) // 60
-    duration_str = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
-    
-    config = get_building_config(building_key)
-    await update.callback_query.answer(
-        f"⚙️ Upgrading {config['emoji']} {config['name']} to Level {upgrade_info['next_level']}!\n⏱ ETA: {duration_str}"
-    )
+async def start_upgrade_worker(context: ContextTypes.DEFAULT_TYPE):
+    """Starts the upgrade worker job."""
+    # Run immediately on startup
+    await _process_upgrades(context)
+    # Then run every minute
+    context.job_queue.run_repeating(_process_upgrades, interval=60, first=60)
 
-async def complete_upgrades_for(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Completes any pending upgrades for a player."""
-    data = get_player_data(user_id)
-    if not data:
-        return
-    
+async def _process_upgrades(context: ContextTypes.DEFAULT_TYPE):
+    """Processes all due upgrades."""
     now = datetime.utcnow()
-    completed_upgrades = []
+    due_upgrades = get_due_upgrades(now)
     
-    for building_key, field_name in _BUILDING_KEY_TO_FIELD.items():
-        timer_field = f"timers_{building_key}_level"
-        timer_str = data.get(timer_field)
-        
-        if not timer_str:
-            continue
-        
-        try:
-            end_time = datetime.fromisoformat(timer_str.replace("Z", "+00:00"))
-            if end_time <= now:
-                # Upgrade is complete
-                current_level = int(data.get(field_name, 1))
-                new_level = current_level + 1
-                update_player_data(user_id, field_name, new_level)
-                update_player_data(user_id, timer_field, None)  # Clear timer
-                
-                config = get_building_config(building_key)
-                completed_upgrades.append(f"✅ {config['emoji']} {config['name']} upgraded to Level {new_level}!")
-        except (ValueError, TypeError):
-            continue
-    
-    if completed_upgrades:
-        # Send notification about completed upgrades
-        message = "Base stats updated:\n" + "\n".join(completed_upgrades)
-        try:
-            await context.bot.send_message(chat_id=user_id, text=message)
-        except Exception:
-            pass  # Ignore if we can't send the message
+    for upgrade in due_upgrades:
+        # Apply the upgrade
+        if apply_building_level(upgrade["user_id"], upgrade["building_key"], upgrade["new_level"]):
+            # Remove from pending
+            remove_pending_upgrade(upgrade["id"])
+            
+            # Notify user
+            try:
+                building_name = BUILDING_CONFIG[upgrade["building_key"]]["name"]
+                await context.bot.send_message(
+                    chat_id=upgrade["user_id"],
+                    text=f"✅ Your {building_name} is now level {upgrade['new_level']}!",
+                    parse_mode=None
+                )
+            except Exception as e:
+                print(f"Error notifying user about completed upgrade: {e}")
 
-def setup_building_system(app: Application) -> None:
-    """Sets up the building system handlers and scheduler."""
-    # Add handlers
-    app.add_handler(CommandHandler("build", build_menu))
-    app.add_handler(CallbackQueryHandler(build_menu, pattern="^BUILD_MENU$"))
-    app.add_handler(CallbackQueryHandler(build_choice, pattern="^BUILD_[a-z_]+$"))
-    app.add_handler(CallbackQueryHandler(confirm_build, pattern="^CONFIRM_[a-z_]+$"))
-    app.add_handler(CallbackQueryHandler(cancel_build, pattern="^CANCEL_BUILD$"))
-    app.add_handler(CallbackQueryHandler(show_building_info, pattern="^INFO_[a-z_]+$"))
-    
-    # Add scheduler job to check for completed upgrades
-    app.job_queue.run_repeating(
-        lambda context: complete_upgrades_for(context.user_data.get('user_id'), context),
-        interval=60,  # Check every minute
-        first=10  # Start after 10 seconds
-    )
-
-def get_upgrade_info(building_key: str, current_level: int) -> Optional[Dict[str, Any]]:
+def get_upgrade_info(user_id: int, building_key: str) -> Optional[Dict[str, Any]]:
     """Gets detailed upgrade information for a building."""
     config = get_building_config(building_key)
-    if not config or current_level >= config["max_level"]:
+    if not config:
         return None
     
-    next_level = current_level + 1
+    next_level = int(get_player_data(user_id).get(_BUILDING_KEY_TO_FIELD[building_key], 1)) + 1
     
     # Calculate costs
-    costs = {}
-    for resource, base_cost in config["base_costs"].items():
-        costs[resource] = math.ceil(base_cost * (config["cost_multiplier"] ** current_level))
+    costs = calculate_upgrade_cost(get_player_data(user_id), building_key)
     
     # Calculate duration
-    duration = math.ceil(config["base_time"] * (config["time_multiplier"] ** current_level))
+    duration = calculate_upgrade_time(get_player_data(user_id), building_key)
     
     # Calculate benefits
     benefits = []
     if "wood_production_per_level" in config["effects"]:
-        current_output = config["effects"]["wood_production_per_level"] * current_level
+        current_output = config["effects"]["wood_production_per_level"] * (next_level - 1)
         next_output = config["effects"]["wood_production_per_level"] * next_level
         benefits.append(f"🪵 {current_output}/hr → {next_output}/hr")
     elif "stone_production_per_level" in config["effects"]:
-        current_output = config["effects"]["stone_production_per_level"] * current_level
+        current_output = config["effects"]["stone_production_per_level"] * (next_level - 1)
         next_output = config["effects"]["stone_production_per_level"] * next_level
         benefits.append(f"🪨 {current_output}/hr → {next_output}/hr")
     elif "food_production_per_level" in config["effects"]:
-        current_output = config["effects"]["food_production_per_level"] * current_level
+        current_output = config["effects"]["food_production_per_level"] * (next_level - 1)
         next_output = config["effects"]["food_production_per_level"] * next_level
         benefits.append(f"🥖 {current_output}/hr → {next_output}/hr")
     elif "gold_production_per_level" in config["effects"]:
-        current_output = config["effects"]["gold_production_per_level"] * current_level
+        current_output = config["effects"]["gold_production_per_level"] * (next_level - 1)
         next_output = config["effects"]["gold_production_per_level"] * next_level
         benefits.append(f"💰 {current_output}/hr → {next_output}/hr")
     elif "energy_production_per_level" in config["effects"]:
-        current_output = config["effects"]["energy_production_per_level"] * current_level
+        current_output = config["effects"]["energy_production_per_level"] * (next_level - 1)
         next_output = config["effects"]["energy_production_per_level"] * next_level
         benefits.append(f"⚡ {current_output}/hr → {next_output}/hr")
     
     # Add percentage-based effects
     if "upgrade_time_reduction_per_level" in config["effects"]:
-        current_reduction = config["effects"]["upgrade_time_reduction_per_level"] * current_level * 100
+        current_reduction = config["effects"]["upgrade_time_reduction_per_level"] * (next_level - 1) * 100
         next_reduction = config["effects"]["upgrade_time_reduction_per_level"] * next_level * 100
         benefits.append(f"⏱️ Upgrade time -{current_reduction:.0f}% → -{next_reduction:.0f}%")
     if "infantry_training_time_reduction_per_level" in config["effects"]:
-        current_reduction = config["effects"]["infantry_training_time_reduction_per_level"] * current_level * 100
+        current_reduction = config["effects"]["infantry_training_time_reduction_per_level"] * (next_level - 1) * 100
         next_reduction = config["effects"]["infantry_training_time_reduction_per_level"] * next_level * 100
         benefits.append(f"🪖 Training time -{current_reduction:.0f}% → -{next_reduction:.0f}%")
     if "research_time_reduction_per_level" in config["effects"]:
-        current_reduction = config["effects"]["research_time_reduction_per_level"] * current_level * 100
+        current_reduction = config["effects"]["research_time_reduction_per_level"] * (next_level - 1) * 100
         next_reduction = config["effects"]["research_time_reduction_per_level"] * next_level * 100
         benefits.append(f"🧪 Research time -{current_reduction:.0f}% → -{next_reduction:.0f}%")
     if "healing_time_reduction_per_level" in config["effects"]:
-        current_reduction = config["effects"]["healing_time_reduction_per_level"] * current_level * 100
+        current_reduction = config["effects"]["healing_time_reduction_per_level"] * (next_level - 1) * 100
         next_reduction = config["effects"]["healing_time_reduction_per_level"] * next_level * 100
         benefits.append(f"🏥 Healing time -{current_reduction:.0f}% → -{next_reduction:.0f}%")
     if "vehicle_training_time_reduction_per_level" in config["effects"]:
-        current_reduction = config["effects"]["vehicle_training_time_reduction_per_level"] * current_level * 100
+        current_reduction = config["effects"]["vehicle_training_time_reduction_per_level"] * (next_level - 1) * 100
         next_reduction = config["effects"]["vehicle_training_time_reduction_per_level"] * next_level * 100
         benefits.append(f"🔧 Vehicle training -{current_reduction:.0f}% → -{next_reduction:.0f}%")
     
     # Add capacity increases
     if "capacity_increase_per_level" in config["effects"]:
-        current_capacity = config["effects"]["capacity_increase_per_level"] * current_level
+        current_capacity = config["effects"]["capacity_increase_per_level"] * (next_level - 1)
         next_capacity = config["effects"]["capacity_increase_per_level"] * next_level
-        benefits.append(f"📦 Capacity {current_capacity} → {next_capacity}")
+        benefits.append(f"�� Capacity {current_capacity} → {next_capacity}")
     
     # Add unlocks
     if "unlocks" in config["effects"]:
@@ -879,8 +834,8 @@ def get_upgrade_info(building_key: str, current_level: int) -> Optional[Dict[str
                 benefits.append(f"🔓 Unlocks {unit}")
     
     return {
-        "cost": costs,
-        "duration": duration * 60,  # Convert to seconds
+        "costs": costs,
+        "duration": duration,
         "next_level": next_level,
         "benefits": benefits
     }
@@ -936,13 +891,13 @@ async def show_building_info(update: Update, context: ContextTypes.DEFAULT_TYPE,
     # Build level table
     table_lines = []
     for level in range(1, config["max_level"] + 1):
-        upgrade_info = get_upgrade_info(building_key, level - 1)
+        upgrade_info = get_upgrade_info(query.from_user.id, building_key)
         if not upgrade_info:
             continue
         
         # Format costs
         cost_display = []
-        for resource, amount in upgrade_info["cost"].items():
+        for resource, amount in upgrade_info["costs"].items():
             emoji_map = {"wood": "🪵", "stone": "🪨", "food": "🥖", "gold": "💰", "energy": "⚡"}
             cost_display.append(f"{emoji_map.get(resource, '')} {amount}")
         cost_str = " / ".join(cost_display)
