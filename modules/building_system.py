@@ -373,103 +373,81 @@ async def build_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             await update.callback_query.answer("❌ You aren't registered yet\. Send /start to begin\.")
         return
 
-    # Check for ongoing upgrades
-    ongoing = get_ongoing_upgrade(user.id)
-    if ongoing:
-        msg = (
-            f"⏳ You already have an upgrade in progress:\n"
-            f"{ongoing['emoji']} {ongoing['building']} to Level {ongoing['next_level']}\n"
-            f"⏱️ {ongoing['remaining']} remaining"
-        )
-        keyboard = [[InlineKeyboardButton("🏠 Back to Base", callback_data="BASE_MENU")]]
-        
-        if update.message:
-            await update.message.reply_text(
-                msg,
-                reply_markup=InlineKeyboardMarkup(keyboard),
-                parse_mode=constants.ParseMode.MARKDOWN_V2
-            )
-        elif update.callback_query:
-            query = update.callback_query
-            await query.answer()
-            await query.edit_message_text(
-                msg,
-                reply_markup=InlineKeyboardMarkup(keyboard),
-                parse_mode=constants.ParseMode.MARKDOWN_V2
-            )
-        return
+    # Initialize variables for the message and keyboard
+    msg_lines = ["🏗️ *Building Menu*\\n"]
+    keyboard_to_send = []
+    parse_mode_to_send = constants.ParseMode.MARKDOWN_V2 # Default to MarkdownV2
 
     # Get current building levels
     buildings = get_player_buildings(user.id)
-    
-    # Build message lines and keyboard buttons
-    msg_lines = ["🏗 *Building Menu*"]
-    keyboard_buttons = []
-    
+
+    # Populate building list and buttons
     for building_key, config in BUILDING_CONFIG.items():
-        current_level = buildings.get(building_key, 1)
-        max_level = config["max_level"]
-        
-        # Add building info line
-        msg_lines.append(f"\n{config['emoji']} *{escape_markdown(config['name'])}* — Level {current_level}/{max_level}")
-        
-        if current_level < max_level:
-            # Calculate upgrade info
-            upgrade_info = get_upgrade_info(building_key, current_level)
-            if upgrade_info:
-                # Format costs
-                cost_display = []
-                for resource, amount in upgrade_info["cost"].items():
-                    emoji_map = {"wood": "🪵", "stone": "🪨", "food": "🥖", "gold": "💰", "energy": "⚡"}
-                    cost_display.append(f"{emoji_map.get(resource, '')} {amount}")
-                cost_str = " / ".join(cost_display)
-                
-                # Add upgrade info
-                minutes = upgrade_info["duration"] // 60
-                msg_lines.append(f"➡️ Upgrade cost: {cost_str}, time: {minutes}m")
-                
-                # Add buttons
-                keyboard_buttons.append([
-                    InlineKeyboardButton(
-                        f"⚒️ Upgrade {config['name']}", 
-                        callback_data=f"BUILD_{building_key}"
-                    ),
-                    InlineKeyboardButton(
-                        "📊 Info", 
-                        callback_data=f"INFO_{building_key}"
-                    )
-                ])
-        else:
-            # Building is at max level
-            keyboard_buttons.append([
-                InlineKeyboardButton(
-                    f"✅ {escape_markdown(config['name'])} \\(Max Level\\)", 
-                    callback_data=f"INFO_{building_key}"
-                )
-            ])
+        player_level = int(buildings.get(_BUILDING_KEY_TO_FIELD.get(building_key), 1))
 
-    # Add back button
-    msg_lines.append("\n🏠 Back to Base")
-    keyboard_buttons.append([InlineKeyboardButton("🏠 Back to Base", callback_data="BASE_MENU")])
+        msg_lines.append(
+            f"{config['emoji']} *{escape_markdown(config['name'])}* \— Level {player_level}/{config['max_level']}"
+        )
 
-    # Build message and keyboard
-    msg = "\n".join(msg_lines)
-    reply_markup = InlineKeyboardMarkup(keyboard_buttons)
+        # Calculate upgrade info (always, even if not used directly for button logic below)
+        upgrade_info = get_upgrade_info(user.id, building_key)
 
-    # Send or edit message
+        cost_str = "N/A"
+        minutes = "N/A"
+
+        if upgrade_info:
+            # Format costs
+            cost_display = []
+            for resource, amount in upgrade_info["costs"].items():
+                emoji_map = {"wood": "🪵", "stone": "🪨", "food": "🥖", "gold": "💰", "energy": "⚡"}
+                cost_display.append(f"{emoji_map.get(resource, '')} {amount}")
+            cost_str = " / ".join(cost_display)
+
+            # Add upgrade info
+            minutes = upgrade_info["duration"] // 60
+
+        msg_lines.append(f"➡️ Upgrade cost: {cost_str}, time: {minutes}m")
+
+        # --- TEMPORARY DEBUGGING CHANGE: FORCE BUTTONS --- 
+        # Always add buttons for Upgrade and Info, regardless of max level
+        # This is to see if the buttons render at all.
+        keyboard_to_send.append([
+            InlineKeyboardButton(
+                f"⚒️ Upgrade {config['name']}",
+                callback_data=f"BUILD_{building_key}"
+            ),
+            InlineKeyboardButton(
+                f"ℹ️ Info {config['name']}",
+                callback_data=f"INFO_{building_key}"
+            )
+        ])
+        # --- END TEMPORARY DEBUGGING CHANGE --- 
+
+    # Add final "Back to Base" button
+    msg_lines.append("\\n🏠 Back to Base")
+    keyboard_to_send.append([InlineKeyboardButton("🏠 Back to Base", callback_data="BASE_MENU")])
+
+    message_to_send = "\\n".join(msg_lines)
+    
+    # Debugging: Print the keyboard_to_send content before creating InlineKeyboardMarkup
+    print(f"DEBUG: keyboard_to_send content: {keyboard_to_send}")
+
+    reply_markup_to_send = InlineKeyboardMarkup(keyboard_to_send)
+
+    # Send or edit message based on update type
     if update.message:
         await update.message.reply_text(
-            msg,
-            reply_markup=reply_markup,
-            parse_mode=constants.ParseMode.MARKDOWN_V2
+            message_to_send,
+            reply_markup=reply_markup_to_send,
+            parse_mode=parse_mode_to_send
         )
     elif update.callback_query:
         query = update.callback_query
         await query.answer()
         await query.edit_message_text(
-            msg,
-            reply_markup=reply_markup,
-            parse_mode=constants.ParseMode.MARKDOWN_V2
+            message_to_send,
+            reply_markup=reply_markup_to_send,
+            parse_mode=parse_mode_to_send
         )
 
 
@@ -835,7 +813,7 @@ def get_upgrade_info(user_id: int, building_key: str) -> Optional[Dict[str, Any]
     if "capacity_increase_per_level" in config["effects"]:
         current_capacity = config["effects"]["capacity_increase_per_level"] * (next_level - 1)
         next_capacity = config["effects"]["capacity_increase_per_level"] * next_level
-        benefits.append(f"�� Capacity {current_capacity} → {next_capacity}")
+        benefits.append(f"🏠 Capacity {current_capacity} → {next_capacity}")
     
     # Add unlocks
     if "unlocks" in config["effects"]:
