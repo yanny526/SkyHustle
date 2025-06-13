@@ -22,6 +22,7 @@ from modules.sheets_helper import get_player_data, update_player_data, list_all_
 import logging
 import datetime
 from datetime import timezone
+from telegram.helpers import escape_markdown
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -188,11 +189,11 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     # Format resource production block with proper escaping
     resource_block = (
         "📈 *Resource Production*\n\n"
-        f"�� Wood: {wood}  (`+{escape_markdown(str(wood_per_hour)):.1f}/hr`)\n"
-        f"⛰️ Stone: {stone}  (`+{escape_markdown(str(stone_per_hour)):.1f}/hr`)\n"
-        f"🍖 Food: {food}  (`+{escape_markdown(str(food_per_hour)):.1f}/hr`)\n"
-        f"💰 Gold: {gold}  (`+{escape_markdown(str(gold_per_hour)):.1f}/hr`)\n"
-        f"⚡ Energy: {energy_cur}/{energy_max}  (`+{escape_markdown(str(energy_per_hour)):.1f}/hr`)\n"
+        f"🌲 Wood: {wood}  (`{escape_markdown(f'+{wood_per_hour:.1f}/hr', version=2)}`)\n"
+        f"⛰️ Stone: {stone}  (`{escape_markdown(f'+{stone_per_hour:.1f}/hr', version=2)}`)\n"
+        f"🍖 Food: {food}  (`{escape_markdown(f'+{food_per_hour:.1f}/hr', version=2)}`)\n"
+        f"💰 Gold: {gold}  (`{escape_markdown(f'+{gold_per_hour:.1f}/hr', version=2)}`)\n"
+        f"⚡ Energy: {energy_cur}/{energy_max}  (`{escape_markdown(f'+{energy_per_hour:.1f}/hr', version=2)}`)\n"
         "――――――――――――"
     )
 
