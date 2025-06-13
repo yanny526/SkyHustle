@@ -139,7 +139,7 @@ def create_new_player(user_id: int, telegram_username: str, game_name: str) -> N
 
     coord_x = random.randint(1, 1000)
     coord_y = random.randint(1, 1000)
-    iso_now = datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+    iso_now = datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
     new_row = [
         user_id,
         telegram_username or "",
@@ -336,13 +336,13 @@ def _accrue_player_resources_in_sheet(player_id: int) -> None:
         return
 
     # Get current time in UTC
-    now_utc = datetime.datetime.now(timezone.utc)
+    now_utc = datetime.now(timezone.utc)
 
     # Get last collection time
     last_collection_str = player_data.get("last_collection")
     if last_collection_str and isinstance(last_collection_str, str):
         try:
-            last_collection_dt = datetime.datetime.fromisoformat(last_collection_str.replace("Z", "")).replace(tzinfo=timezone.utc)
+            last_collection_dt = datetime.fromisoformat(last_collection_str.replace("Z", "")).replace(tzinfo=timezone.utc)
         except ValueError:
             last_collection_dt = now_utc  # Fallback if format is bad
     else:

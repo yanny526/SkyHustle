@@ -188,11 +188,11 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     # Format resource production block with proper escaping
     resource_block = (
         "📈 *Resource Production*\n\n"
-        f"🌲 Wood: {wood}  (`+{wood_per_hour:.1f}/hr`)\n"
-        f"⛰️ Stone: {stone}  (`+{stone_per_hour:.1f}/hr`)\n"
-        f"🍖 Food: {food}  (`+{food_per_hour:.1f}/hr`)\n"
-        f"💰 Gold: {gold}  (`+{gold_per_hour:.1f}/hr`)\n"
-        f"⚡ Energy: {energy_cur}/{energy_max}  (`+{energy_per_hour:.1f}/hr`)\n"
+        f"�� Wood: {wood}  (`+{escape_markdown(str(wood_per_hour)):.1f}/hr`)\n"
+        f"⛰️ Stone: {stone}  (`+{escape_markdown(str(stone_per_hour)):.1f}/hr`)\n"
+        f"🍖 Food: {food}  (`+{escape_markdown(str(food_per_hour)):.1f}/hr`)\n"
+        f"💰 Gold: {gold}  (`+{escape_markdown(str(gold_per_hour)):.1f}/hr`)\n"
+        f"⚡ Energy: {energy_cur}/{energy_max}  (`+{escape_markdown(str(energy_per_hour)):.1f}/hr`)\n"
         "――――――――――――"
     )
 
