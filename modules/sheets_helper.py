@@ -510,6 +510,27 @@ def apply_building_level(user_id: int, building_key: str, new_level: int) -> boo
         print(f"Error applying building level: {e}")
         return False
 
+def get_player_buildings(user_id: int) -> Dict[str, int]:
+    """
+    Fetch just the current building levels for user_id,
+    returning a mapping from building_key to its integer level.
+    """
+    player = get_player_data(user_id)
+    if not player:
+        return {}
+        
+    return {
+        'lumber_house': int(player.get('lumber_house_level', 0)),
+        'mine':         int(player.get('mine_level', 0)),
+        'warehouse':    int(player.get('warehouse_level', 0)),
+        'hospital':     int(player.get('hospital_level', 0)),
+        'research_lab': int(player.get('research_lab_level', 0)),
+        'barracks':     int(player.get('barracks_level', 0)),
+        'power_plant':  int(player.get('power_plant_level', 0)),
+        'workshop':     int(player.get('workshop_level', 0)),
+        'jail':         int(player.get('jail_level', 0)),
+    }
+
 # Cursor Prompt (for future regeneration):
 # "Generate a file modules/sheets_helper.py that decodes BASE64_CREDS,
 #  authenticates to Google Sheets via google-auth and gspread, ensures
