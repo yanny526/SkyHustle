@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from modules.sheets_helper import (
     get_player_data, update_player_data, get_player_buildings,
     add_pending_upgrade, get_due_upgrades, remove_pending_upgrade,
-    apply_building_level, get_pending_upgrades
+    apply_building_level, get_pending_upgrades, initialize_sheets
 )
 
 __all__ = [
@@ -479,6 +479,9 @@ async def build_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if not user:
         return
 
+    # Ensure sheets are initialized before getting player data
+    initialize_sheets()
+
     data = get_player_data(user.id)
     if not data:
         await query.edit_message_text("❌ You aren't registered yet\. Send /start to begin\.")
@@ -591,7 +594,10 @@ async def confirm_build(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     
     if not query.from_user:
         return
-    
+
+    # Ensure sheets are initialized before getting player data
+    initialize_sheets()
+
     # Check if user is registered
     user_data = get_player_data(query.from_user.id)
     if not user_data:
@@ -620,7 +626,7 @@ async def confirm_build(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         return
     
     # Check if user can afford the upgrade
-    if not can_afford(user_data, upgrade_info["costs"]):
+    if not can_afford(query.from_user.id, upgrade_info["costs"]):
         await query.edit_message_text(
             "❌ You don't have enough resources for this upgrade!",
             parse_mode=None
