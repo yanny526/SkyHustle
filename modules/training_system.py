@@ -28,10 +28,10 @@ async def train_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         "🪖 *[TRAIN YOUR ARMY]*",
         "Available Units \(by Barracks level\):",
         "",
-        f"• 👣 {escape_markdown(_UNIT_STATS['infantry']['name'])} (Tier 1)", 
-        f"• 🛡️ {escape_markdown(_UNIT_STATS['tank']['name'])} (Tier 1)", 
-        f"• 🎯 {escape_markdown(_UNIT_STATS['artillery']['name'])} (Tier 1)", 
-        f"• 🚧 {escape_markdown(_UNIT_STATS['destroyer']['name'])} (Tier 1)", 
+        f"• 👣 {escape_markdown(_UNIT_STATS['infantry']['name'])} \(Tier 1\)", 
+        f"• 🛡️ {escape_markdown(_UNIT_STATS['tank']['name'])} \(Tier 1\)", 
+        f"• 🎯 {escape_markdown(_UNIT_STATS['artillery']['name'])} \(Tier 1\)", 
+        f"• 🚧 {escape_markdown(_UNIT_STATS['destroyer']['name'])} \(Tier 1\)", 
     ])
 
     keyboard = [
