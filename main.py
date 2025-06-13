@@ -63,6 +63,9 @@ def main() -> None:
     setup_alliance_system(app)
     setup_zone_system(app)
 
+    # Register the 'Enter Your Base' callback separately to ensure it always works
+    app.add_handler(CallbackQueryHandler(base_handler, pattern=f"^{ENTER_BASE}$", block=False))
+
     # Temporary test command for debugging
     async def test_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         logger.info("--- /test command received ---")
