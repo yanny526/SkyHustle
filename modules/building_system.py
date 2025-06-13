@@ -39,7 +39,8 @@ BUILDING_CONFIG = {
         "time_multiplier": 1.2,
         "effects": {
             "upgrade_time_reduction_per_level": 0.05, # 5% reduction per level
-            "build_slots_unlock_levels": [5, 10, 15]
+            "build_slots_unlock_levels": [5, 10, 15, 20],
+            "power_bonus_per_level": 100
         },
         "unlock_requirements": {}
     },
@@ -53,13 +54,14 @@ BUILDING_CONFIG = {
         "cost_multiplier": 1.12,
         "time_multiplier": 1.18,
         "effects": {
-            "wood_production_per_level": 10
+            "wood_production_per_level": 10,
+            "power_bonus_per_level": 50
         },
         "unlock_requirements": {}
     },
     "mine": { # This is for Quarry (stone) and Gold Mine (gold) as they share 'mine_level'
         "key": "mine", # Will be used for both "Quarry" and "Gold Mine" conceptual buildings
-        "name": "Mine (Stone)",
+        "name": "Mine",
         "emoji": "⛏️",
         "max_level": 20,
         "base_costs": {"wood": 40, "stone": 60, "food": 10, "gold": 8, "energy": 3},
@@ -67,7 +69,8 @@ BUILDING_CONFIG = {
         "cost_multiplier": 1.12,
         "time_multiplier": 1.18,
         "effects": {
-            "stone_production_per_level": 10 # This is Quarry's effect
+            "stone_production_per_level": 10,
+            "power_bonus_per_level": 50
         },
         "unlock_requirements": {}
     },
@@ -109,7 +112,8 @@ BUILDING_CONFIG = {
         "cost_multiplier": 1.13,
         "time_multiplier": 1.19,
         "effects": {
-            "energy_production_per_level": 5
+            "energy_production_per_level": 5,
+            "power_bonus_per_level": 100
         },
         "unlock_requirements": {}
     },
@@ -117,14 +121,20 @@ BUILDING_CONFIG = {
         "key": "barracks",
         "name": "Barracks",
         "emoji": "🪖",
-        "max_level": 10,
+        "max_level": 20,
         "base_costs": {"wood": 80, "stone": 60, "food": 40, "gold": 25, "energy": 15},
         "base_time": 20, # minutes
         "cost_multiplier": 1.18,
         "time_multiplier": 1.25,
         "effects": {
             "infantry_training_time_reduction_per_level": 0.05,
-            "unlocks": {"artillery": 5, "tank": 10}
+            "power_bonus_per_level": 75,
+            "unlocks": {
+                "artillery": 5,
+                "tank": 10,
+                "helicopter": 15,
+                "jet": 20
+            }
         },
         "unlock_requirements": {}
     },
@@ -132,14 +142,17 @@ BUILDING_CONFIG = {
         "key": "research_lab",
         "name": "Research Lab",
         "emoji": "🧪",
-        "max_level": 10,
+        "max_level": 20,
         "base_costs": {"wood": 75, "stone": 75, "food": 50, "gold": 40, "energy": 20},
         "base_time": 25, # minutes
         "cost_multiplier": 1.17,
         "time_multiplier": 1.24,
         "effects": {
             "research_time_reduction_per_level": 0.05,
-            "unlocks": {"tech_tiers": "per doc"} # Placeholder for now as doc doesn't specify tiers
+            "power_bonus_per_level": 75,
+            "unlocks": {
+                "tech_tiers": [5, 10, 15, 20]
+            }
         },
         "unlock_requirements": {}
     },
@@ -147,14 +160,15 @@ BUILDING_CONFIG = {
         "key": "hospital",
         "name": "Hospital",
         "emoji": "🏥",
-        "max_level": 10,
+        "max_level": 20,
         "base_costs": {"wood": 60, "stone": 50, "food": 30, "gold": 20, "energy": 10},
         "base_time": 15, # minutes
         "cost_multiplier": 1.16,
         "time_multiplier": 1.22,
         "effects": {
             "healing_time_reduction_per_level": 0.05,
-            "capacity_increase_per_level": 10
+            "capacity_increase_per_level": 10,
+            "power_bonus_per_level": 75
         },
         "unlock_requirements": {}
     },
@@ -162,14 +176,20 @@ BUILDING_CONFIG = {
         "key": "workshop",
         "name": "Workshop",
         "emoji": "🔧",
-        "max_level": 10,
+        "max_level": 20,
         "base_costs": {"wood": 90, "stone": 80, "food": 50, "gold": 35, "energy": 20},
         "base_time": 25, # minutes
         "cost_multiplier": 1.19,
         "time_multiplier": 1.26,
         "effects": {
             "vehicle_training_time_reduction_per_level": 0.05,
-            "unlocks": {"destroyer": 8}
+            "power_bonus_per_level": 75,
+            "unlocks": {
+                "destroyer": 8,
+                "cruiser": 12,
+                "battleship": 16,
+                "carrier": 20
+            }
         },
         "unlock_requirements": {}
     },
@@ -177,12 +197,15 @@ BUILDING_CONFIG = {
         "key": "jail",
         "name": "Jail",
         "emoji": "🚔",
-        "max_level": 10,
+        "max_level": 20,
         "base_costs": {"wood": 70, "stone": 60, "food": 40, "gold": 30, "energy": 15},
         "base_time": 20, # minutes
         "cost_multiplier": 1.17,
         "time_multiplier": 1.23,
-        "effects": {}, # No effects specified in doc
+        "effects": {
+            "capacity_increase_per_level": 5,
+            "power_bonus_per_level": 75
+        },
         "unlock_requirements": {}
     }
 }
@@ -336,6 +359,32 @@ async def build_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             await update.callback_query.answer("❌ You aren't registered yet\. Send /start to begin\.")
         return
 
+    # Check for ongoing upgrades
+    ongoing = get_ongoing_upgrade(user.id)
+    if ongoing:
+        msg = (
+            f"⏳ You already have an upgrade in progress:\n"
+            f"{ongoing['emoji']} {ongoing['building']} to Level {ongoing['next_level']}\n"
+            f"⏱️ {ongoing['remaining']} remaining"
+        )
+        keyboard = [[InlineKeyboardButton("🏠 Back to Base", callback_data="BASE_MENU")]]
+        
+        if update.message:
+            await update.message.reply_text(
+                msg,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode=constants.ParseMode.MARKDOWN_V2
+            )
+        elif update.callback_query:
+            query = update.callback_query
+            await query.answer()
+            await query.edit_message_text(
+                msg,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode=constants.ParseMode.MARKDOWN_V2
+            )
+        return
+
     # Get current building levels
     buildings = get_player_buildings(user.id)
     
@@ -352,7 +401,7 @@ async def build_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         
         if current_level < max_level:
             # Calculate upgrade info
-            upgrade_info = calculate_upgrade(building_key, current_level)
+            upgrade_info = get_upgrade_info(building_key, current_level)
             if upgrade_info:
                 # Format costs
                 cost_display = []
@@ -365,11 +414,15 @@ async def build_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
                 minutes = upgrade_info["duration"] // 60
                 msg_lines.append(f"➡️ Upgrade cost: {cost_str}, time: {minutes}m")
                 
-                # Add upgrade button
+                # Add buttons
                 keyboard_buttons.append([
                     InlineKeyboardButton(
                         f"⚒️ Upgrade {config['name']}", 
                         callback_data=f"BUILD_{building_key}"
+                    ),
+                    InlineKeyboardButton(
+                        "📊 Info", 
+                        callback_data=f"INFO_{building_key}"
                     )
                 ])
         else:
@@ -730,13 +783,190 @@ def setup_building_system(app: Application) -> None:
     """Sets up the building system handlers and scheduler."""
     # Add handlers
     app.add_handler(CommandHandler("build", build_menu))
+    app.add_handler(CallbackQueryHandler(build_menu, pattern="^BUILD_MENU$"))
     app.add_handler(CallbackQueryHandler(build_choice, pattern="^BUILD_[a-z_]+$"))
     app.add_handler(CallbackQueryHandler(confirm_build, pattern="^CONFIRM_[a-z_]+$"))
     app.add_handler(CallbackQueryHandler(cancel_build, pattern="^CANCEL_BUILD$"))
+    app.add_handler(CallbackQueryHandler(show_building_info, pattern="^INFO_[a-z_]+$"))
     
     # Add scheduler job to check for completed upgrades
     app.job_queue.run_repeating(
         lambda context: complete_upgrades_for(context.user_data.get('user_id'), context),
         interval=60,  # Check every minute
         first=10  # Start after 10 seconds
+    )
+
+def get_upgrade_info(building_key: str, current_level: int) -> Optional[Dict[str, Any]]:
+    """Gets detailed upgrade information for a building."""
+    config = get_building_config(building_key)
+    if not config or current_level >= config["max_level"]:
+        return None
+    
+    next_level = current_level + 1
+    
+    # Calculate costs
+    costs = {}
+    for resource, base_cost in config["base_costs"].items():
+        costs[resource] = math.ceil(base_cost * (config["cost_multiplier"] ** current_level))
+    
+    # Calculate duration
+    duration = math.ceil(config["base_time"] * (config["time_multiplier"] ** current_level))
+    
+    # Calculate benefits
+    benefits = []
+    if "wood_production_per_level" in config["effects"]:
+        current_output = config["effects"]["wood_production_per_level"] * current_level
+        next_output = config["effects"]["wood_production_per_level"] * next_level
+        benefits.append(f"🪵 {current_output}/hr → {next_output}/hr")
+    elif "stone_production_per_level" in config["effects"]:
+        current_output = config["effects"]["stone_production_per_level"] * current_level
+        next_output = config["effects"]["stone_production_per_level"] * next_level
+        benefits.append(f"🪨 {current_output}/hr → {next_output}/hr")
+    elif "food_production_per_level" in config["effects"]:
+        current_output = config["effects"]["food_production_per_level"] * current_level
+        next_output = config["effects"]["food_production_per_level"] * next_level
+        benefits.append(f"🥖 {current_output}/hr → {next_output}/hr")
+    elif "gold_production_per_level" in config["effects"]:
+        current_output = config["effects"]["gold_production_per_level"] * current_level
+        next_output = config["effects"]["gold_production_per_level"] * next_level
+        benefits.append(f"💰 {current_output}/hr → {next_output}/hr")
+    elif "energy_production_per_level" in config["effects"]:
+        current_output = config["effects"]["energy_production_per_level"] * current_level
+        next_output = config["effects"]["energy_production_per_level"] * next_level
+        benefits.append(f"⚡ {current_output}/hr → {next_output}/hr")
+    
+    # Add percentage-based effects
+    if "upgrade_time_reduction_per_level" in config["effects"]:
+        current_reduction = config["effects"]["upgrade_time_reduction_per_level"] * current_level * 100
+        next_reduction = config["effects"]["upgrade_time_reduction_per_level"] * next_level * 100
+        benefits.append(f"⏱️ Upgrade time -{current_reduction:.0f}% → -{next_reduction:.0f}%")
+    if "infantry_training_time_reduction_per_level" in config["effects"]:
+        current_reduction = config["effects"]["infantry_training_time_reduction_per_level"] * current_level * 100
+        next_reduction = config["effects"]["infantry_training_time_reduction_per_level"] * next_level * 100
+        benefits.append(f"🪖 Training time -{current_reduction:.0f}% → -{next_reduction:.0f}%")
+    if "research_time_reduction_per_level" in config["effects"]:
+        current_reduction = config["effects"]["research_time_reduction_per_level"] * current_level * 100
+        next_reduction = config["effects"]["research_time_reduction_per_level"] * next_level * 100
+        benefits.append(f"🧪 Research time -{current_reduction:.0f}% → -{next_reduction:.0f}%")
+    if "healing_time_reduction_per_level" in config["effects"]:
+        current_reduction = config["effects"]["healing_time_reduction_per_level"] * current_level * 100
+        next_reduction = config["effects"]["healing_time_reduction_per_level"] * next_level * 100
+        benefits.append(f"🏥 Healing time -{current_reduction:.0f}% → -{next_reduction:.0f}%")
+    if "vehicle_training_time_reduction_per_level" in config["effects"]:
+        current_reduction = config["effects"]["vehicle_training_time_reduction_per_level"] * current_level * 100
+        next_reduction = config["effects"]["vehicle_training_time_reduction_per_level"] * next_level * 100
+        benefits.append(f"🔧 Vehicle training -{current_reduction:.0f}% → -{next_reduction:.0f}%")
+    
+    # Add capacity increases
+    if "capacity_increase_per_level" in config["effects"]:
+        current_capacity = config["effects"]["capacity_increase_per_level"] * current_level
+        next_capacity = config["effects"]["capacity_increase_per_level"] * next_level
+        benefits.append(f"📦 Capacity {current_capacity} → {next_capacity}")
+    
+    # Add unlocks
+    if "unlocks" in config["effects"]:
+        for unit, level in config["effects"]["unlocks"].items():
+            if next_level == level:
+                benefits.append(f"🔓 Unlocks {unit}")
+    
+    return {
+        "cost": costs,
+        "duration": duration * 60,  # Convert to seconds
+        "next_level": next_level,
+        "benefits": benefits
+    }
+
+def get_ongoing_upgrade(user_id: int) -> Optional[Dict[str, Any]]:
+    """Gets information about any ongoing upgrade for a player."""
+    data = get_player_data(user_id)
+    if not data:
+        return None
+    
+    now = datetime.utcnow()
+    
+    for building_key, field_name in _BUILDING_KEY_TO_FIELD.items():
+        timer_field = f"timers_{building_key}_level"
+        timer_str = data.get(timer_field)
+        
+        if not timer_str:
+            continue
+        
+        try:
+            end_time = datetime.fromisoformat(timer_str.replace("Z", "+00:00"))
+            if end_time > now:
+                config = get_building_config(building_key)
+                current_level = int(data.get(field_name, 1))
+                remaining = end_time - now
+                hours = remaining.seconds // 3600
+                minutes = (remaining.seconds % 3600) // 60
+                time_str = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
+                
+                return {
+                    "building": config["name"],
+                    "emoji": config["emoji"],
+                    "current_level": current_level,
+                    "next_level": current_level + 1,
+                    "remaining": time_str,
+                    "end_time": end_time
+                }
+        except (ValueError, TypeError):
+            continue
+    
+    return None
+
+async def show_building_info(update: Update, context: ContextTypes.DEFAULT_TYPE, building_key: str) -> None:
+    """Shows detailed information about a building's levels and effects."""
+    query = update.callback_query
+    await query.answer()
+    
+    config = get_building_config(building_key)
+    if not config:
+        await query.edit_message_text("❌ Invalid building selected\.")
+        return
+    
+    # Build level table
+    table_lines = []
+    for level in range(1, config["max_level"] + 1):
+        upgrade_info = get_upgrade_info(building_key, level - 1)
+        if not upgrade_info:
+            continue
+        
+        # Format costs
+        cost_display = []
+        for resource, amount in upgrade_info["cost"].items():
+            emoji_map = {"wood": "🪵", "stone": "🪨", "food": "🥖", "gold": "💰", "energy": "⚡"}
+            cost_display.append(f"{emoji_map.get(resource, '')} {amount}")
+        cost_str = " / ".join(cost_display)
+        
+        # Format duration
+        minutes = upgrade_info["duration"] // 60
+        hours = minutes // 60
+        minutes = minutes % 60
+        duration_str = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
+        
+        # Format benefits
+        benefits_str = " | ".join(upgrade_info["benefits"])
+        
+        table_lines.append(f"*Level {level}*")
+        table_lines.append(f"Cost: {cost_str}")
+        table_lines.append(f"Time: {duration_str}")
+        table_lines.append(f"Effects: {benefits_str}")
+        table_lines.append("")
+    
+    # Build message
+    msg_lines = [
+        f"{config['emoji']} *{escape_markdown(config['name'])}*",
+        "Building Information:",
+        "\-\-\-",
+        *table_lines,
+        "\-\-\-",
+        "🏠 Back to Base"
+    ]
+    
+    keyboard = [[InlineKeyboardButton("🏠 Back to Base", callback_data="BASE_MENU")]]
+    
+    await query.edit_message_text(
+        "\n".join(msg_lines),
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode=constants.ParseMode.MARKDOWN_V2
     ) 
