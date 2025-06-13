@@ -6,8 +6,8 @@ from dotenv import load_dotenv
 from telegram.ext import Application, JobQueue, ContextTypes, CommandHandler, CallbackQueryHandler
 from telegram.error import Conflict
 from modules.sheets_helper import initialize_sheets
-from modules.registration import setup_registration
-from modules.base_ui import setup_base_ui, tick_resources
+from modules.registration import setup_registration, ENTER_BASE
+from modules.base_ui import setup_base_ui, tick_resources, base_handler
 from modules.building_system import (
     build_menu, build_choice, confirm_build, cancel_build,
     show_building_info, start_upgrade_worker, view_queue
