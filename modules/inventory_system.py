@@ -277,7 +277,7 @@ async def inventory_use_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await update.message.reply_text("❌ You have no items to use.")
         return
 
-    keyboard.append([InlineKeyboardButton("🏠 Back to Base", callback_data="INV_BACK")])
+    keyboard.append([InlineKeyboardButton("🏠 Back to Base", callback_data="BACK_TO_BASE")])
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     await update.message.reply_text(
@@ -434,4 +434,5 @@ def setup_inventory_system(app: Application) -> None:
     app.add_handler(CallbackQueryHandler(inventory_handler, pattern="^BACK_TO_BASE$"))
     app.add_handler(CallbackQueryHandler(show_item_info, pattern="^inv_info:"))
     app.add_handler(CallbackQueryHandler(use_item_callback, pattern="^use_item_"))
-    app.add_handler(CallbackQueryHandler(confirm_use_callback, pattern="^confirm_use_")) 
+    app.add_handler(CallbackQueryHandler(confirm_use_callback, pattern="^confirm_use_"))
+    app.add_handler(CallbackQueryHandler(inventory_handler, pattern="^SHOW_INVENTORY$")) 

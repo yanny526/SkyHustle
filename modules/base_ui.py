@@ -252,7 +252,7 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             InlineKeyboardButton("🕶️ Black Market", callback_data="BM_MENU"),
         ],
         [
-            InlineKeyboardButton("🎒 Inventory", callback_data="INV_BACK"),
+            InlineKeyboardButton("🎒 Inventory", callback_data="SHOW_INVENTORY"),
         ],
         [
             InlineKeyboardButton("🤝 Alliances", callback_data="ALLIANCE_MENU"),
