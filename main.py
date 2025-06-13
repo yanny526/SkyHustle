@@ -3,11 +3,11 @@ import os
 import sys
 import signal
 from dotenv import load_dotenv
-from telegram.ext import Application
+from telegram.ext import Application, JobQueue
 from telegram.error import Conflict
 from modules.sheets_helper import initialize_sheets
 from modules.registration import setup_registration
-from modules.base_ui import setup_base_ui
+from modules.base_ui import setup_base_ui, tick_resources
 from modules.building_system import setup_building_system
 from modules.training_system import setup_training_system
 from modules.research_system import setup_research_system
@@ -45,6 +45,15 @@ def main() -> None:
     setup_inventory_system(app)
     setup_alliance_system(app)
     setup_zone_system(app)
+    
+    # schedule resource ticks every minute:
+    job_queue = app.job_queue
+    job_queue.run_repeating(
+        tick_resources,
+        interval=60,           # seconds
+        first=0,               # run immediately on startup
+        name="resource_tick"
+    )
     
     # Start the bot with error handling
     try:

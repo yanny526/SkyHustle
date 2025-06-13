@@ -3,7 +3,7 @@
 # Implements the /base command to show a player's resources and base level,
 # with inline buttons to "Build New" or "Train Troops".
 
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 from telegram import (
     Update,
@@ -18,9 +18,10 @@ from telegram.ext import (
     CallbackQueryHandler,
 )
 
-from modules.sheets_helper import get_player_data, tick_resources, update_player_data
-from modules.resource_system import tick_resources
+from modules.sheets_helper import get_player_data, update_player_data, list_all_players, _accrue_player_resources_in_sheet
 import logging
+import datetime
+from datetime import timezone
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -28,6 +29,33 @@ logger = logging.getLogger(__name__)
 # Stub for ongoing activities until we build that system
 def _get_ongoing_activities(user_id: int) -> list[str]:
     return []
+
+
+async def tick_resources(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Accrue resources for players based on their last collection time and production rates.
+
+    This function can be called for a specific user (e.g., from /base command)
+    or as a repeating job for all active players.
+    """
+    # Determine if this is a single-user tick or a global tick
+    if context.effective_user:
+        # Single user tick (e.g., from /base command)
+        user_ids_to_tick = [context.effective_user.id]
+        logger.info(f"Ticking resources for user {context.effective_user.id} from command.")
+    else:
+        # Global tick (from JobQueue)
+        logger.info("Performing global resource tick...")
+        all_players = list_all_players()
+        user_ids_to_tick = [int(player.get("user_id")) for player in all_players if player.get("user_id")]
+        logger.info(f"Found {len(user_ids_to_tick)} players for global tick.")
+
+    for user_id in user_ids_to_tick:
+        try:
+            _accrue_player_resources_in_sheet(user_id)
+            logger.debug(f"Successfully ticked resources for user {user_id}.")
+        except Exception as e:
+            logger.error(f"Failed to tick resources for user {user_id}: {e}")
+
 
 async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
@@ -63,11 +91,7 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
 
     # TICK resources up to now
-    try:
-        await tick_resources(user.id)
-    except Exception as e:
-        logger.error(f"Resource tick failed: {e}")
-        # Continue with base display even if tick fails
+    await tick_resources(context)
 
     data: Dict[str, Any] = get_player_data(user.id)
     if not data:
@@ -83,24 +107,24 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     y            = data.get("coord_y", 0)
     power        = data.get("power", 0)
     prestige     = data.get("prestige_level", 0)
-    base_lvl     = data.get("base_level", 1)
+    base_lvl     = int(data.get("base_level", 1))
 
-    wood         = data.get("resources_wood", 0)
-    stone        = data.get("resources_stone", 0)
-    food         = data.get("resources_food", 0)
-    gold         = data.get("resources_gold", 0)
-    diamonds     = data.get("diamonds", 0)
-    energy_cur   = data.get("energy", base_lvl * 200)
-    energy_max   = data.get("energy_max", base_lvl * 200)
+    wood         = int(data.get("resources_wood", 0))
+    stone        = int(data.get("resources_stone", 0))
+    food         = int(data.get("resources_food", 0))
+    gold         = int(data.get("resources_gold", 0))
+    diamonds     = int(data.get("resources_diamonds", 0))
+    energy_cur   = int(data.get("resources_energy", base_lvl * 200))
+    energy_max   = int(data.get("energy_max", base_lvl * 200))
 
     # Army counts
-    inf = data.get("army_infantry", 0)
-    tnk = data.get("army_tank",      0)
-    art = data.get("army_artillery",  0)
-    dst = data.get("army_destroyer",  0)
-    bm1 = data.get("army_bm_barrage",     0)
-    bm2 = data.get("army_venom_reaper",   0)
-    bm3 = data.get("army_titan_crusher",  0)
+    inf = int(data.get("army_infantry", 0))
+    tnk = int(data.get("army_tank",      0))
+    art = int(data.get("army_artillery",  0))
+    dst = int(data.get("army_destroyer",  0))
+    bm1 = int(data.get("army_bm_barrage",     0))
+    bm2 = int(data.get("army_venom_reaper",   0))
+    bm3 = int(data.get("army_titan_crusher",  0))
 
     army_lines = [
         f"👣 Infantry: {inf}",
@@ -117,15 +141,15 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     bm_lines = [l for l in bm_lines if l is not None]
 
     # Building levels (default to 1)
-    lumber_lvl       = data.get("lumber_house_level", 1)
-    mine_lvl         = data.get("mine_level", 1)
-    warehouse_lvl    = data.get("warehouse_level", 1)
-    hospital_lvl     = data.get("hospital_level", 1)
-    research_lvl     = data.get("research_lab_level", 1)
-    barracks_lvl     = data.get("barracks_level", 1)
-    powerplant_lvl   = data.get("power_plant_level", 1)
-    workshop_lvl     = data.get("workshop_level", 1)
-    jail_lvl         = data.get("jail_level", 1)
+    lumber_lvl       = int(data.get("lumber_house_level", 1))
+    mine_lvl         = int(data.get("mine_level", 1))
+    warehouse_lvl    = int(data.get("warehouse_level", 1))
+    hospital_lvl     = int(data.get("hospital_level", 1))
+    research_lvl     = int(data.get("research_lab_level", 1))
+    barracks_lvl     = int(data.get("barracks_level", 1))
+    powerplant_lvl   = int(data.get("power_plant_level", 1))
+    workshop_lvl     = int(data.get("workshop_level", 1))
+    jail_lvl         = int(data.get("jail_level", 1))
 
     # Building levels
     lines_buildings = [
@@ -136,21 +160,21 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         f"🚔 Jail: {jail_lvl}",
     ]
 
-    # Calculate per-minute production rates
-    wood_per_minute = lumber_lvl * 1.0
-    stone_per_minute = mine_lvl * 0.8
-    food_per_minute = warehouse_lvl * 0.7
-    gold_per_minute = mine_lvl * 0.5
-    energy_per_minute = powerplant_lvl * 0.3
+    # Production rates per hour based on levels (simplified for now)
+    wood_per_hour = lumber_lvl * 60.0 
+    stone_per_hour = mine_lvl * 50.0 
+    food_per_hour = warehouse_lvl * 40.0 
+    gold_per_hour = mine_lvl * 30.0 
+    energy_per_hour = powerplant_lvl * 20.0 
 
     # Format resource production block with proper escaping
     resource_block = (
         "📈 *Resource Production*\n\n"
-        f"🌲 Wood: {wood}  (`+{wood_per_minute:.1f}/min`)\n"
-        f"⛰️ Stone: {stone}  (`+{stone_per_minute:.1f}/min`)\n"
-        f"🍖 Food: {food}  (`+{food_per_minute:.1f}/min`)\n"
-        f"💰 Gold: {gold}  (`+{gold_per_minute:.1f}/min`)\n"
-        f"⚡ Energy: {energy_cur}/{energy_max}  (`+{energy_per_minute:.1f}/min`)\n"
+        f"🌲 Wood: {wood}  (`+{wood_per_hour:.1f}/hr`)\n"
+        f"⛰️ Stone: {stone}  (`+{stone_per_hour:.1f}/hr`)\n"
+        f"🍖 Food: {food}  (`+{food_per_hour:.1f}/hr`)\n"
+        f"💰 Gold: {gold}  (`+{gold_per_hour:.1f}/hr`)\n"
+        f"⚡ Energy: {energy_cur}/{energy_max}  (`+{energy_per_hour:.1f}/hr`)\n"
         "――――――――――――"
     )
 

@@ -302,83 +302,111 @@ def update_player_data(user_id: int, field: str, new_value: Any) -> None:
         raise RuntimeError(f"Failed to update player data: {e}")
 
 def list_all_players() -> List[Dict[str, Any]]:
-    """Return a list of all players as dicts of header→value."""
+    """Lists all players in the 'Players' worksheet, returning their data as a list of dictionaries."""
     if _players_ws is None:
         raise RuntimeError("Sheets not initialized. Call initialize_sheets() first.")
-    all_vals = _players_ws.get_all_values()
-    headers = all_vals[0]
-    players: List[Dict[str, Any]] = []
-    for row in all_vals[1:]:
-        entry = {}
-        for i, h in enumerate(headers):
-            entry[h] = row[i] if i < len(row) else ""
-        players.append(entry)
-    return players
+    
+    headers = _players_ws.row_values(1)
+    all_values = _players_ws.get_all_values()
+    
+    players_data = []
+    # Start from the second row to skip headers
+    for row_values in all_values[1:]:
+        player_data: Dict[str, Any] = {}
+        for i, header in enumerate(headers):
+            val = row_values[i] if i < len(row_values) else ""
+            player_data[header] = val # Store as string, convert when reading specific fields
+        players_data.append(player_data)
+    return players_data
 
 def ensure_headers(ws: gspread.Worksheet, headers: List[str]) -> None:
-    """Ensure all needed headers exist in the first row."""
-    try:
-        existing_headers = ws.row_values(1)
-        next_col = len(existing_headers) + 1
-        
-        for header in headers:
-            if header not in existing_headers:
-                ws.update_cell(1, next_col, header)
-                next_col += 1
-    except GSpreadException as e:
-        raise RuntimeError(f"Failed to ensure headers: {e}")
+    """Ensure a worksheet has all required headers, adding missing ones."""
+    existing_headers = ws.row_values(1)
+    missing_headers = [h for h in headers if h not in existing_headers]
+    if missing_headers:
+        ws.append_row(missing_headers)
 
-def tick_resources(player_id: int) -> None:
+def _accrue_player_resources_in_sheet(player_id: int) -> None:
+    """Accrue resources for a player based on their production rates and last collection time.
+    This function is intended for internal use by the resource ticking mechanism.
     """
-    Calculate time-based resource gains since last_collection,
-    cap by capacity, update balances and last_collection timestamp.
-    """
-    # 1. Fetch raw player data from sheet
-    data = get_player_data(player_id)
-    last_ts = data.get("last_collection")
-    if not last_ts:
-        # If no timestamp, just set it now and exit
-        now = datetime.now(timezone.utc)
-        update_player_data(player_id, "last_collection", now.isoformat() + "Z")
+    player_data = get_player_data(player_id)
+    if not player_data:
+        print(f"Player {player_id} not found for resource accrual.")
         return
 
-    # 2. Parse timestamps
-    # strip trailing 'Z' if present, then parse as UTC
-    try:
-        # Ensure last_ts is a string before rstrip and fromisoformat
-        if isinstance(last_ts, datetime):
-            last = last_ts # Already a datetime object if from get_player_data
-        else:
-            last = datetime.fromisoformat(str(last_ts).rstrip("Z")).replace(tzinfo=timezone.utc)
-    except Exception:
-        last = datetime.now(timezone.utc)
+    # Get current time in UTC
+    now_utc = datetime.datetime.now(timezone.utc)
 
-    now = datetime.now(timezone.utc)
-    elapsed = (now - last).total_seconds()
+    # Get last collection time
+    last_collection_str = player_data.get("last_collection")
+    if last_collection_str and isinstance(last_collection_str, str):
+        try:
+            last_collection_dt = datetime.datetime.fromisoformat(last_collection_str.replace("Z", "")).replace(tzinfo=timezone.utc)
+        except ValueError:
+            last_collection_dt = now_utc  # Fallback if format is bad
+    else:
+        last_collection_dt = now_utc
 
-    # 3. Compute per-second rates (stored in sheet as per-hour)
-    #    (if your sheet stores per-hour, divide by 3600; otherwise they may already be per-sec)
-    gold_rate_per_sec     = data.get("gold_rate", 0)     / 3600
-    wood_rate_per_sec     = data.get("wood_rate", 0)     / 3600
-    research_rate_per_sec = data.get("research_rate", 0) / 3600
+    # Calculate elapsed time in seconds
+    elapsed_seconds = (now_utc - last_collection_dt).total_seconds()
 
-    # 4. Calculate gains and cap by capacity
-    def accrue(balance_key, rate_per_sec, cap_key):
-        bal = data.get(balance_key, 0)
-        cap = data.get(cap_key, 0)
-        gain = rate_per_sec * elapsed
-        new_bal = min(bal + gain, cap)
-        return new_bal
+    if elapsed_seconds <= 0:
+        # No time has passed, or time went backwards (shouldn't happen)
+        return
 
-    new_gold     = accrue("gold_balance",     gold_rate_per_sec,     "capacity_gold")
-    new_wood     = accrue("wood_balance",     wood_rate_per_sec,     "capacity_wood")
-    new_research = accrue("research_balance", research_rate_per_sec, "capacity_research")
+    # Get current resources and production rates (per hour)
+    wood = int(player_data.get("resources_wood", 0))
+    stone = int(player_data.get("resources_stone", 0))
+    food = int(player_data.get("resources_food", 0))
+    gold = int(player_data.get("resources_gold", 0))
+    energy = int(player_data.get("resources_energy", 0))
 
-    # 5. Write back updated balances + timestamp
-    update_player_data(player_id, "gold_balance",     round(new_gold))
-    update_player_data(player_id, "wood_balance",     round(new_wood))
-    update_player_data(player_id, "research_balance", round(new_research))
-    update_player_data(player_id, "last_collection",  now.isoformat() + "Z")
+    # Get building levels to determine rates
+    lumber_lvl = int(player_data.get("lumber_house_level", 1))
+    mine_lvl = int(player_data.get("mine_level", 1))
+    warehouse_lvl = int(player_data.get("warehouse_level", 1))
+    powerplant_lvl = int(player_data.get("power_plant_level", 1))
+    base_lvl = int(player_data.get("base_level", 1))
+
+    # Production rates per hour based on levels (simplified for now)
+    wood_per_hour = lumber_lvl * 60.0 # Example: 60 wood per hour per level
+    stone_per_hour = mine_lvl * 50.0  # Example: 50 stone per hour per level
+    food_per_hour = warehouse_lvl * 40.0 # Example: 40 food per hour per level
+    gold_per_hour = mine_lvl * 30.0  # Example: 30 gold per hour per level
+    energy_per_hour = powerplant_lvl * 20.0 # Example: 20 energy per hour per level
+    energy_max = base_lvl * 200 # Example: Max energy tied to base level
+
+    # Calculate accrued resources
+    wood_delta = (wood_per_hour / 3600) * elapsed_seconds
+    stone_delta = (stone_per_hour / 3600) * elapsed_seconds
+    food_delta = (food_per_hour / 3600) * elapsed_seconds
+    gold_delta = (gold_per_hour / 3600) * elapsed_seconds
+    energy_delta = (energy_per_hour / 3600) * elapsed_seconds
+
+    # Add to current balance (only integer part)
+    wood += int(wood_delta)
+    stone += int(stone_delta)
+    food += int(food_delta)
+    gold += int(gold_delta)
+    energy = min(energy + int(energy_delta), energy_max) # Cap energy at max
+
+    # Update player data in Sheets
+    updates = {
+        "resources_wood": wood,
+        "resources_stone": stone,
+        "resources_food": food,
+        "resources_gold": gold,
+        "resources_energy": energy,
+        "last_collection": now_utc.isoformat() + "Z" # Update last tick time
+    }
+    
+    for field, value in updates.items():
+        update_player_data(player_id, field, value)
+
+def accrue(balance_key, rate_per_sec, cap_key):
+    """This function is now obsolete and will be removed."""
+    pass # No operation, function will be removed or commented out. 
 
 # Cursor Prompt (for future regeneration):
 # "Generate a file modules/sheets_helper.py that decodes BASE64_CREDS,
