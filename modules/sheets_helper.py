@@ -126,7 +126,10 @@ def get_player_row(user_id: int) -> Optional[int]:
         raise RuntimeError("Sheets not initialized. Call initialize_sheets() first.")
     try:
         cell = _players_ws.find(str(user_id), in_column=1)
-        return cell.row
+        if cell: # Explicitly check if cell is not None
+            return cell.row
+        else:
+            return None # If find returns None, treat as not found
     except GSpreadException:
         return None
 
