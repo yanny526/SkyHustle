@@ -9,8 +9,8 @@ from modules.sheets_helper import initialize_sheets
 from modules.registration import setup_registration
 from modules.base_ui import setup_base_ui, tick_resources
 from modules.building_system import (
-    setup_building_system, build_menu, build_choice, confirm_build, cancel_build,
-    show_building_info, start_upgrade_worker
+    build_menu, build_choice, confirm_build, cancel_build,
+    show_building_info, start_upgrade_worker, view_queue
 )
 from modules.training_system import setup_training_system
 from modules.research_system import setup_research_system
@@ -48,7 +48,6 @@ def main() -> None:
     # Register handlers
     setup_registration(app)
     setup_base_ui(app)
-    setup_building_system(app)
     setup_training_system(app)
     setup_research_system(app)
     setup_black_market(app)
