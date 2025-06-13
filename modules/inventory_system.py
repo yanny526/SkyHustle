@@ -431,7 +431,7 @@ def setup_inventory_system(app: Application) -> None:
     """Register inventory system handlers."""
     app.add_handler(CommandHandler("inventory", inventory_handler))
     app.add_handler(CommandHandler("use", inventory_use_menu))
-    app.add_handler(CallbackQueryHandler(inventory_handler, pattern="^INV_BACK$"))
+    app.add_handler(CallbackQueryHandler(inventory_handler, pattern="^BACK_TO_BASE$"))
     app.add_handler(CallbackQueryHandler(show_item_info, pattern="^inv_info:"))
     app.add_handler(CallbackQueryHandler(use_item_callback, pattern="^use_item_"))
     app.add_handler(CallbackQueryHandler(confirm_use_callback, pattern="^confirm_use_")) 
