@@ -358,7 +358,7 @@ async def build_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         else:
             # Indicate max level
             keyboard_buttons.append(
-                [InlineKeyboardButton(f"✅ {escape_markdown(config['name'])} \(Max Level\)", callback_data=f"INFO_{building_key}")]
+                [InlineKeyboardButton(f"✅ {escape_markdown(config['name'])} \\(Max Level\\)", callback_data=f"INFO_{building_key}")]
             ) # Using INFO_ to avoid triggering build_choice for maxed buildings
 
     msg_lines.append("\n🏠 Back to Base") # Add backslash for newline
