@@ -168,7 +168,7 @@ def create_new_player(user_id: int, telegram_username: str, game_name: str) -> N
         1000,  # resources_stone
         500,   # resources_gold
         500,   # resources_food
-        0,     # resources_energy
+        1000,     # resources_energy
         0,     # resources_diamonds
         500,   # gold_balance (initial)
         1000,  # wood_balance (initial)
