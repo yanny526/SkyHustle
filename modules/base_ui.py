@@ -100,7 +100,11 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         from modules.alliance_system import alliance_handler
         await alliance_handler(update, context)
         return
-    elif callback_data in ["BUILD_MENU", "RESEARCH_MENU", "TRAIN_MENU", "BASE_ATTACK", "BASE_QUESTS", "BASE_INFO"]:
+    elif callback_data == "TRAIN_MENU":
+        from modules.training_system import train_menu
+        await train_menu(update, context)
+        return
+    elif callback_data in ["BUILD_MENU", "RESEARCH_MENU", "BASE_ATTACK", "BASE_QUESTS", "BASE_INFO"]:
         # These will be handled by their respective modules
         return
 
