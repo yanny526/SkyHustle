@@ -23,6 +23,7 @@ import logging
 import datetime
 from datetime import timezone
 from telegram.helpers import escape_markdown
+from modules.building_system import apply_building_effects
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -124,6 +125,9 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         logger.warning(f"base_handler: No data for user {user.id}. Sent registration message.")
         return
 
+    # Apply building effects to get updated capacities and rates
+    calculated_effects = apply_building_effects(data)
+
     # Safely pull stats with defaults
     name         = data.get("game_name", "Commander")
     x            = data.get("coord_x", 0)
@@ -139,6 +143,13 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     diamonds     = int(data.get("resources_diamonds", 0))
     energy_cur   = int(data.get("resources_energy", base_lvl * 200))
     energy_max   = int(data.get("energy_max", base_lvl * 200))
+
+    # Get capacities
+    wood_cap = calculated_effects.get("wood_capacity", data.get("capacity_wood", 10000))
+    stone_cap = calculated_effects.get("stone_capacity", data.get("capacity_stone", 10000))
+    food_cap = calculated_effects.get("food_capacity", data.get("capacity_food", 10000))
+    gold_cap = calculated_effects.get("gold_capacity", data.get("capacity_gold", 5000))
+    research_cap = calculated_effects.get("research_capacity", data.get("capacity_research", 1000))
 
     # Army counts
     inf = int(data.get("army_infantry", 0))
@@ -184,19 +195,19 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     ]
 
     # Production rates per hour based on levels (simplified for now)
-    wood_per_hour = lumber_lvl * 60.0 
-    stone_per_hour = mine_lvl * 50.0 
-    food_per_hour = warehouse_lvl * 40.0 
-    gold_per_hour = mine_lvl * 30.0 
-    energy_per_hour = powerplant_lvl * 20.0 
+    wood_per_hour = calculated_effects.get("wood_production_per_hour", 0)
+    stone_per_hour = calculated_effects.get("stone_production_per_hour", 0)
+    food_per_hour = calculated_effects.get("food_production_per_hour", 0)
+    gold_per_hour = calculated_effects.get("gold_production_per_hour", 0)
+    energy_per_hour = calculated_effects.get("energy_production_per_hour", 0)
 
     # Format resource production block with proper escaping
     resource_block = (
         "📈 *Resource Production*\n\n"
-        f"🌲 Wood: {wood}  \(`{escape_markdown(f'+{wood_per_hour:.1f}/hr')}`\)\n"
-        f"⛰️ Stone: {stone}  \(`{escape_markdown(f'+{stone_per_hour:.1f}/hr')}`\)\n"
-        f"🍖 Food: {food}  \(`{escape_markdown(f'+{food_per_hour:.1f}/hr')}`\)\n"
-        f"💰 Gold: {gold}  \(`{escape_markdown(f'+{gold_per_hour:.1f}/hr')}`\)\n"
+        f"🌲 Wood: {wood}/{wood_cap}  \(`{escape_markdown(f'+{wood_per_hour:.1f}/hr')}`\)\n"
+        f"⛰️ Stone: {stone}/{stone_cap}  \(`{escape_markdown(f'+{stone_per_hour:.1f}/hr')}`\)\n"
+        f"🍖 Food: {food}/{food_cap}  \(`{escape_markdown(f'+{food_per_hour:.1f}/hr')}`\)\n"
+        f"💰 Gold: {gold}/{gold_cap}  \(`{escape_markdown(f'+{gold_per_hour:.1f}/hr')}`\)\n"
         f"⚡ Energy: {energy_cur}/{energy_max}  \(`{escape_markdown(f'+{energy_per_hour:.1f}/hr')}`\)\n"
         "――――――――――――"
     )
@@ -222,7 +233,7 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         resource_block,
         "",
         "*Current Resources:*",
-        f"🪵 {wood}  🪨 {stone}  🥖 {food}  💰 {gold}  💎 {diamonds}",
+        f"🪵 {wood}/{wood_cap}  🪨 {stone}/{stone_cap}  🥖 {food}/{food_cap}  💰 {gold}/{gold_cap}  💎 {diamonds}",
         f"🔋 Energy: {energy_cur}/{energy_max}",
         "",
         "*Ongoing Activities:*",

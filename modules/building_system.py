@@ -98,7 +98,15 @@ BUILDING_CONFIG = {
         "cost_multiplier": 1.12,
         "time_multiplier": 1.18,
         "effects": {
-            "food_production_per_level": 10
+            "food_production_per_level": 10,
+            "capacity_increase_per_level": {
+                "wood": 1000,    # +1000 wood capacity per level
+                "stone": 1000,   # +1000 stone capacity per level
+                "food": 2000,    # +2000 food capacity per level (higher since it's the Farm)
+                "gold": 500,     # +500 gold capacity per level (lower since gold is more valuable)
+                "energy": 200    # +200 energy capacity per level
+            },
+            "power_bonus_per_level": 50
         },
         "unlock_requirements": {}
     },
@@ -300,6 +308,11 @@ def apply_building_effects(player_data: Dict[str, Any]) -> Dict[str, Any]:
         "research_time_reduction": 0,
         "healing_time_reduction": 0,
         "hospital_capacity_increase": 0,
+        "wood_capacity_increase": 0,
+        "stone_capacity_increase": 0,
+        "food_capacity_increase": 0,
+        "gold_capacity_increase": 0,
+        "energy_capacity_increase": 0,
         "unlocked_units": [],
         "unlocked_tech_tiers": [],
         "unlocked_build_slots": 0,
@@ -336,9 +349,13 @@ def apply_building_effects(player_data: Dict[str, Any]) -> Dict[str, Any]:
         if "healing_time_reduction_per_level" in config["effects"] and building_key == "hospital":
             calculated_effects["healing_time_reduction"] = min(current_level * config["effects"]["healing_time_reduction_per_level"], 0.90)
 
-        # Apply capacity increase
-        if "capacity_increase_per_level" in config["effects"] and building_key == "hospital":
-            calculated_effects["hospital_capacity_increase"] += current_level * config["effects"]["capacity_increase_per_level"]
+        # Apply capacity increases
+        if "capacity_increase_per_level" in config["effects"]:
+            if building_key == "hospital":
+                calculated_effects["hospital_capacity_increase"] += current_level * config["effects"]["capacity_increase_per_level"]
+            elif building_key == "farm":  # Warehouse/Farm
+                for resource, increase in config["effects"]["capacity_increase_per_level"].items():
+                    calculated_effects[f"{resource}_capacity_increase"] += current_level * increase
 
         # Apply unlocks
         if "unlocks" in config["effects"]:
@@ -347,15 +364,14 @@ def apply_building_effects(player_data: Dict[str, Any]) -> Dict[str, Any]:
                     if unlock_type == "artillery" or unlock_type == "tank" or unlock_type == "destroyer":
                         calculated_effects["unlocked_units"].append(unlock_type)
                     elif unlock_type == "tech_tiers":
-                        # Placeholder for tech tiers, add specific tiers if document provided
-                        calculated_effects["unlocked_tech_tiers"].append(f"Tier {unlock_level}") # Assuming unlock_level refers to tiers
+                        calculated_effects["unlocked_tech_tiers"].append(f"Tier {unlock_level}")
         
         # Build slots unlock for Town Hall
         if building_key == "town_hall" and "build_slots_unlock_levels" in config["effects"]:
             for slot_level in config["effects"]["build_slots_unlock_levels"]:
                 if current_level >= slot_level:
                     calculated_effects["unlocked_build_slots"] += 1
-    
+
     return calculated_effects
 
 
@@ -811,9 +827,16 @@ def get_upgrade_info(user_id: int, building_key: str) -> Optional[Dict[str, Any]
     
     # Add capacity increases
     if "capacity_increase_per_level" in config["effects"]:
-        current_capacity = config["effects"]["capacity_increase_per_level"] * (next_level - 1)
-        next_capacity = config["effects"]["capacity_increase_per_level"] * next_level
-        benefits.append(f"🏠 Capacity {current_capacity} → {next_capacity}")
+        if building_key == "hospital":
+            current_capacity = config["effects"]["capacity_increase_per_level"] * (next_level - 1)
+            next_capacity = config["effects"]["capacity_increase_per_level"] * next_level
+            benefits.append(f"🏥 Hospital capacity +{current_capacity} → +{next_capacity}")
+        elif building_key == "farm":  # Warehouse/Farm
+            for resource, increase in config["effects"]["capacity_increase_per_level"].items():
+                current_capacity = increase * (next_level - 1)
+                next_capacity = increase * next_level
+                emoji_map = {"wood": "🪵", "stone": "🪨", "food": "🥖", "gold": "💰", "energy": "⚡"}
+                benefits.append(f"{emoji_map.get(resource, '')} {resource.title()} capacity +{current_capacity} → +{next_capacity}")
     
     # Add unlocks
     if "unlocks" in config["effects"]:
