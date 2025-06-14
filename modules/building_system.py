@@ -579,8 +579,8 @@ async def confirm_build(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         )
         return
     
-    # Get upgrade info
-    upgrade_info = get_upgrade_info(query.from_user.id, building_key)
+    # Get upgrade info - pass user_data to avoid re-fetching
+    upgrade_info = get_upgrade_info(user_data, building_key)
     if not upgrade_info:
         await query.edit_message_text(
             "❌ Could not calculate upgrade information.",
@@ -590,22 +590,22 @@ async def confirm_build(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     
     # Debug logging
     print(f"DEBUG: Player resources:")
-    for resource in ["wood", "stone", "food", "gold", "energy"]:
-        print(f"DEBUG: resources_{resource}: {user_data.get(f'resources_{resource}', 0)}")
+    for resource in ["resources_wood", "resources_stone", "resources_food", "resources_gold", "resources_energy"]:
+        print(f"DEBUG: {resource}: {user_data.get(resource, 0)}")
     print(f"DEBUG: Upgrade costs:")
     for resource, amount in upgrade_info["costs"].items():
         print(f"DEBUG: {resource}: {amount}")
     
-    # Check if user can afford the upgrade
-    if not can_afford(query.from_user.id, upgrade_info["costs"]):
+    # Check if user can afford the upgrade - pass user_data and upgrade_info["costs"]
+    if not can_afford(user_data, upgrade_info["costs"]):
         await query.edit_message_text(
             "❌ You don't have enough resources for this upgrade!",
             parse_mode=None
         )
         return
     
-    # Deduct resources
-    if not deduct_resources(query.from_user.id, upgrade_info["costs"]):
+    # Deduct resources - pass user_data and upgrade_info["costs"]
+    if not deduct_resources(user_data, upgrade_info["costs"]):
         await query.edit_message_text(
             "❌ Failed to deduct resources. Please try again.",
             parse_mode=None
@@ -682,7 +682,7 @@ def calculate_upgrade(building_key: str, current_level: int) -> Dict[str, Any]:
     next_level = current_level + 1
     costs = {}
     for resource, base_cost in config["base_costs"].items():
-        costs[resource] = math.ceil(base_cost * (config["cost_multiplier"] ** current_level))
+        costs[f"resources_{resource}"] = math.ceil(base_cost * (config["cost_multiplier"] ** current_level))
     
     duration = math.ceil(config["base_time"] * (config["time_multiplier"] ** current_level))
     
@@ -692,20 +692,19 @@ def calculate_upgrade(building_key: str, current_level: int) -> Dict[str, Any]:
         "next_level": next_level
     }
 
-def can_afford(user_id: int, cost: Dict[str, int]) -> bool:
+def can_afford(player_data: Dict[str, Any], cost: Dict[str, int]) -> bool:
     """
     Checks if a player can afford the upgrade cost.
     """
-    data = get_player_data(user_id)
-    if not data:
-        print(f"DEBUG: can_afford - Player data not found for user_id: {user_id}")
+    if not player_data:
+        print(f"DEBUG: can_afford - Player data not found (passed as empty dict)")
         return False
     
-    print(f"DEBUG: can_afford - Player data: {data}")
+    print(f"DEBUG: can_afford - Player data: {player_data}")
     for resource, amount in cost.items():
         print(f"DEBUG: can_afford - Iterating resource: {resource}, required amount: {amount}")
         try:
-            current_raw = data[resource]
+            current_raw = player_data[resource]
             print(f"DEBUG: can_afford - Raw value from direct access: {current_raw}, type: {type(current_raw)}")
             current = int(current_raw)
         except KeyError:
@@ -722,19 +721,18 @@ def can_afford(user_id: int, cost: Dict[str, int]) -> bool:
     print(f"DEBUG: can_afford - All resources affordable.")
     return True
 
-def deduct_resources(user_id: int, cost: Dict[str, int]) -> bool:
+def deduct_resources(player_data: Dict[str, Any], cost: Dict[str, int]) -> bool:
     """
     Deducts resources from a player's inventory.
     """
-    data = get_player_data(user_id)
-    if not data:
+    if not player_data:
         return False
     
     for resource, amount in cost.items():
-        current = int(data.get(resource, 0))
+        current = int(player_data.get(resource, 0))
         if current < amount:
             return False
-        update_player_data(user_id, resource, current - amount)
+        update_player_data(player_data["user_id"], resource, current - amount)
     return True
 
 async def start_upgrade_worker(context: ContextTypes.DEFAULT_TYPE):
@@ -766,20 +764,20 @@ async def _process_upgrades(context: ContextTypes.DEFAULT_TYPE):
             except Exception as e:
                 print(f"Error notifying user about completed upgrade: {e}")
 
-def get_upgrade_info(user_id: int, building_key: str) -> Optional[Dict[str, Any]]:
+def get_upgrade_info(player_data: Dict[str, Any], building_key: str) -> Optional[Dict[str, Any]]:
     """Gets detailed upgrade information for a building."""
     config = get_building_config(building_key)
     if not config:
         return None
     
-    next_level = int(get_player_data(user_id).get(_BUILDING_KEY_TO_FIELD[building_key], 1)) + 1
+    next_level = int(player_data.get(_BUILDING_KEY_TO_FIELD[building_key], 1)) + 1
     
-    # Calculate costs
-    costs = calculate_upgrade_cost(get_player_data(user_id), building_key)
+    # Calculate costs - pass player_data to avoid re-fetching
+    costs = calculate_upgrade_cost(player_data, building_key)
     print(f"DEBUG: get_upgrade_info - Calculated costs: {costs}")
     
-    # Calculate duration
-    duration = calculate_upgrade_time(get_player_data(user_id), building_key)
+    # Calculate duration - pass player_data to avoid re-fetching
+    duration = calculate_upgrade_time(player_data, building_key)
     
     # Calculate benefits
     benefits = []
