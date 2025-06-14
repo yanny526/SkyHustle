@@ -73,7 +73,7 @@ __all__ = [
 
 # Mapping from BUILDING_CONFIG keys to sheet field names
 _BUILDING_KEY_TO_FIELD = {
-    "town_hall": "base_level",
+    "base": "base_level",
     "lumber_house": "lumber_house_level",
     "mine": "mine_level", # Stone production
     "farm": "warehouse_level", # Food production (called Farm in doc, Warehouse in sheet/code)
@@ -91,9 +91,9 @@ _FIELD_TO_BUILDING_KEY = {v: k for k, v in _BUILDING_KEY_TO_FIELD.items()}
 
 
 BUILDING_CONFIG = {
-    "town_hall": {
-        "key": "town_hall",
-        "name": "Town Hall",
+    "base": {
+        "key": "base",
+        "name": "Base",
         "emoji": "🏠",
         "max_level": 20,
         "base_costs": {"wood": 100, "stone": 80, "food": 50, "gold": 20, "energy": 10},
