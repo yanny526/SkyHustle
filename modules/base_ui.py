@@ -18,12 +18,11 @@ from telegram.ext import (
     CallbackQueryHandler,
 )
 
-from modules.sheets_helper import client
+from modules.sheets_helper import get_player_data, update_player_data, list_all_players, _accrue_player_resources_in_sheet
 import logging
 import datetime
 from datetime import timezone
 from telegram.helpers import escape_markdown
-from modules.building_system import apply_building_effects
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -48,7 +47,7 @@ async def tick_resources(context: ContextTypes.DEFAULT_TYPE, user_id: Optional[i
     elif context.job:
         # Global tick (from JobQueue)
         logger.info("Performing global resource tick from JobQueue...")
-        all_players = client.list_all_players()
+        all_players = list_all_players()
         user_ids_to_tick = [int(player["user_id"]) for player in all_players if player.get("user_id")]
         logger.info(f"Found {len(user_ids_to_tick)} players for global tick.")
     else:
@@ -57,34 +56,7 @@ async def tick_resources(context: ContextTypes.DEFAULT_TYPE, user_id: Optional[i
 
     for uid in user_ids_to_tick:
         try:
-            # Get player data
-            player_data = client.get_player_data(uid)
-            if not player_data:
-                continue
-
-            # Calculate time since last tick
-            last_tick = datetime.datetime.fromisoformat(player_data.get('last_tick', '2000-01-01T00:00:00'))
-            now = datetime.datetime.now(timezone.utc)
-            hours_passed = (now - last_tick).total_seconds() / 3600
-
-            # Calculate production based on building levels
-            effects = apply_building_effects(player_data)
-            resources = player_data.get('resources', {})
-            
-            # Add resources based on production rates
-            for resource in ['wood', 'stone', 'food', 'gold']:
-                production_key = f'{resource}_production_per_hour'
-                if production_key in effects:
-                    current = resources.get(resource, 0)
-                    produced = effects[production_key] * hours_passed
-                    capacity = effects.get(f'{resource}_capacity', 1000)
-                    resources[resource] = min(current + produced, capacity)
-
-            # Update player data
-            player_data['resources'] = resources
-            player_data['last_tick'] = now.isoformat()
-            client.update_player_data(uid, player_data)
-            
+            _accrue_player_resources_in_sheet(uid)
             logger.debug(f"Successfully ticked resources for user {uid}.")
         except Exception as e:
             logger.error(f"Failed to tick resources for user {uid}: {e}")
@@ -141,7 +113,7 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     await tick_resources(context, user.id)
     logger.info("base_handler: tick_resources completed.")
 
-    data: Dict[str, Any] = client.get_player_data(user.id)
+    data: Dict[str, Any] = get_player_data(user.id)
     logger.info(f"base_handler: Player data fetched: {data is not None}")
     if not data:
         if message:
@@ -151,9 +123,6 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             )
         logger.warning(f"base_handler: No data for user {user.id}. Sent registration message.")
         return
-
-    # Apply building effects to get updated capacities and rates
-    calculated_effects = apply_building_effects(data)
 
     # Safely pull stats with defaults
     name         = data.get("game_name", "Commander")
@@ -170,13 +139,6 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     diamonds     = int(data.get("resources_diamonds", 0))
     energy_cur   = int(data.get("resources_energy", base_lvl * 200))
     energy_max   = int(data.get("energy_max", base_lvl * 200))
-
-    # Get capacities
-    wood_cap = calculated_effects.get("wood_capacity", data.get("capacity_wood", 10000))
-    stone_cap = calculated_effects.get("stone_capacity", data.get("capacity_stone", 10000))
-    food_cap = calculated_effects.get("food_capacity", data.get("capacity_food", 10000))
-    gold_cap = calculated_effects.get("gold_capacity", data.get("capacity_gold", 5000))
-    research_cap = calculated_effects.get("research_capacity", data.get("capacity_research", 1000))
 
     # Army counts
     inf = int(data.get("army_infantry", 0))
@@ -222,19 +184,19 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     ]
 
     # Production rates per hour based on levels (simplified for now)
-    wood_per_hour = calculated_effects.get("wood_production_per_hour", 0)
-    stone_per_hour = calculated_effects.get("stone_production_per_hour", 0)
-    food_per_hour = calculated_effects.get("food_production_per_hour", 0)
-    gold_per_hour = calculated_effects.get("gold_production_per_hour", 0)
-    energy_per_hour = calculated_effects.get("energy_production_per_hour", 0)
+    wood_per_hour = lumber_lvl * 60.0 
+    stone_per_hour = mine_lvl * 50.0 
+    food_per_hour = warehouse_lvl * 40.0 
+    gold_per_hour = mine_lvl * 30.0 
+    energy_per_hour = powerplant_lvl * 20.0 
 
     # Format resource production block with proper escaping
     resource_block = (
         "📈 *Resource Production*\n\n"
-        f"🌲 Wood: {wood}/{wood_cap}  \(`{escape_markdown(f'+{wood_per_hour:.1f}/hr')}`\)\n"
-        f"⛰️ Stone: {stone}/{stone_cap}  \(`{escape_markdown(f'+{stone_per_hour:.1f}/hr')}`\)\n"
-        f"🍖 Food: {food}/{food_cap}  \(`{escape_markdown(f'+{food_per_hour:.1f}/hr')}`\)\n"
-        f"💰 Gold: {gold}/{gold_cap}  \(`{escape_markdown(f'+{gold_per_hour:.1f}/hr')}`\)\n"
+        f"🌲 Wood: {wood}  \(`{escape_markdown(f'+{wood_per_hour:.1f}/hr')}`\)\n"
+        f"⛰️ Stone: {stone}  \(`{escape_markdown(f'+{stone_per_hour:.1f}/hr')}`\)\n"
+        f"🍖 Food: {food}  \(`{escape_markdown(f'+{food_per_hour:.1f}/hr')}`\)\n"
+        f"💰 Gold: {gold}  \(`{escape_markdown(f'+{gold_per_hour:.1f}/hr')}`\)\n"
         f"⚡ Energy: {energy_cur}/{energy_max}  \(`{escape_markdown(f'+{energy_per_hour:.1f}/hr')}`\)\n"
         "――――――――――――"
     )
@@ -260,7 +222,7 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         resource_block,
         "",
         "*Current Resources:*",
-        f"🪵 {wood}/{wood_cap}  🪨 {stone}/{stone_cap}  🥖 {food}/{food_cap}  💰 {gold}/{gold_cap}  💎 {diamonds}",
+        f"🪵 {wood}  🪨 {stone}  🥖 {food}  💰 {gold}  💎 {diamonds}",
         f"🔋 Energy: {energy_cur}/{energy_max}",
         "",
         "*Ongoing Activities:*",
@@ -277,42 +239,59 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         msg += "\n\n*Black Market Units:*\n"
         msg += "\n".join(bm_lines)
 
-    # Create keyboard
     keyboard = [
         [
-            InlineKeyboardButton("🏗️ Build", callback_data="BUILD_MENU"),
+            InlineKeyboardButton("⚒️ Build", callback_data="BUILD_MENU"),
+            InlineKeyboardButton("🧪 Research", callback_data="RESEARCH_MENU"),
             InlineKeyboardButton("🪖 Train", callback_data="TRAIN_MENU"),
         ],
         [
-            InlineKeyboardButton("🧪 Research", callback_data="RESEARCH_MENU"),
-            InlineKeyboardButton("🏪 Black Market", callback_data="BM_MENU"),
-        ],
-        [
             InlineKeyboardButton("⚔️ Attack", callback_data="BASE_ATTACK"),
-            InlineKeyboardButton("📜 Quests", callback_data="BASE_QUESTS"),
+            InlineKeyboardButton("🎖 Quests", callback_data="BASE_QUESTS"),
+            InlineKeyboardButton("📊 Building Info", callback_data="BUILD_MENU"),
         ],
         [
-            InlineKeyboardButton("ℹ️ Info", callback_data="BASE_INFO"),
+            InlineKeyboardButton("💰 Black Market", callback_data="BM_MENU"),
             InlineKeyboardButton("🤝 Alliance", callback_data="ALLIANCE_MENU"),
+            InlineKeyboardButton("🗺 Zones", callback_data="ZONE_MENU"),
         ],
+        [InlineKeyboardButton("🏠 Back to Base", callback_data="base")]
     ]
 
-    # Send or edit message
-    if update.callback_query:
-        await update.callback_query.edit_message_text(
-            text=msg,
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode=constants.ParseMode.MARKDOWN_V2
-        )
-    else:
-        await message.reply_text(
-            text=msg,
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode=constants.ParseMode.MARKDOWN_V2
-        )
+    reply_markup = InlineKeyboardMarkup(keyboard)
 
+    # Send or edit message
+    if update.message:
+        await message.reply_text(
+            msg,
+            reply_markup=reply_markup,
+            parse_mode=constants.ParseMode.MARKDOWN_V2,
+        )
+    elif update.callback_query:
+        await update.callback_query.edit_message_text(
+            msg,
+            reply_markup=reply_markup,
+            parse_mode=constants.ParseMode.MARKDOWN_V2,
+        )
 
 def setup_base_ui(app: Application) -> None:
-    """Set up the base UI command and callback handlers."""
+    """
+    Call this in main.py to register the /base command handler.
+    """
+    # Import handlers here to avoid circular imports
+    from modules.black_market import setup_black_market
+    from modules.alliance_system import setup_alliance_system
+
+    # Register base command and callback handlers
     app.add_handler(CommandHandler("base", base_handler))
-    app.add_handler(CallbackQueryHandler(base_handler, pattern="^BASE_MENU$")) 
+    app.add_handler(CallbackQueryHandler(base_handler, pattern="^BUILD_MENU$"))
+    app.add_handler(CallbackQueryHandler(base_handler, pattern="^RESEARCH_MENU$"))
+    app.add_handler(CallbackQueryHandler(base_handler, pattern="^TRAIN_MENU$"))
+    app.add_handler(CallbackQueryHandler(base_handler, pattern="^BASE_ATTACK$"))
+    app.add_handler(CallbackQueryHandler(base_handler, pattern="^BASE_QUESTS$"))
+    app.add_handler(CallbackQueryHandler(base_handler, pattern="^BASE_INFO$"))
+    app.add_handler(CallbackQueryHandler(base_handler, pattern="^BACK_TO_BASE$"))
+    
+    # Register black market and alliance handlers
+    setup_black_market(app)
+    setup_alliance_system(app) 
