@@ -726,13 +726,26 @@ def deduct_resources(player_data: Dict[str, Any], cost: Dict[str, int]) -> bool:
     Deducts resources from a player's inventory.
     """
     if not player_data:
+        print(f"DEBUG: deduct_resources - Player data is empty.")
         return False
+    
+    user_id = player_data.get("user_id")
+    if not user_id:
+        print(f"DEBUG: deduct_resources - User ID not found in player data: {player_data}")
+        return False
+
+    print(f"DEBUG: deduct_resources - User ID: {user_id}, Cost: {cost}")
     
     for resource, amount in cost.items():
         current = int(player_data.get(resource, 0))
+        print(f"DEBUG: deduct_resources - Resource: {resource}, Current: {current}, Amount to deduct: {amount}")
         if current < amount:
+            print(f"DEBUG: deduct_resources - Insufficient {resource} for deduction. Current: {current}, Required: {amount}")
             return False
-        update_player_data(player_data["user_id"], resource, current - amount)
+        new_value = current - amount
+        print(f"DEBUG: deduct_resources - Updating {resource} from {current} to {new_value}")
+        update_player_data(user_id, resource, new_value)
+    print(f"DEBUG: deduct_resources - All resources successfully deducted.")
     return True
 
 async def start_upgrade_worker(context: ContextTypes.DEFAULT_TYPE):

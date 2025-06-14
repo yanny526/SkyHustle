@@ -496,7 +496,7 @@ def get_pending_upgrades() -> List[Dict[str, Any]]:
                     "user_id": int(row["user_id"]),
                     "building_key": row["building_key"],
                     "new_level": int(row["new_level"]),
-                    "finish_at": datetime.fromisoformat(row["finish_at"].replace("Z", "+00:00"))
+                    "finish_at": datetime.fromisoformat(row["finish_at"].replace("Z", "+00:00")).replace(tzinfo=timezone.utc)
                 })
             except (ValueError, KeyError):
                 continue
