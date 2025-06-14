@@ -5,7 +5,7 @@ import signal
 from dotenv import load_dotenv
 from telegram.ext import Application, JobQueue, ContextTypes, CommandHandler, CallbackQueryHandler
 from telegram.error import Conflict
-from modules.sheets_helper import initialize_sheets
+from modules.sheets_helper import client
 from modules.registration import setup_registration, ENTER_BASE
 from modules.base_ui import setup_base_ui, tick_resources, base_handler
 from modules.building_system import (
@@ -38,9 +38,6 @@ def main() -> None:
     
     # Load environment variables
     load_dotenv()
-    
-    # Initialize Google Sheets
-    initialize_sheets()
     
     # Build the application
     app = Application.builder().token(os.getenv("BOT_TOKEN")).build()
