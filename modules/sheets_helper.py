@@ -260,6 +260,19 @@ def create_new_player(user_id: int, telegram_username: str, game_name: str) -> N
 
 def get_player_data(user_id: int) -> Dict[str, Any]:
     """Return a dict of all player fields, typed (int or str). Empty if not found."""
+    global _players_ws # Declare _players_ws as global to modify it
+    if _sheet is None: # Ensure _sheet is initialized
+        raise RuntimeError("Spreadsheet not initialized. Call initialize_sheets() first.")
+    
+    # Re-fetch the worksheet to ensure fresh data
+    try:
+        _players_ws = _sheet.worksheet("Players")
+    except gspread.exceptions.WorksheetNotFound:
+        # This should ideally not happen if initialize_sheets is called correctly, but for safety
+        print("WARNING: Players worksheet not found during data retrieval. Attempting to re-ensure.")
+        _ensure_players_worksheet()
+        _players_ws = _sheet.worksheet("Players") # Re-fetch after ensuring
+
     if _players_ws is None:
         raise RuntimeError("Sheets not initialized. Call initialize_sheets() first.")
     row_idx = get_player_row(user_id)

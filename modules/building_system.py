@@ -693,7 +693,9 @@ def calculate_upgrade(building_key: str, current_level: int) -> Dict[str, Any]:
     }
 
 def can_afford(user_id: int, cost: Dict[str, int]) -> bool:
-    """Checks if a player can afford the upgrade cost."""
+    """
+    Checks if a player can afford the upgrade cost.
+    """
     data = get_player_data(user_id)
     if not data:
         print(f"DEBUG: can_afford - Player data not found for user_id: {user_id}")
@@ -701,7 +703,18 @@ def can_afford(user_id: int, cost: Dict[str, int]) -> bool:
     
     print(f"DEBUG: can_afford - Player data: {data}")
     for resource, amount in cost.items():
-        current = int(data.get(f"resources_{resource}", 0))
+        print(f"DEBUG: can_afford - Iterating resource: {resource}, required amount: {amount}")
+        try:
+            current_raw = data[resource]
+            print(f"DEBUG: can_afford - Raw value from direct access: {current_raw}, type: {type(current_raw)}")
+            current = int(current_raw)
+        except KeyError:
+            current = 0 # Resource not found in player data
+            print(f"DEBUG: can_afford - KeyError for resource: {resource}. Defaulting to 0.")
+        except ValueError:
+            current = 0 # Value cannot be converted to int
+            print(f"DEBUG: can_afford - ValueError for resource: {resource}. Raw value: {current_raw}. Defaulting to 0.")
+        
         print(f"DEBUG: can_afford - Resource: {resource}, Current: {current}, Required: {amount}")
         if current < amount:
             print(f"DEBUG: can_afford - Insufficient {resource}. Current: {current}, Required: {amount}")
@@ -710,16 +723,18 @@ def can_afford(user_id: int, cost: Dict[str, int]) -> bool:
     return True
 
 def deduct_resources(user_id: int, cost: Dict[str, int]) -> bool:
-    """Deducts resources from a player's inventory."""
+    """
+    Deducts resources from a player's inventory.
+    """
     data = get_player_data(user_id)
     if not data:
         return False
     
     for resource, amount in cost.items():
-        current = int(data.get(f"resources_{resource}", 0))
+        current = int(data.get(resource, 0))
         if current < amount:
             return False
-        update_player_data(user_id, f"resources_{resource}", current - amount)
+        update_player_data(user_id, resource, current - amount)
     return True
 
 async def start_upgrade_worker(context: ContextTypes.DEFAULT_TYPE):
