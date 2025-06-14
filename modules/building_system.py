@@ -301,9 +301,8 @@ def calculate_upgrade_cost(player_data: Dict[str, Any], building_key: str) -> Di
 
 def calculate_upgrade_time(player_data: Dict[str, Any], building_key: str) -> int:
     """
-    Calculates the upgrade time for the next level of a building.
-    Time: base_time * (time_multiplier ** current_level)
-    Then applies Town Hall reduction.
+    Calculates the upgrade time in seconds for the next level of a building.
+    Time: base_time * (time_multiplier ** current_level) * (1 - total_upgrade_time_reduction)
     """
     config = get_building_config(building_key)
     if not config:
@@ -314,21 +313,20 @@ def calculate_upgrade_time(player_data: Dict[str, Any], building_key: str) -> in
         return 0
 
     current_level = int(player_data.get(field_name, 1))
-    town_hall_level = int(player_data.get(_BUILDING_KEY_TO_FIELD["town_hall"], 1))
 
-    base_time = config["base_time"]
-    calculated_time = base_time * (config["time_multiplier"] ** (current_level))
-    
-    # Apply Town Hall upgrade time reduction
-    th_config = get_building_config("town_hall")
-    if th_config and "upgrade_time_reduction_per_level" in th_config["effects"]:
-        reduction_per_level = th_config["effects"]["upgrade_time_reduction_per_level"]
-        total_reduction = town_hall_level * reduction_per_level
-        # Cap reduction at a reasonable max, e.g., 90% to avoid negative/zero times
-        total_reduction = min(total_reduction, 0.90)
-        calculated_time *= (1 - total_reduction)
+    # We need to get the actual level from player_data using the correct key (base_level)
+    base_level = int(player_data.get(_BUILDING_KEY_TO_FIELD["base"], 1))
+    base_config = get_building_config("base")
+    total_upgrade_time_reduction = 0
 
-    return math.ceil(calculated_time)
+    if base_config and "upgrade_time_reduction_per_level" in base_config["effects"]:
+        reduction_per_level = base_config["effects"]["upgrade_time_reduction_per_level"]
+        total_upgrade_time_reduction = min(base_level * reduction_per_level, 0.90) # Cap at 90% reduction
+
+    calculated_time = config["base_time"] * (config["time_multiplier"] ** current_level)
+    final_time_minutes = math.ceil(calculated_time * (1 - total_upgrade_time_reduction))
+
+    return final_time_minutes * 60 # Convert minutes to seconds
 
 def apply_building_effects(player_data: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -373,7 +371,7 @@ def apply_building_effects(player_data: Dict[str, Any]) -> Dict[str, Any]:
             calculated_effects["energy_production_per_hour"] += config["effects"]["energy_production_per_level"] * current_level
 
         # Apply time reduction effects
-        if "upgrade_time_reduction_per_level" in config["effects"] and building_key == "town_hall":
+        if "upgrade_time_reduction_per_level" in config["effects"] and building_key == "base":
             # Town Hall affects all upgrade times
             calculated_effects["total_upgrade_time_reduction"] = min(current_level * config["effects"]["upgrade_time_reduction_per_level"], 0.90) # Cap at 90%
         if "infantry_training_time_reduction_per_level" in config["effects"] and building_key == "barracks":
@@ -400,7 +398,7 @@ def apply_building_effects(player_data: Dict[str, Any]) -> Dict[str, Any]:
                         calculated_effects["unlocked_tech_tiers"].append(f"Tier {unlock_level}") # Assuming unlock_level refers to tiers
         
         # Build slots unlock for Town Hall
-        if building_key == "town_hall" and "build_slots_unlock_levels" in config["effects"]:
+        if building_key == "base" and "build_slots_unlock_levels" in config["effects"]:
             for slot_level in config["effects"]["build_slots_unlock_levels"]:
                 if current_level >= slot_level:
                     calculated_effects["unlocked_build_slots"] += 1
