@@ -20,13 +20,16 @@ from telegram.ext import (
 
 from modules.sheets_helper import (
     get_player_data, update_player_data, list_all_players, 
-    _accrue_player_resources_in_sheet, get_pending_upgrades
+    _accrue_player_resources_in_sheet, get_pending_upgrades, get_due_upgrades
 )
-from modules.building_system import BUILDING_CONFIG, _BUILDING_KEY_TO_FIELD
+from modules.building_system import BUILDING_CONFIG, _BUILDING_KEY_TO_FIELD, get_building_info
+from modules.research_system import get_active_research, RESEARCH_CATALOG, complete_research
 import logging
 import datetime
 from datetime import timezone
 from telegram.helpers import escape_markdown
+import math
+from collections import defaultdict
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -43,18 +46,17 @@ def _get_ongoing_activities(user_id: int) -> list[str]:
         activities.append(f"🔨 {building_name} to level {upgrade['new_level']} \\(Completes at {end_time}\\)")
     
     # Check for research projects
-    data = get_player_data(user_id)
-    if data and data.get("research_timer"):
-        try:
-            research_end = datetime.datetime.fromisoformat(data["research_timer"].replace("Z", "+00:00"))
-            if research_end > datetime.datetime.now(timezone.utc):
-                research_name = escape_markdown(data.get("research_name", "Unknown Research"), version=2)
-                end_time = research_end.strftime("%H:%M UTC")
-                activities.append(f"🧪 {research_name} \\(Completes at {end_time}\\)")
-        except (ValueError, TypeError):
-            pass
-    
+    active_research = get_active_research(user_id)
+    if active_research:
+        remaining_time = active_research.end_timestamp - datetime.datetime.now(timezone.utc)
+        if remaining_time.total_seconds() > 0:
+            hours, remainder = divmod(remaining_time.total_seconds(), 3600)
+            minutes, _ = divmod(remainder, 60)
+            remaining_str = f"{int(hours):02d}:{int(minutes):02d}:{(remaining_time.total_seconds() % 60):02.0f}"
+            activities.append(f"🧪 {escape_markdown(active_research.name, version=2)} \\(Completes in {escape_markdown(remaining_str, version=2)}\\)")
+
     # Check for troop training
+    data = get_player_data(user_id)
     if data and data.get("training_timer"):
         try:
             training_end = datetime.datetime.fromisoformat(data["training_timer"].replace("Z", "+00:00"))

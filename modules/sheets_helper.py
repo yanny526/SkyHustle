@@ -84,7 +84,8 @@ needed_headers = [
     "scheduled_zone", "scheduled_time", "controlled_zone",
     
     # Misc
-    "energy", "energy_max", "last_daily", "last_attack", "last_collection"
+    "energy", "energy_max", "last_daily", "last_attack", "last_collection",
+    "research_id", "research_start_at", "research_finish_at", "research_name_display",
 ]
 
 # Required OAuth scopes for reading/writing Google Sheets & Drive
@@ -259,7 +260,7 @@ def create_new_player(user_id: int, telegram_username: str, game_name: str) -> N
     _players_ws.append_row(new_row)
 
 def get_player_data(user_id: int) -> Dict[str, Any]:
-    """Return a dict of all player fields, typed (int or str). Empty if not found."""
+    """Fetches all data for a given player from the "Players" worksheet."""
     if _players_ws is None:
         raise RuntimeError("Sheets not initialized. Call initialize_sheets() first.")
     
@@ -315,34 +316,63 @@ def get_player_data(user_id: int) -> Dict[str, Any]:
     print(f"DEBUG: Final player data: {data}") # Debug print
     return data
 
-def update_player_data(user_id: int, field: str, new_value: Any) -> None:
-    """Update a specific field for a player."""
+def update_player_data(user_id: int, player_data: Dict[str, Any]) -> None:
+    """
+    Updates multiple fields for a player in a single batch operation.
+    Ensures that column headers are present before updating.
+    """
     if _players_ws is None:
         raise RuntimeError("Sheets not initialized. Call initialize_sheets() first.")
-    try:
-        row_idx = get_player_row(user_id)
-        if row_idx is None:
-            # If user not found, create a new entry with basic data and then update
-            # This might create a sparse row if not all new_player data is used
-            # Consider a more robust way to create partial data or require full creation
-            create_new_player(user_id, "", "New Player") # Placeholder for telegram_username, game_name
-            row_idx = get_player_row(user_id) # Re-fetch row index after creation
-            if row_idx is None: # Should not happen
-                raise ValueError(f"Failed to create or find user ID {user_id} for update.")
 
-        headers = _players_ws.row_values(1)
-        if field not in headers:
-            # If field doesn't exist, add it to headers and then update
-            ensure_headers(_players_ws, [field])
-            headers = _players_ws.row_values(1) # Refresh headers after adding new one
+    # This should be called to ensure headers are up-to-date and in the correct order
+    ensure_headers(_players_ws, needed_headers)
 
-        col_idx = headers.index(field) + 1
-        # Convert datetime objects to ISO format string before writing to sheet
-        if isinstance(new_value, datetime):
-            new_value = new_value.isoformat() + "Z"
-        _players_ws.update_cell(row_idx, col_idx, new_value)
-    except GSpreadException as e:
-        raise RuntimeError(f"Failed to update player data: {e}")
+    player_row_idx = get_player_row(user_id)
+    if player_row_idx is None:
+        raise ValueError(f"Player with user_id {user_id} not found for update.")
+
+    # Get the current header row to map fields to columns
+    headers = _players_ws.row_values(1)
+    
+    # Prepare updates in a list of lists format for batch update
+    # Only include values for the headers that actually exist in player_data
+    # and are part of the `needed_headers` list (to maintain order and consistency)
+    updates = []
+    for header in needed_headers: # Iterate through `needed_headers` to preserve order
+        if header in player_data:
+            updates.append(player_data[header])
+        else:
+            # If a field is not in player_data, we assume it's not being updated
+            # or should retain its current value if it exists.
+            # For simplicity, we are passing the full updated player_data dictionary.
+            # If a key is missing from player_data, it means we don't want to change it.
+            # However, `update_cells` expects a full row, so we need to fetch the existing
+            # row and merge. A simpler approach for `update_player_data` when provided
+            # with a full dict is to overwrite the entire row based on `needed_headers`.
+            # Let's adjust this to fetch the existing row, merge, then update.
+
+            # Re-fetch player data to get current values for fields not being updated
+            # This is inefficient if called frequently.
+            # A better pattern is to pass only the fields to update, or always a full dict.
+            # Given the current usage of `update_player_data` in `building_system.py`,
+            # it expects a full player_data dictionary.
+            pass # No action needed, the logic below handles the full row update
+
+
+    # Fetch the existing row to merge with the new data
+    existing_row_values = _players_ws.row_values(player_row_idx)
+    existing_player_data = dict(zip(headers, existing_row_values))
+    
+    # Merge new player_data into existing_player_data
+    # This ensures that fields not explicitly passed in player_data retain their values
+    merged_player_data = {**existing_player_data, **player_data}
+
+    # Construct the row to update based on needed_headers order
+    row_to_update = [str(merged_player_data.get(header, '')) for header in headers] # Use 'headers' here because it's the actual order in the sheet.
+                                                                                # Make sure to convert to string as gspread stores everything as string.
+    
+    # Perform the update
+    _players_ws.update(f'A{player_row_idx}', [row_to_update])
 
 def list_all_players() -> List[Dict[str, Any]]:
     """Lists all players in the 'Players' worksheet, returning their data as a list of dictionaries."""
@@ -463,13 +493,15 @@ def _accrue_player_resources_in_sheet(player_id: int) -> None:
     accrued_energy = min(current_energy + (energy_rate_per_sec * time_since_last_collection), energy_capacity)
 
     # Update sheet
-    update_player_data(player_id, "resources_wood", int(accrued_wood))
-    update_player_data(player_id, "resources_stone", int(accrued_stone))
-    update_player_data(player_id, "resources_food", int(accrued_food))
-    update_player_data(player_id, "resources_gold", int(accrued_gold))
-    update_player_data(player_id, "research_balance", int(accrued_research))
-    update_player_data(player_id, "resources_energy", int(accrued_energy))
-    update_player_data(player_id, "last_collection", now_utc.isoformat() + "Z")
+    update_player_data(player_id, {
+        "resources_wood": int(accrued_wood),
+        "resources_stone": int(accrued_stone),
+        "resources_food": int(accrued_food),
+        "resources_gold": int(accrued_gold),
+        "research_balance": int(accrued_research),
+        "resources_energy": int(accrued_energy),
+        "last_collection": now_utc.isoformat() + "Z"
+    })
 
 def accrue(balance_key, rate_per_sec, cap_key):
     # This function seems to be unused or a placeholder. 
@@ -560,7 +592,7 @@ def apply_building_level(user_id: int, building_key: str, new_level: int) -> boo
             return False
         
         # Update the building level
-        update_player_data(user_id, field_name, new_level)
+        update_player_data(user_id, {field_name: new_level})
         
         # Recalculate and update player stats
         data = get_player_data(user_id)
@@ -568,7 +600,7 @@ def apply_building_level(user_id: int, building_key: str, new_level: int) -> boo
             updated_data = apply_building_effects(data)
             for key, value in updated_data.items():
                 if key.startswith("resources_") or key.endswith("_level"):
-                    update_player_data(user_id, key, value)
+                    update_player_data(user_id, {key: value})
         
         return True
     except Exception as e:
@@ -595,6 +627,115 @@ def get_player_buildings(user_id: int) -> Dict[str, int]:
         'workshop':     int(player.get('workshop_level', 0)),
         'jail':         int(player.get('jail_level', 0)),
     }
+
+def record_active_research(user_id: int, research_id: str, start_time: datetime, finish_time: datetime, research_name_display: str) -> None:
+    """Records an active research entry for a player."""
+    player_data = get_player_data(user_id)
+    player_data["research_id"] = research_id
+    player_data["research_start_at"] = start_time.isoformat(timespec='microseconds') + 'Z'
+    player_data["research_finish_at"] = finish_time.isoformat(timespec='microseconds') + 'Z'
+    player_data["research_name_display"] = research_name_display
+    update_player_data(user_id, player_data)
+    logger.info(f"Recorded active research {research_id} for player {user_id}.")
+
+def fetch_active_research_data(user_id: int) -> Optional[Dict[str, Any]]:
+    """Fetches the active research data for a player."""
+    player_data = get_player_data(user_id)
+    research_id = player_data.get("research_id")
+    if research_id:
+        try:
+            start_at_str = player_data.get("research_start_at")
+            finish_at_str = player_data.get("research_finish_at")
+            
+            start_at = datetime.fromisoformat(start_at_str.replace('Z', '+00:00')) if start_at_str else None
+            finish_at = datetime.fromisoformat(finish_at_str.replace('Z', '+00:00')) if finish_at_str else None
+
+            # Ensure datetimes are timezone-aware if they are not already
+            if start_at and start_at.tzinfo is None:
+                start_at = start_at.replace(tzinfo=timezone.utc)
+            if finish_at and finish_at.tzinfo is None:
+                finish_at = finish_at.replace(tzinfo=timezone.utc)
+
+            return {
+                "research_id": research_id,
+                "research_start_at": start_at,
+                "research_finish_at": finish_at,
+                "research_name_display": player_data.get("research_name_display", "")
+            }
+        except Exception as e:
+            logger.error(f"Error parsing research datetime for player {user_id}: {e}")
+            return None
+    return None
+
+def clear_active_research(user_id: int) -> None:
+    """Clears the active research entry for a player."""
+    player_data = get_player_data(user_id)
+    player_data["research_id"] = ""
+    player_data["research_start_at"] = ""
+    player_data["research_finish_at"] = ""
+    player_data["research_name_display"] = ""
+    update_player_data(user_id, player_data)
+    logger.info(f"Cleared active research for player {user_id}.")
+
+def add_player_effect(user_id: int, effect_key: str, effect_value: Any) -> None:
+    """
+    Applies a single effect to a player's stats.
+    This function will be extended to handle various types of effects (e.g., percentage boosts, direct additions).
+    """
+    player_data = get_player_data(user_id)
+
+    if effect_key.endswith("_pct"): # For percentage based effects
+        base_key = effect_key.replace("_pct", "")
+        if base_key == "mine_output": # Example: mine_output_pct -> mine_level
+            # Assuming mine_output_pct increases the actual resource generation rate
+            # This will require logic that links to how resources are accrued.
+            # For now, let's just add a placeholder field or modify an existing rate.
+            # A more robust system would involve a separate 'effects' column
+            # or a complex 'calculate_output' function that considers all effects.
+            
+            # For demonstration, let's assume 'gold_rate' and 'wood_rate' are affected by 'mine_output_pct'
+            # This is a simplification. The actual implementation would be more complex.
+            # I will apply it to existing rate fields as a placeholder.
+            current_gold_rate = player_data.get("gold_rate", 0)
+            current_wood_rate = player_data.get("wood_rate", 0)
+            
+            player_data["gold_rate"] = current_gold_rate * (1 + effect_value / 100)
+            player_data["wood_rate"] = current_wood_rate * (1 + effect_value / 100)
+
+            # Also apply to stone if applicable, assuming a generic "mine_output"
+            current_stone_rate = player_data.get("stone_rate", 0) # Assuming a stone_rate exists
+            player_data["stone_rate"] = current_stone_rate * (1 + effect_value / 100)
+            
+        elif base_key == "infantry_attack":
+            # Assuming 'army_infantry_attack' is a field for attack power
+            current_infantry_attack = player_data.get("army_infantry_attack", 0)
+            player_data["army_infantry_attack"] = current_infantry_attack * (1 + effect_value / 100)
+
+        elif base_key == "energy_consumption_reduction": # energy_consumption_pct_reduction
+            # This might involve modifying a global energy consumption multiplier
+            # Or adjusting rates of energy-consuming activities.
+            # For now, we'll create a new field to represent this effect.
+            player_data["energy_consumption_multiplier"] = player_data.get("energy_consumption_multiplier", 1.0) * (1 - effect_value / 100)
+        
+        elif base_key == "base_defense":
+            current_base_defense = player_data.get("base_defense", 0)
+            player_data["base_defense"] = current_base_defense * (1 + effect_value / 100)
+
+        elif base_key == "market_efficiency":
+            current_market_efficiency = player_data.get("market_efficiency", 1.0)
+            player_data["market_efficiency"] = current_market_efficiency * (1 + effect_value / 100)
+        
+        logger.info(f"Applied {effect_key} of {effect_value}% to player {user_id}.")
+    
+    # Add other types of effects as needed (e.g., direct additions to capacity, new units)
+    
+    update_player_data(user_id, player_data)
+
+def apply_research_effects(user_id: int, effects: Dict[str, Any]) -> None:
+    """Applies a dictionary of research effects to the player's stats."""
+    for effect_key, effect_value in effects.items():
+        add_player_effect(user_id, effect_key, effect_value)
+    logger.info(f"Applied all research effects for player {user_id}.")
 
 # Cursor Prompt (for future regeneration):
 # "Generate a file modules/sheets_helper.py that decodes BASE64_CREDS,
