@@ -588,6 +588,14 @@ async def confirm_build(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         )
         return
     
+    # Debug logging
+    print(f"DEBUG: Player resources:")
+    for resource in ["wood", "stone", "food", "gold", "energy"]:
+        print(f"DEBUG: resources_{resource}: {user_data.get(f'resources_{resource}', 0)}")
+    print(f"DEBUG: Upgrade costs:")
+    for resource, amount in upgrade_info["costs"].items():
+        print(f"DEBUG: {resource}: {amount}")
+    
     # Check if user can afford the upgrade
     if not can_afford(query.from_user.id, upgrade_info["costs"]):
         await query.edit_message_text(
@@ -753,6 +761,7 @@ def get_upgrade_info(user_id: int, building_key: str) -> Optional[Dict[str, Any]
     
     # Calculate costs
     costs = calculate_upgrade_cost(get_player_data(user_id), building_key)
+    print(f"DEBUG: get_upgrade_info - Calculated costs: {costs}")
     
     # Calculate duration
     duration = calculate_upgrade_time(get_player_data(user_id), building_key)
