@@ -36,11 +36,26 @@ def main() -> None:
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
     
-    # Load environment variables
-    load_dotenv()
+    # Load environment variables from .env if it exists (for local development)
+    if os.path.exists('.env'):
+        load_dotenv()
+    
+    # Log environment variable status (without exposing values)
+    logger.info("Checking environment variables...")
+    required_vars = ["BOT_TOKEN", "BASE64_CREDS", "SHEET_ID"]
+    missing_vars = [var for var in required_vars if not os.getenv(var)]
+    if missing_vars:
+        logger.error(f"Missing required environment variables: {', '.join(missing_vars)}")
+        sys.exit(1)
+    logger.info("All required environment variables are present")
     
     # Initialize Google Sheets
-    initialize_sheets()
+    try:
+        initialize_sheets()
+        logger.info("Successfully initialized Google Sheets connection")
+    except Exception as e:
+        logger.error(f"Failed to initialize Google Sheets: {e}")
+        sys.exit(1)
     
     # Build the application
     app = Application.builder().token(os.getenv("BOT_TOKEN")).build()
