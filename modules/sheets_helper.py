@@ -737,6 +737,121 @@ def apply_research_effects(user_id: int, effects: Dict[str, Any]) -> None:
         add_player_effect(user_id, effect_key, effect_value)
     logger.info(f"Applied all research effects for player {user_id}.")
 
+def can_afford(player_id: int, costs: dict) -> bool:
+    """Return True if player has at least each resource in costs."""
+    player_data = get_player_data(player_id)
+    if not player_data:
+        return False
+    
+    for resource, amount in costs.items():
+        resource_key = f"resources_{resource}"
+        if resource_key not in player_data or player_data[resource_key] < amount:
+            return False
+    return True
+
+def deduct_resources(player_id: int, costs: dict) -> None:
+    """Subtract each cost from player's resources and save."""
+    player_data = get_player_data(player_id)
+    if not player_data:
+        raise ValueError(f"Player {player_id} not found")
+    
+    for resource, amount in costs.items():
+        resource_key = f"resources_{resource}"
+        if resource_key not in player_data:
+            raise ValueError(f"Invalid resource type: {resource}")
+        player_data[resource_key] = max(0, player_data[resource_key] - amount)
+    
+    update_player_data(player_id, player_data)
+
+def record_active_research(player_id: int, research_id: str, start_ts: int, end_ts: int) -> None:
+    """Write a row to a 'Research' sheet/tab: player_id, research_id, start_ts, end_ts."""
+    research_ws = get_sheet("Research")
+    if not research_ws:
+        raise RuntimeError("Failed to get or create Research worksheet")
+    
+    # Ensure headers exist
+    headers = ["player_id", "research_id", "start_ts", "end_ts"]
+    ensure_headers(research_ws, headers)
+    
+    # Add new research record
+    research_ws.append_row([player_id, research_id, start_ts, end_ts])
+    
+    # Update player's research status
+    player_data = get_player_data(player_id)
+    if player_data:
+        player_data.update({
+            "research_id": research_id,
+            "research_start_at": start_ts,
+            "research_finish_at": end_ts
+        })
+        update_player_data(player_id, player_data)
+
+def fetch_active_research(player_id: int) -> Optional[dict]:
+    """Read the 'Research' sheet to return {'research_id', 'start_ts', 'end_ts'} or None."""
+    research_ws = get_sheet("Research")
+    if not research_ws:
+        return None
+    
+    # Get all research records
+    records = research_ws.get_all_records()
+    
+    # Find the most recent active research for this player
+    active_research = None
+    for record in records:
+        if str(record["player_id"]) == str(player_id):
+            if not active_research or record["end_ts"] > active_research["end_ts"]:
+                active_research = {
+                    "research_id": record["research_id"],
+                    "start_ts": record["start_ts"],
+                    "end_ts": record["end_ts"]
+                }
+    
+    return active_research
+
+def clear_active_research(player_id: int) -> None:
+    """Remove or mark complete the research entry for this player."""
+    research_ws = get_sheet("Research")
+    if not research_ws:
+        return
+    
+    # Get all research records
+    records = research_ws.get_all_records()
+    
+    # Find and delete the player's research record
+    for idx, record in enumerate(records, start=2):  # start=2 because of header row
+        if str(record["player_id"]) == str(player_id):
+            research_ws.delete_row(idx)
+            break
+    
+    # Clear player's research status
+    player_data = get_player_data(player_id)
+    if player_data:
+        player_data.update({
+            "research_id": "",
+            "research_start_at": 0,
+            "research_finish_at": 0
+        })
+        update_player_data(player_id, player_data)
+
+def apply_research_effects(player_id: int, research_id: str) -> None:
+    """Look up RESEARCH_CATALOG[research_id]['effects'], merge into player stats, and save."""
+    from modules.research_system import RESEARCH_CATALOG  # Import here to avoid circular imports
+    
+    if research_id not in RESEARCH_CATALOG:
+        raise ValueError(f"Invalid research ID: {research_id}")
+    
+    effects = RESEARCH_CATALOG[research_id].get("effects", {})
+    if not effects:
+        return
+    
+    player_data = get_player_data(player_id)
+    if not player_data:
+        raise ValueError(f"Player {player_id} not found")
+    
+    # Apply each effect
+    for effect_key, effect_value in effects.items():
+        add_player_effect(player_id, effect_key, effect_value)
+
 # Cursor Prompt (for future regeneration):
 # "Generate a file modules/sheets_helper.py that decodes BASE64_CREDS,
 #  authenticates to Google Sheets via google-auth and gspread, ensures
