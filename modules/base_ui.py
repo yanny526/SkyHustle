@@ -18,7 +18,11 @@ from telegram.ext import (
     CallbackQueryHandler,
 )
 
-from modules.sheets_helper import get_player_data, update_player_data, list_all_players, _accrue_player_resources_in_sheet
+from modules.sheets_helper import (
+    get_player_data, update_player_data, list_all_players, 
+    _accrue_player_resources_in_sheet, get_pending_upgrades
+)
+from modules.building_system import BUILDING_CONFIG, _BUILDING_KEY_TO_FIELD
 import logging
 import datetime
 from datetime import timezone
@@ -27,7 +31,6 @@ from telegram.helpers import escape_markdown
 # Set up logging
 logger = logging.getLogger(__name__)
 
-# Stub for ongoing activities until we build that system
 def _get_ongoing_activities(user_id: int) -> list[str]:
     activities = []
     
@@ -43,8 +46,8 @@ def _get_ongoing_activities(user_id: int) -> list[str]:
     data = get_player_data(user_id)
     if data and data.get("research_timer"):
         try:
-            research_end = datetime.fromisoformat(data["research_timer"].replace("Z", "+00:00"))
-            if research_end > datetime.now(timezone.utc):
+            research_end = datetime.datetime.fromisoformat(data["research_timer"].replace("Z", "+00:00"))
+            if research_end > datetime.datetime.now(timezone.utc):
                 research_name = data.get("research_name", "Unknown Research")
                 end_time = research_end.strftime("%H:%M UTC")
                 activities.append(f"🧪 {research_name} (Completes at {end_time})")
@@ -54,8 +57,8 @@ def _get_ongoing_activities(user_id: int) -> list[str]:
     # Check for troop training
     if data and data.get("training_timer"):
         try:
-            training_end = datetime.fromisoformat(data["training_timer"].replace("Z", "+00:00"))
-            if training_end > datetime.now(timezone.utc):
+            training_end = datetime.datetime.fromisoformat(data["training_timer"].replace("Z", "+00:00"))
+            if training_end > datetime.datetime.now(timezone.utc):
                 unit_name = data.get("training_unit", "Unknown Unit")
                 quantity = data.get("training_quantity", 0)
                 end_time = training_end.strftime("%H:%M UTC")
