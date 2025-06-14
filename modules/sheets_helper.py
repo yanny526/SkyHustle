@@ -10,6 +10,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 from gspread import WorksheetNotFound
 from gspread.exceptions import GSpreadException
+from modules.building_system import _BUILDING_KEY_TO_FIELD, apply_building_effects
 
 # ------------------------------------------------------------------------------
 # Module-level variables
