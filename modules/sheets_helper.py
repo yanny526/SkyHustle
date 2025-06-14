@@ -340,21 +340,17 @@ def get_player_data(user_id: int) -> Dict[str, Any]:
                 ]:
                     try:
                         data[h] = int(val)
-                    except:
-                        data[h] = 0
+                    except ValueError:
+                        data[h] = 0 # Default to 0 if conversion fails
                 elif h == "zones_controlled":
                     data[h] = val.split(",") if val else []
                 elif h in ["last_collection", "timers_emp_boost_end", "timers_hazmat_access_end"]:
-                    # Parse ISO format with timezone. If not present, default to None.
                     try:
                         data[h] = datetime.fromisoformat(val.rstrip("Z")).replace(tzinfo=timezone.utc) if val else None
                     except ValueError:
-                        data[h] = None # Fallback to None if parsing fails
-                    print(f"DEBUG: Converted '{h}' to datetime: {data[h]}") # Debug print
+                        data[h] = None
                 else:
                     data[h] = val
-                    print(f"DEBUG: Converted '{h}' to string: {data[h]}") # Debug print
-            print(f"DEBUG: Final player data: {data}") # Debug print
             return data
         except gspread.exceptions.APIError as e:
             print(f"APIError in get_player_data, retrying: {e}")
@@ -426,7 +422,6 @@ def list_all_players() -> List[Dict[str, Any]]:
                         "alliance_members_count", "alliance_power",
                         "army_infantry", "army_tank", "army_artillery", "army_destroyer",
                         "army_bm_barrage", "army_venom_reaper", "army_titan_crusher",
-                        "army_dead_infantry", "army_dead_tanks",
                         "items_hazmat_mask", "items_energy_drink", "items_repair_kit",
                         "items_medkit", "items_radar", "items_shield_generator",
                         "items_revive_all", "items_emp_device", "items_hazmat_drone",
@@ -463,12 +458,19 @@ def list_all_players() -> List[Dict[str, Any]]:
     raise RuntimeError("Failed to list all players after multiple retries.")
 
 def ensure_headers(ws: gspread.Worksheet, headers: List[str]) -> None:
-    """Ensures all specified headers exist in the given worksheet, adding them if missing."""
-    existing = ws.row_values(1)
-    to_add = [h for h in headers if h not in existing]
-    if to_add:
-        updated_headers = existing + to_add
-        ws.update('A1', [updated_headers])
+    """Ensure a worksheet has all the necessary headers, adding any missing ones."""
+    # This function operates on a passed worksheet object, not directly on _players_ws,
+    # so no global declaration for _players_ws is needed here.
+    try:
+        existing = ws.row_values(1)
+        to_add = [h for h in headers if h not in existing]
+        if to_add:
+            updated_headers = existing + to_add
+            # Update the first row with all headers
+            ws.update('A1', [updated_headers])
+    except gspread.exceptions.APIError as e:
+        print(f"APIError in ensure_headers: {e}")
+        raise # Re-raise to be handled by calling function if needed
 
 def _accrue_player_resources_in_sheet(player_id: int) -> None:
     """Accrue resources for a single player by updating their sheet data."""
