@@ -24,6 +24,7 @@ from modules.sheets_helper import (
 )
 from modules.building_system import BUILDING_CONFIG, _BUILDING_KEY_TO_FIELD, get_building_info
 from modules.research_system import get_active_research, RESEARCH_CATALOG, complete_research
+from modules.utils import escape_markdown_v2
 import logging
 import datetime
 from datetime import timezone
@@ -41,7 +42,7 @@ def _get_ongoing_activities(user_id: int) -> list[str]:
     upgrades = get_pending_upgrades()
     user_upgrades = [u for u in upgrades if u["user_id"] == user_id]
     for upgrade in user_upgrades:
-        building_name = escape_markdown(BUILDING_CONFIG[upgrade["building_key"]]["name"], version=2)
+        building_name = escape_markdown_v2(BUILDING_CONFIG[upgrade["building_key"]]["name"], version=2)
         end_time = upgrade["finish_at"].strftime("%H:%M UTC")
         activities.append(f"🔨 {building_name} to level {upgrade['new_level']} \\(Completes at {end_time}\\)")
     
@@ -53,7 +54,7 @@ def _get_ongoing_activities(user_id: int) -> list[str]:
             hours, remainder = divmod(remaining_time.total_seconds(), 3600)
             minutes, _ = divmod(remainder, 60)
             remaining_str = f"{int(hours):02d}:{int(minutes):02d}:{(remaining_time.total_seconds() % 60):02.0f}"
-            activities.append(f"🧪 {escape_markdown(active_research.name, version=2)} \\(Completes in {escape_markdown(remaining_str, version=2)}\\)")
+            activities.append(f"�� {escape_markdown_v2(active_research.name, version=2)} \\(Completes in {escape_markdown_v2(remaining_str, version=2)}\\)")
 
     # Check for troop training
     data = get_player_data(user_id)
@@ -61,7 +62,7 @@ def _get_ongoing_activities(user_id: int) -> list[str]:
         try:
             training_end = datetime.datetime.fromisoformat(data["training_timer"].replace("Z", "+00:00"))
             if training_end > datetime.datetime.now(timezone.utc):
-                unit_name = escape_markdown(data.get("training_unit", "Unknown Unit"), version=2)
+                unit_name = escape_markdown_v2(data.get("training_unit", "Unknown Unit"), version=2)
                 quantity = data.get("training_quantity", 0)
                 end_time = training_end.strftime("%H:%M UTC")
                 activities.append(f"🪖 Training {quantity} {unit_name} \\(Completes at {end_time}\\)")
@@ -179,11 +180,11 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     # Building levels display
     lines_buildings = [
-        f"🪓 {escape_markdown('Lumber House', version=2)}: {lumber_lvl} ⛏️ {escape_markdown('Mine', version=2)}: {mine_lvl}",
-        f"🧺 {escape_markdown('Warehouse', version=2)}: {warehouse_lvl} 🏥 {escape_markdown('Hospital', version=2)}: {hospital_lvl}",
-        f"🧪 {escape_markdown('Research Lab', version=2)}: {research_lvl} 🪖 {escape_markdown('Barracks', version=2)}: {barracks_lvl}",
-        f"🔋 {escape_markdown('Power Plant', version=2)}: {powerplant_lvl} 🔧 {escape_markdown('Workshop', version=2)}: {workshop_lvl}",
-        f"🚔 {escape_markdown('Jail', version=2)}: {jail_lvl}",
+        f"🪓 {escape_markdown_v2('Lumber House', version=2)}: {lumber_lvl} ⛏️ {escape_markdown_v2('Mine', version=2)}: {mine_lvl}",
+        f"🧺 {escape_markdown_v2('Warehouse', version=2)}: {warehouse_lvl} �� {escape_markdown_v2('Hospital', version=2)}: {hospital_lvl}",
+        f"🧪 {escape_markdown_v2('Research Lab', version=2)}: {research_lvl} 🪖 {escape_markdown_v2('Barracks', version=2)}: {barracks_lvl}",
+        f"🔋 {escape_markdown_v2('Power Plant', version=2)}: {powerplant_lvl} 🔧 {escape_markdown_v2('Workshop', version=2)}: {workshop_lvl}",
+        f"🚔 {escape_markdown_v2('Jail', version=2)}: {jail_lvl}",
     ]
 
     # Production rates per hour based on levels (simplified for now)
@@ -195,60 +196,60 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     # Format resource production block with proper escaping
     resource_block = (
-        f"📈 *{escape_markdown('Resource Production', version=2)}*\n\n"
-        f"🌲 Wood: {wood}  \\(\\`{escape_markdown(f'+{wood_per_hour:.1f}/hr', version=2)}\\`\\)\n"
-        f"⛰️ Stone: {stone}  \\(\\`{escape_markdown(f'+{stone_per_hour:.1f}/hr', version=2)}\\`\\)\n"
-        f"🍖 Food: {food}  \\(\\`{escape_markdown(f'+{food_per_hour:.1f}/hr', version=2)}\\`\\)\n"
-        f"💰 Gold: {gold}  \\(\\`{escape_markdown(f'+{gold_per_hour:.1f}/hr', version=2)}\\`\\)\n"
-        f"⚡ Energy: {energy_cur}/{energy_max}  \\(\\`{escape_markdown(f'+{energy_per_hour:.1f}/hr', version=2)}\\`\\)\n"
+        f"📈 *{escape_markdown_v2('Resource Production', version=2)}*\n\n"
+        f"🌲 Wood: {wood}  \\(\\`{escape_markdown_v2(f'+{wood_per_hour:.1f}/hr', version=2)}\\`\\)\n"
+        f"⛰️ Stone: {stone}  \\(\\`{escape_markdown_v2(f'+{stone_per_hour:.1f}/hr', version=2)}\\`\\)\n"
+        f"🍖 Food: {food}  \\(\\`{escape_markdown_v2(f'+{food_per_hour:.1f}/hr', version=2)}\\`\\)\n"
+        f"💰 Gold: {gold}  \\(\\`{escape_markdown_v2(f'+{gold_per_hour:.1f}/hr', version=2)}\\`\\)\n"
+        f"⚡ Energy: {energy_cur}/{energy_max}  \\(\\`{escape_markdown_v2(f'+{energy_per_hour:.1f}/hr', version=2)}\\`\\)\n"
         f"\-\-\-\-\-\-\-\-\-\-\-\-\-"
     )
 
     # Get ongoing activities
     activities = _get_ongoing_activities(user.id)
-    lines_activities = [escape_markdown(act, version=2) for act in activities]
+    lines_activities = [escape_markdown_v2(act, version=2) for act in activities]
     if not lines_activities:
-        lines_activities = [escape_markdown("None", version=2)]
+        lines_activities = [escape_markdown_v2("None", version=2)]
 
     # Build the message with proper escaping
     msg = "\n".join([
-        f"🏠 *[Commander {escape_markdown(name, version=2)}\'s Base]*",
-        f"📍 Coordinates: X:{escape_markdown(str(x), version=2)}, Y:{escape_markdown(str(y), version=2)}",
+        f"🏠 *[Commander {escape_markdown_v2(name, version=2)}\'s Base]*",
+        f"📍 Coordinates: X:{escape_markdown_v2(str(x), version=2)}, Y:{escape_markdown_v2(str(y), version=2)}",
         f"📈 Power: {power}",
         f"🧬 Prestige Level: {prestige}",
         f"🏗️ Base Level: {base_lvl}",
         "",
-        f"*{escape_markdown('Building Levels:', version=2)}*",
+        f"*{escape_markdown_v2('Building Levels:', version=2)}*",
         *lines_buildings,
         "",
         resource_block,
         "",
-        f"*{escape_markdown('Current Resources:', version=2)}*",
+        f"*{escape_markdown_v2('Current Resources:', version=2)}*",
         f"🪵 {wood}  🪨 {stone}  🥖 {food}  💰 {gold}  💎 {diamonds}",
         f"🔋 Energy: {energy_cur}/{energy_max}",
         "",
-        f"*{escape_markdown('Ongoing Activities:', version=2)}*",
+        f"*{escape_markdown_v2('Ongoing Activities:', version=2)}*",
         *lines_activities,
         "",
-        f"*{escape_markdown('Your Command Options:', version=2)}*"
+        f"*{escape_markdown_v2('Your Command Options:', version=2)}*"
     ])
 
     # Append army overview
-    msg += f"\n\n*{escape_markdown('Army Overview:', version=2)}*\n"
+    msg += f"\n\n*{escape_markdown_v2('Army Overview:', version=2)}*\n"
     msg += "\n".join([
-        f"👣 {escape_markdown('Infantry', version=2)}: {inf}",
-        f"🛡️ {escape_markdown('Tanks', version=2)}: {tnk}",
-        f"🎯 {escape_markdown('Artillery', version=2)}: {art}",
-        f"💥 {escape_markdown('Destroyers', version=2)}: {dst}",
+        f"👣 {escape_markdown_v2('Infantry', version=2)}: {inf}",
+        f"🛡️ {escape_markdown_v2('Tanks', version=2)}: {tnk}",
+        f"🎯 {escape_markdown_v2('Artillery', version=2)}: {art}",
+        f"💥 {escape_markdown_v2('Destroyers', version=2)}: {dst}",
     ])
 
     # Append black market units if any
     if bm_lines:
-        msg += f"\n\n*{escape_markdown('Black Market Units:', version=2)}*\n"
+        msg += f"\n\n*{escape_markdown_v2('Black Market Units:', version=2)}*\n"
         msg += "\n".join([
-            f"🧨 {escape_markdown('BM Barrage', version=2)}: {bm1}"   if bm1 is not None else None,
-            f"🦂 {escape_markdown('Venom Reapers', version=2)}: {bm2}" if bm2 is not None else None,
-            f"🦾 {escape_markdown('Titan Crushers', version=2)}: {bm3}"if bm3 is not None else None,
+            f"🧨 {escape_markdown_v2('BM Barrage', version=2)}: {bm1}"   if bm1 is not None else None,
+            f"�� {escape_markdown_v2('Venom Reapers', version=2)}: {bm2}" if bm2 is not None else None,
+            f"🦾 {escape_markdown_v2('Titan Crushers', version=2)}: {bm3}"if bm3 is not None else None,
         ])
         bm_lines = [l for l in bm_lines if l is not None] # Re-filter after escaping
 

@@ -8,7 +8,7 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Cont
 from telegram.helpers import escape_markdown
 
 from modules.sheets_helper import get_player_data, update_player_data, deduct_resources, can_afford, record_active_research, fetch_active_research, clear_active_research, apply_research_effects, add_player_effect
-from modules.base_ui import escape_markdown_v2
+from modules.utils import escape_markdown_v2
 
 # Set up logging
 logger = logging.getLogger(__name__)
