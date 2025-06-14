@@ -263,9 +263,6 @@ def get_player_data(user_id: int) -> Dict[str, Any]:
     if _players_ws is None:
         raise RuntimeError("Sheets not initialized. Call initialize_sheets() first.")
     
-    # Clear cache to ensure fresh data is pulled from the sheet
-    _players_ws.clear_cache()
-
     row_idx = get_player_row(user_id)
     if row_idx is None:
         return {}
@@ -288,6 +285,7 @@ def get_player_data(user_id: int) -> Dict[str, Any]:
             "alliance_members_count", "alliance_power",
             "army_infantry", "army_tank", "army_artillery", "army_destroyer",
             "army_bm_barrage", "army_venom_reaper", "army_titan_crusher",
+            "army_dead_infantry", "army_dead_tanks",
             "items_hazmat_mask", "items_energy_drink", "items_repair_kit",
             "items_medkit", "items_radar", "items_shield_generator",
             "items_revive_all", "items_emp_device", "items_hazmat_drone", # New item fields
