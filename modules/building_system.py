@@ -20,7 +20,7 @@ def format_building_menu(player_data: dict) -> str:
     """
     lines = ["🏗️ <b>Building Menu</b>\n"]
     specs = [
-        ("Town Hall",      player_data["town_hall_level"],      20, player_data["upgrade_costs"]["town_hall"]),
+        ("Base",           player_data["base_level"],            20, player_data["upgrade_costs"]["base"]),
         ("Lumber House",   player_data["lumber_house_level"],    20, player_data["upgrade_costs"]["lumber_house"]),
         ("Mine",           player_data["mine_level"],            20, player_data["upgrade_costs"]["mine"]),
         ("Farm",           player_data["farm_level"],            20, player_data["upgrade_costs"]["farm"]),
