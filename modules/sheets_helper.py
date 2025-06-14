@@ -549,7 +549,8 @@ def remove_pending_upgrade(upgrade_id: int) -> bool:
 def get_due_upgrades(now: datetime) -> List[Dict[str, Any]]:
     """Fetches all upgrades that are due to complete."""
     upgrades = get_pending_upgrades()
-    return [u for u in upgrades if u["finish_at"] <= now]
+    now_utc = now.replace(tzinfo=timezone.utc)
+    return [u for u in upgrades if u["finish_at"] <= now_utc]
 
 def apply_building_level(user_id: int, building_key: str, new_level: int) -> bool:
     """Applies a building level upgrade to the player's data."""
