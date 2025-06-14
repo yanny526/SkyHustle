@@ -990,4 +990,21 @@ async def view_queue(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             message,
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode=None
-        ) 
+        )
+
+def get_building_info(building_key: str) -> Dict[str, Any]:
+    """
+    Get information about a building without showing it in the UI.
+    Returns the building configuration and effects.
+    """
+    if building_key not in BUILDING_CONFIG:
+        return {}
+    
+    building = BUILDING_CONFIG[building_key]
+    return {
+        "name": building["name"],
+        "emoji": building["emoji"],
+        "max_level": building["max_level"],
+        "effects": building["effects"],
+        "unlock_requirements": building["unlock_requirements"]
+    } 
