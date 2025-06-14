@@ -125,50 +125,139 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         )
         return
     
+    # Safely pull stats with defaults
+    name         = player_data.get("game_name", "Commander")
+    x            = player_data.get("coord_x", 0)
+    y            = player_data.get("coord_y", 0)
+    power        = player_data.get("power", 0)
+    prestige     = player_data.get("prestige_level", 0)
+    base_lvl     = int(player_data.get("base_level", 1))
+
+    wood         = int(player_data.get("resources_wood", 0))
+    stone        = int(player_data.get("resources_stone", 0))
+    food         = int(player_data.get("resources_food", 0))
+    gold         = int(player_data.get("resources_gold", 0))
+    diamonds     = int(player_data.get("resources_diamonds", 0))
+    energy_cur   = int(player_data.get("resources_energy", base_lvl * 200))
+    energy_max   = int(player_data.get("energy_max", base_lvl * 200))
+
+    # Army counts
+    inf = int(player_data.get("army_infantry", 0))
+    tnk = int(player_data.get("army_tank",      0))
+    art = int(player_data.get("army_artillery",  0))
+    dst = int(player_data.get("army_destroyer",  0))
+    bm1 = int(player_data.get("army_bm_barrage",     0))
+    bm2 = int(player_data.get("army_venom_reaper",   0))
+    bm3 = int(player_data.get("army_titan_crusher",  0))
+
+    army_lines = [
+        f"👣 Infantry: {inf}",
+        f"🛡️ Tanks: {tnk}",
+        f"🎯 Artillery: {art}",
+        f"💥 Destroyers: {dst}",
+    ]
+    bm_lines = [
+        f"🧨 BM Barrage: {bm1}"   if bm1 else None,
+        f"🦂 Venom Reapers: {bm2}" if bm2 else None,
+        f"🦾 Titan Crushers: {bm3}"if bm3 else None,
+    ]
+    # Filter out zero lines
+    bm_lines = [l for l in bm_lines if l is not None]
+
+    # Building levels (default to 1)
+    lumber_lvl       = int(player_data.get("lumber_house_level", 1))
+    mine_lvl         = int(player_data.get("mine_level", 1))
+    warehouse_lvl    = int(player_data.get("warehouse_level", 1))
+    hospital_lvl     = int(player_data.get("hospital_level", 1))
+    research_lvl     = int(player_data.get("research_lab_level", 1))
+    barracks_lvl     = int(player_data.get("barracks_level", 1))
+    powerplant_lvl   = int(player_data.get("power_plant_level", 1))
+    workshop_lvl     = int(player_data.get("workshop_level", 1))
+    jail_lvl         = int(player_data.get("jail_level", 1))
+
+    # Building levels display
+    lines_buildings = [
+        f"🪓 Lumber House: {lumber_lvl} ⛏️ Mine: {mine_lvl}",
+        f"🧺 Warehouse: {warehouse_lvl} 🏥 Hospital: {hospital_lvl}",
+        f"🧪 Research Lab: {research_lvl} 🪖 Barracks: {barracks_lvl}",
+        f"🔋 Power Plant: {powerplant_lvl} 🔧 Workshop: {workshop_lvl}",
+        f"🚔 Jail: {jail_lvl}",
+    ]
+
+    # Production rates per hour based on levels (simplified for now)
+    wood_per_hour = lumber_lvl * 60.0 
+    stone_per_hour = mine_lvl * 50.0 
+    food_per_hour = warehouse_lvl * 40.0 
+    gold_per_hour = mine_lvl * 30.0 
+    energy_per_hour = powerplant_lvl * 20.0 
+
+    # Format resource production block with proper escaping
+    resource_block = (
+        "📈 *Resource Production*\n\n"
+        f"🌲 Wood: {wood}  \\(\\`{escape_markdown(f'+{wood_per_hour:.1f}/hr', version=2)}\\`\\)\n"
+        f"⛰️ Stone: {stone}  \\(\\`{escape_markdown(f'+{stone_per_hour:.1f}/hr', version=2)}\\`\\)\n"
+        f"🍖 Food: {food}  \\(\\`{escape_markdown(f'+{food_per_hour:.1f}/hr', version=2)}\\`\\)\n"
+        f"💰 Gold: {gold}  \\(\\`{escape_markdown(f'+{gold_per_hour:.1f}/hr', version=2)}\\`\\)\n"
+        f"⚡ Energy: {energy_cur}/{energy_max}  \\(\\`{escape_markdown(f'+{energy_per_hour:.1f}/hr', version=2)}\\`\\)\n"
+        "――――――――――――"
+    )
+
     # Get ongoing activities
     activities = _get_ongoing_activities(user.id)
-    
-    # Format the message
-    message = (
-        f"*{escape_markdown(player_data['game_name'], version=2)}'s Base*\n\n"
-        f"*Resources:*\n"
-        f"💰 Gold: {player_data['resources_gold']}/{player_data['capacity_gold']} \\(\\+{player_data['gold_rate']}/min\\)\n"
-        f"🪵 Wood: {player_data['resources_wood']}/{player_data['capacity_wood']} \\(\\+{player_data['wood_rate']}/min\\)\n"
-        f"📚 Research: {player_data['research_balance']}/{player_data['capacity_research']} \\(\\+{player_data['research_rate']}/min\\)\n"
-        f"⚡ Energy: {player_data['resources_energy']}/{player_data['energy_max']}\n\n"
-        f"*Buildings:*\n"
-        f"🏰 Base: Level {player_data['base_level']}\n"
-        f"⛏️ Mine: Level {player_data['mine_level']}\n"
-        f"🪓 Lumber House: Level {player_data['lumber_house_level']}\n"
-        f"🏪 Warehouse: Level {player_data['warehouse_level']}\n"
-        f"⚔️ Barracks: Level {player_data['barracks_level']}\n"
-        f"⚡ Power Plant: Level {player_data['power_plant_level']}\n"
-        f"🏥 Hospital: Level {player_data['hospital_level']}\n"
-        f"🔬 Research Lab: Level {player_data['research_lab_level']}\n"
-        f"🔧 Workshop: Level {player_data['workshop_level']}\n"
-        f"🔒 Jail: Level {player_data['jail_level']}\n\n"
-        f"*Ongoing Activities:*\n"
-    )
-    
-    if activities:
-        message += "\n".join(activities)
-    else:
-        message += "None"
-    
+    lines_activities = [f"- {act}" for act in activities]
+    if not lines_activities:
+        lines_activities = ["None"]
+
+    # Build the message with proper escaping
+    msg = "\n".join([
+        f"🏠 *[Commander {escape_markdown(name, version=2)}\'s Base]*",
+        f"📍 Coordinates: X:{x}, Y:{y}",
+        f"📈 Power: {power}",
+        f"🧬 Prestige Level: {prestige}",
+        f"🏗️ Base Level: {base_lvl}",
+        "",
+        "*Building Levels:*",
+        *lines_buildings,
+        "",
+        resource_block,
+        "",
+        "*Current Resources:*",
+        f"🪵 {wood}  🪨 {stone}  🥖 {food}  💰 {gold}  💎 {diamonds}",
+        f"🔋 Energy: {energy_cur}/{energy_max}",
+        "",
+        "*Ongoing Activities:*",
+        *lines_activities,
+        "",
+        f"*Your Command Options:*"
+    ])
+
+    # Append army overview
+    msg += "\n\n*Army Overview:*\n"
+    msg += "\n".join(army_lines)
+
+    # Append black market units if any
+    if bm_lines:
+        msg += "\n\n*Black Market Units:*\n"
+        msg += "\n".join(bm_lines)
+
     # Create keyboard
     keyboard = [
         [
-            InlineKeyboardButton("Upgrade", callback_data="upgrade"),
-            InlineKeyboardButton("Research", callback_data="research"),
+            InlineKeyboardButton("⚒️ Build", callback_data="BUILD_MENU"),
+            InlineKeyboardButton("🧪 Research", callback_data="RESEARCH_MENU"),
+            InlineKeyboardButton("🪖 Train", callback_data="TRAIN_MENU"),
         ],
         [
-            InlineKeyboardButton("Train Troops", callback_data="train"),
-            InlineKeyboardButton("Attack", callback_data="attack"),
+            InlineKeyboardButton("⚔️ Attack", callback_data="BASE_ATTACK"),
+            InlineKeyboardButton("🎖 Quests", callback_data="BASE_QUESTS"),
+            InlineKeyboardButton("📊 Building Info", callback_data="BUILD_MENU"),
         ],
         [
-            InlineKeyboardButton("Items", callback_data="items"),
-            InlineKeyboardButton("Alliance", callback_data="alliance"),
+            InlineKeyboardButton("💰 Black Market", callback_data="BM_MENU"),
+            InlineKeyboardButton("🤝 Alliance", callback_data="ALLIANCE_MENU"),
+            InlineKeyboardButton("🗺 Zones", callback_data="ZONE_MENU"),
         ],
+        [InlineKeyboardButton("🏠 Back to Base", callback_data="base")]
     ]
     
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -176,13 +265,13 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     # Send or update message
     if update.callback_query:
         await update.callback_query.edit_message_text(
-            message,
+            msg,
             reply_markup=reply_markup,
             parse_mode=constants.ParseMode.MARKDOWN_V2
         )
     else:
         await update.message.reply_text(
-            message,
+            msg,
             reply_markup=reply_markup,
             parse_mode=constants.ParseMode.MARKDOWN_V2
         )
