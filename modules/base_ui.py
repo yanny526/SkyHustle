@@ -38,7 +38,7 @@ def _get_ongoing_activities(user_id: int) -> list[str]:
     upgrades = get_pending_upgrades()
     user_upgrades = [u for u in upgrades if u["user_id"] == user_id]
     for upgrade in user_upgrades:
-        building_name = BUILDING_CONFIG[upgrade["building_key"]]["name"]
+        building_name = escape_markdown(BUILDING_CONFIG[upgrade["building_key"]]["name"], version=2)
         end_time = upgrade["finish_at"].strftime("%H:%M UTC")
         activities.append(f"🔨 {building_name} to level {upgrade['new_level']} \\(Completes at {end_time}\\)")
     
@@ -48,7 +48,7 @@ def _get_ongoing_activities(user_id: int) -> list[str]:
         try:
             research_end = datetime.datetime.fromisoformat(data["research_timer"].replace("Z", "+00:00"))
             if research_end > datetime.datetime.now(timezone.utc):
-                research_name = data.get("research_name", "Unknown Research")
+                research_name = escape_markdown(data.get("research_name", "Unknown Research"), version=2)
                 end_time = research_end.strftime("%H:%M UTC")
                 activities.append(f"🧪 {research_name} \\(Completes at {end_time}\\)")
         except (ValueError, TypeError):
@@ -59,7 +59,7 @@ def _get_ongoing_activities(user_id: int) -> list[str]:
         try:
             training_end = datetime.datetime.fromisoformat(data["training_timer"].replace("Z", "+00:00"))
             if training_end > datetime.datetime.now(timezone.utc):
-                unit_name = data.get("training_unit", "Unknown Unit")
+                unit_name = escape_markdown(data.get("training_unit", "Unknown Unit"), version=2)
                 quantity = data.get("training_quantity", 0)
                 end_time = training_end.strftime("%H:%M UTC")
                 activities.append(f"🪖 Training {quantity} {unit_name} \\(Completes at {end_time}\\)")
@@ -199,12 +199,12 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         f"🍖 Food: {food}  \\(\\`{escape_markdown(f'+{food_per_hour:.1f}/hr', version=2)}\\`\\)\n"
         f"💰 Gold: {gold}  \\(\\`{escape_markdown(f'+{gold_per_hour:.1f}/hr', version=2)}\\`\\)\n"
         f"⚡ Energy: {energy_cur}/{energy_max}  \\(\\`{escape_markdown(f'+{energy_per_hour:.1f}/hr', version=2)}\\`\\)\n"
-        "――――――――――――"
+        f"\u2015\u2015\u2015\u2015\u2015\u2015\u2015\u2015\u2015\u2015\u2015\u2015\u2015"
     )
 
     # Get ongoing activities
     activities = _get_ongoing_activities(user.id)
-    lines_activities = [f"- {act}" for act in activities]
+    lines_activities = activities
     if not lines_activities:
         lines_activities = ["None"]
 
