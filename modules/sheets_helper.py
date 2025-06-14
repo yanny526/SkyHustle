@@ -139,13 +139,32 @@ def get_player_row(user_id: int) -> Optional[int]:
     """Return the row number where user_id matches, or None if not found."""
     if _players_ws is None:
         raise RuntimeError("Sheets not initialized. Call initialize_sheets() first.")
+    print(f"DEBUG: get_player_row - Searching for user_id: {user_id}")
     try:
+        # It's crucial that user_id in the sheet is treated consistently.
+        # If stored as numbers, gspread.find might struggle with string search.
+        # We will try to find it as a string first.
         cell = _players_ws.find(str(user_id), in_column=1)
-        if cell: # Explicitly check if cell is not None
+        if cell:
+            print(f"DEBUG: get_player_row - Found user_id {user_id} at row: {cell.row}")
             return cell.row
         else:
-            return None # If find returns None, treat as not found
-    except GSpreadException:
+            # If not found as string, try iterating and converting to int for comparison
+            # This is a fallback and can be slow for large sheets.
+            all_user_ids = _players_ws.col_values(1)[1:] # Skip header row
+            print(f"DEBUG: get_player_row - User ID not found as string, checking all_user_ids: {all_user_ids}")
+            for idx, sheet_user_id_str in enumerate(all_user_ids):
+                try:
+                    if int(sheet_user_id_str) == user_id:
+                        found_row = idx + 2 # +1 for 0-index to 1-index, +1 for header row
+                        print(f"DEBUG: get_player_row - Found user_id {user_id} via int conversion at row: {found_row}")
+                        return found_row
+                except ValueError:
+                    continue # Skip if not a valid integer
+            print(f"DEBUG: get_player_row - User ID {user_id} not found in sheet.")
+            return None
+    except GSpreadException as e:
+        print(f"ERROR: get_player_row - GSpreadException: {e}")
         return None
 
 def create_new_player(user_id: int, telegram_username: str, game_name: str) -> None:
