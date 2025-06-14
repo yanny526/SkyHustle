@@ -126,7 +126,7 @@ def _authenticate_and_open_sheet() -> None:
 
 def _ensure_players_worksheet() -> None:
     """Ensure that the "Players" worksheet exists with the correct headers."""
-    global _players_ws
+    global _players_ws, _gc, _sheet
 
     for _ in range(2): # Retry once
         try:
@@ -145,7 +145,6 @@ def _ensure_players_worksheet() -> None:
         except gspread.exceptions.APIError as e:
             print(f"APIError in _ensure_players_worksheet, retrying: {e}")
             # Clear globals to force re-authentication in the next attempt
-            global _gc, _sheet
             _gc = None
             _sheet = None
         except Exception as e:
