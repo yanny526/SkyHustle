@@ -296,7 +296,7 @@ def calculate_upgrade_cost(player_data: Dict[str, Any], building_key: str) -> Di
     costs = {}
     for resource, base_cost in config["base_costs"].items():
         calculated_cost = base_cost * (config["cost_multiplier"] ** (current_level))
-        costs[resource] = math.ceil(calculated_cost)
+        costs[f"resources_{resource}"] = math.ceil(calculated_cost)
     return costs
 
 def calculate_upgrade_time(player_data: Dict[str, Any], building_key: str) -> int:
@@ -421,10 +421,10 @@ async def build_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         cost = calculate_upgrade_cost(player_data, building_key)
         time = calculate_upgrade_time(player_data, building_key)
         upgrade_costs[building_key] = (
-            cost.get("wood", 0),
-            cost.get("stone", 0),
-            cost.get("food", 0),
-            cost.get("gold", 0),
+            cost.get("resources_wood", 0),
+            cost.get("resources_stone", 0),
+            cost.get("resources_food", 0),
+            cost.get("resources_gold", 0),
             time
         )
     
@@ -475,7 +475,7 @@ async def build_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     # Format costs with emojis
     cost_display = []
     for resource, amount in upgrade_info["cost"].items():
-        emoji_map = {"wood": "🪵", "stone": "🪨", "food": "🥖", "gold": "💰", "energy": "⚡"}
+        emoji_map = {"resources_wood": "🪵", "resources_stone": "🪨", "resources_food": "🥖", "resources_gold": "💰", "resources_energy": "⚡"}
         cost_display.append(f"{emoji_map.get(resource, '')} {escape_markdown(str(amount))}")
     cost_str = " / ".join(cost_display)
 
@@ -589,7 +589,7 @@ async def confirm_build(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         return
     
     # Check if user can afford the upgrade
-    if not can_afford(user_data, upgrade_info["costs"]):
+    if not can_afford(query.from_user.id, upgrade_info["costs"]):
         await query.edit_message_text(
             "❌ You don't have enough resources for this upgrade!",
             parse_mode=None
@@ -879,7 +879,7 @@ async def show_building_info(update: Update, context: ContextTypes.DEFAULT_TYPE,
         # Format costs
         cost_display = []
         for resource, amount in upgrade_info["costs"].items():
-            emoji_map = {"wood": "🪵", "stone": "🪨", "food": "🥖", "gold": "💰", "energy": "⚡"}
+            emoji_map = {"resources_wood": "🪵", "resources_stone": "🪨", "resources_food": "🥖", "resources_gold": "💰", "resources_energy": "⚡"}
             cost_display.append(f"{emoji_map.get(resource, '')} {amount}")
         cost_str = " / ".join(cost_display)
         
