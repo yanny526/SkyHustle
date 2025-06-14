@@ -12,6 +12,55 @@ from modules.sheets_helper import (
     apply_building_level, get_pending_upgrades
 )
 
+def format_building_menu(player_data: dict) -> str:
+    """
+    Return an HTML-formatted building menu list.
+    Each building is on its own line, with bold name,
+    current level / max level, and upgrade cost + time.
+    """
+    lines = ["🏗️ <b>Building Menu</b>\n"]
+    specs = [
+        ("Town Hall",      player_data["town_hall_level"],      20, player_data["upgrade_costs"]["town_hall"]),
+        ("Lumber House",   player_data["lumber_house_level"],    20, player_data["upgrade_costs"]["lumber_house"]),
+        ("Mine",           player_data["mine_level"],            20, player_data["upgrade_costs"]["mine"]),
+        ("Farm",           player_data["farm_level"],            20, player_data["upgrade_costs"]["farm"]),
+        ("Gold Mine",      player_data["gold_mine_level"],       20, player_data["upgrade_costs"]["gold_mine"]),
+        ("Power Plant",    player_data["power_plant_level"],     20, player_data["upgrade_costs"]["power_plant"]),
+        ("Barracks",       player_data["barracks_level"],        20, player_data["upgrade_costs"]["barracks"]),
+        ("Research Lab",   player_data["research_lab_level"],    20, player_data["upgrade_costs"]["research_lab"]),
+        ("Hospital",       player_data["hospital_level"],        20, player_data["upgrade_costs"]["hospital"]),
+        ("Workshop",       player_data["workshop_level"],        20, player_data["upgrade_costs"]["workshop"]),
+        ("Jail",           player_data["jail_level"],            20, player_data["upgrade_costs"]["jail"]),
+    ]
+    for name, lvl, max_lvl, cost in specs:
+        if lvl < max_lvl:
+            wood, stone, food, gold, time_min = cost
+            lines.append(
+                f"🏠 <b>{name}</b> — Level {lvl}/{max_lvl}\n"
+                f" 🔨 Upgrade cost: 🪵{wood}, 🪨{stone}, 🍞{food}, 💰{gold} — ⏱️{time_min}m\n"
+            )
+        else:
+            lines.append(f"🏠 <b>{name}</b> — Level {lvl}/{max_lvl} (max)\n")
+    lines.append("\n🏡 <i>Back to Base</i>")
+    return "\n".join(lines)
+
+def build_menu_keyboard() -> InlineKeyboardMarkup:
+    """Create the keyboard for the building menu."""
+    keyboard = []
+    for building_key, config in BUILDING_CONFIG.items():
+        keyboard.append([
+            InlineKeyboardButton(
+                f"⚒️ Upgrade {config['name']}",
+                callback_data=f"BUILD_{building_key}"
+            ),
+            InlineKeyboardButton(
+                f"ℹ️ Info {config['name']}",
+                callback_data=f"INFO_{building_key}"
+            )
+        ])
+    keyboard.append([InlineKeyboardButton("🏠 Back to Base", callback_data="BASE_MENU")])
+    return InlineKeyboardMarkup(keyboard)
+
 __all__ = [
     "build_menu",
     "build_choice",
@@ -360,95 +409,36 @@ def apply_building_effects(player_data: Dict[str, Any]) -> Dict[str, Any]:
 
 
 async def build_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Shows the building menu with current levels and upgrade options."""
-    user = update.effective_user
-    if not user:
-        return
-
-    data = get_player_data(user.id)
-    if not data:
-        if update.message:
-            await update.message.reply_text("❌ You aren't registered yet\. Send /start to begin\.")
-        elif update.callback_query:
-            await update.callback_query.answer("❌ You aren't registered yet\. Send /start to begin\.")
-        return
-
-    # Initialize variables for the message and keyboard
-    msg_lines = ["🏗️ *Building Menu*\\n"]
-    keyboard_to_send = []
-    parse_mode_to_send = constants.ParseMode.MARKDOWN_V2 # Default to MarkdownV2
-
-    # Get current building levels
-    buildings = get_player_buildings(user.id)
-
-    # Populate building list and buttons
-    for building_key, config in BUILDING_CONFIG.items():
-        player_level = int(buildings.get(_BUILDING_KEY_TO_FIELD.get(building_key), 1))
-
-        msg_lines.append(
-            f"{config['emoji']} *{escape_markdown(config['name'])}* \— Level {player_level}/{config['max_level']}"
-        )
-
-        # Calculate upgrade info (always, even if not used directly for button logic below)
-        upgrade_info = get_upgrade_info(user.id, building_key)
-
-        cost_str = "N/A"
-        minutes = "N/A"
-
-        if upgrade_info:
-            # Format costs
-            cost_display = []
-            for resource, amount in upgrade_info["costs"].items():
-                emoji_map = {"wood": "🪵", "stone": "🪨", "food": "🥖", "gold": "💰", "energy": "⚡"}
-                cost_display.append(f"{emoji_map.get(resource, '')} {amount}")
-            cost_str = " / ".join(cost_display)
-
-            # Add upgrade info
-            minutes = upgrade_info["duration"] // 60
-
-        msg_lines.append(f"➡️ Upgrade cost: {cost_str}, time: {minutes}m")
-
-        # --- TEMPORARY DEBUGGING CHANGE: FORCE BUTTONS --- 
-        # Always add buttons for Upgrade and Info, regardless of max level
-        # This is to see if the buttons render at all.
-        keyboard_to_send.append([
-            InlineKeyboardButton(
-                f"⚒️ Upgrade {config['name']}",
-                callback_data=f"BUILD_{building_key}"
-            ),
-            InlineKeyboardButton(
-                f"ℹ️ Info {config['name']}",
-                callback_data=f"INFO_{building_key}"
-            )
-        ])
-        # --- END TEMPORARY DEBUGGING CHANGE --- 
-
-    # Add final "Back to Base" button
-    msg_lines.append("\\n🏠 Back to Base")
-    keyboard_to_send.append([InlineKeyboardButton("🏠 Back to Base", callback_data="BASE_MENU")])
-
-    message_to_send = "\\n".join(msg_lines)
+    """Handler for /build command - shows building menu"""
+    user_id = update.effective_user.id
+    player_data = get_player_data(user_id)
     
-    # Debugging: Print the keyboard_to_send content before creating InlineKeyboardMarkup
-    print(f"DEBUG: keyboard_to_send content: {keyboard_to_send}")
+    if not player_data:
+        await update.message.reply_text("❌ Error: Could not load player data")
+        return
 
-    reply_markup_to_send = InlineKeyboardMarkup(keyboard_to_send)
-
-    # Send or edit message based on update type
-    if update.message:
-        await update.message.reply_text(
-            message_to_send,
-            reply_markup=reply_markup_to_send,
-            parse_mode=parse_mode_to_send
+    # Calculate upgrade costs for all buildings
+    upgrade_costs = {}
+    for building_key in BUILDING_CONFIG:
+        cost = calculate_upgrade_cost(player_data, building_key)
+        time = calculate_upgrade_time(player_data, building_key)
+        upgrade_costs[building_key] = (
+            cost.get("wood", 0),
+            cost.get("stone", 0),
+            cost.get("food", 0),
+            cost.get("gold", 0),
+            time
         )
-    elif update.callback_query:
-        query = update.callback_query
-        await query.answer()
-        await query.edit_message_text(
-            message_to_send,
-            reply_markup=reply_markup_to_send,
-            parse_mode=parse_mode_to_send
-        )
+    
+    player_data["upgrade_costs"] = upgrade_costs
+    
+    # Format and send the menu
+    menu_text = format_building_menu(player_data)
+    await update.message.reply_text(
+        menu_text,
+        parse_mode=constants.ParseMode.HTML,
+        reply_markup=build_menu_keyboard()
+    )
 
 
 async def build_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
