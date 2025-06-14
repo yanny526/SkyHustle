@@ -177,11 +177,11 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     # Building levels display
     lines_buildings = [
-        f"🪓 Lumber House: {lumber_lvl} ⛏️ Mine: {mine_lvl}",
-        f"🧺 Warehouse: {warehouse_lvl} 🏥 Hospital: {hospital_lvl}",
-        f"🧪 Research Lab: {research_lvl} 🪖 Barracks: {barracks_lvl}",
-        f"🔋 Power Plant: {powerplant_lvl} 🔧 Workshop: {workshop_lvl}",
-        f"🚔 Jail: {jail_lvl}",
+        f"🪓 {escape_markdown('Lumber House', version=2)}: {lumber_lvl} ⛏️ {escape_markdown('Mine', version=2)}: {mine_lvl}",
+        f"🧺 {escape_markdown('Warehouse', version=2)}: {warehouse_lvl} 🏥 {escape_markdown('Hospital', version=2)}: {hospital_lvl}",
+        f"🧪 {escape_markdown('Research Lab', version=2)}: {research_lvl} 🪖 {escape_markdown('Barracks', version=2)}: {barracks_lvl}",
+        f"🔋 {escape_markdown('Power Plant', version=2)}: {powerplant_lvl} 🔧 {escape_markdown('Workshop', version=2)}: {workshop_lvl}",
+        f"🚔 {escape_markdown('Jail', version=2)}: {jail_lvl}",
     ]
 
     # Production rates per hour based on levels (simplified for now)
@@ -193,52 +193,62 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     # Format resource production block with proper escaping
     resource_block = (
-        "📈 *Resource Production*\n\n"
+        f"📈 *{escape_markdown('Resource Production', version=2)}*\n\n"
         f"🌲 Wood: {wood}  \\(\\`{escape_markdown(f'+{wood_per_hour:.1f}/hr', version=2)}\\`\\)\n"
         f"⛰️ Stone: {stone}  \\(\\`{escape_markdown(f'+{stone_per_hour:.1f}/hr', version=2)}\\`\\)\n"
         f"🍖 Food: {food}  \\(\\`{escape_markdown(f'+{food_per_hour:.1f}/hr', version=2)}\\`\\)\n"
         f"💰 Gold: {gold}  \\(\\`{escape_markdown(f'+{gold_per_hour:.1f}/hr', version=2)}\\`\\)\n"
         f"⚡ Energy: {energy_cur}/{energy_max}  \\(\\`{escape_markdown(f'+{energy_per_hour:.1f}/hr', version=2)}\\`\\)\n"
-        f"\u2015\u2015\u2015\u2015\u2015\u2015\u2015\u2015\u2015\u2015\u2015\u2015\u2015"
+        f"\-\-\-\-\-\-\-\-\-\-\-\-\-"
     )
 
     # Get ongoing activities
     activities = _get_ongoing_activities(user.id)
-    lines_activities = activities
+    lines_activities = [escape_markdown(act, version=2) for act in activities]
     if not lines_activities:
-        lines_activities = ["None"]
+        lines_activities = [escape_markdown("None", version=2)]
 
     # Build the message with proper escaping
     msg = "\n".join([
         f"🏠 *[Commander {escape_markdown(name, version=2)}\'s Base]*",
-        f"📍 Coordinates: X:{x}, Y:{y}",
+        f"📍 Coordinates: X:{escape_markdown(str(x), version=2)}, Y:{escape_markdown(str(y), version=2)}",
         f"📈 Power: {power}",
         f"🧬 Prestige Level: {prestige}",
         f"🏗️ Base Level: {base_lvl}",
         "",
-        "*Building Levels:*",
+        f"*{escape_markdown('Building Levels:', version=2)}*",
         *lines_buildings,
         "",
         resource_block,
         "",
-        "*Current Resources:*",
+        f"*{escape_markdown('Current Resources:', version=2)}*",
         f"🪵 {wood}  🪨 {stone}  🥖 {food}  💰 {gold}  💎 {diamonds}",
         f"🔋 Energy: {energy_cur}/{energy_max}",
         "",
-        "*Ongoing Activities:*",
+        f"*{escape_markdown('Ongoing Activities:', version=2)}*",
         *lines_activities,
         "",
-        f"*Your Command Options:*"
+        f"*{escape_markdown('Your Command Options:', version=2)}*"
     ])
 
     # Append army overview
-    msg += "\n\n*Army Overview:*\n"
-    msg += "\n".join(army_lines)
+    msg += f"\n\n*{escape_markdown('Army Overview:', version=2)}*\n"
+    msg += "\n".join([
+        f"👣 {escape_markdown('Infantry', version=2)}: {inf}",
+        f"🛡️ {escape_markdown('Tanks', version=2)}: {tnk}",
+        f"🎯 {escape_markdown('Artillery', version=2)}: {art}",
+        f"💥 {escape_markdown('Destroyers', version=2)}: {dst}",
+    ])
 
     # Append black market units if any
     if bm_lines:
-        msg += "\n\n*Black Market Units:*\n"
-        msg += "\n".join(bm_lines)
+        msg += f"\n\n*{escape_markdown('Black Market Units:', version=2)}*\n"
+        msg += "\n".join([
+            f"🧨 {escape_markdown('BM Barrage', version=2)}: {bm1}"   if bm1 is not None else None,
+            f"🦂 {escape_markdown('Venom Reapers', version=2)}: {bm2}" if bm2 is not None else None,
+            f"🦾 {escape_markdown('Titan Crushers', version=2)}: {bm3}"if bm3 is not None else None,
+        ])
+        bm_lines = [l for l in bm_lines if l is not None] # Re-filter after escaping
 
     # Create keyboard
     keyboard = [
