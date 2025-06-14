@@ -688,12 +688,17 @@ def can_afford(user_id: int, cost: Dict[str, int]) -> bool:
     """Checks if a player can afford the upgrade cost."""
     data = get_player_data(user_id)
     if not data:
+        print(f"DEBUG: can_afford - Player data not found for user_id: {user_id}")
         return False
     
+    print(f"DEBUG: can_afford - Player data: {data}")
     for resource, amount in cost.items():
         current = int(data.get(f"resources_{resource}", 0))
+        print(f"DEBUG: can_afford - Resource: {resource}, Current: {current}, Required: {amount}")
         if current < amount:
+            print(f"DEBUG: can_afford - Insufficient {resource}. Current: {current}, Required: {amount}")
             return False
+    print(f"DEBUG: can_afford - All resources affordable.")
     return True
 
 def deduct_resources(user_id: int, cost: Dict[str, int]) -> bool:
