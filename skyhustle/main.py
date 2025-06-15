@@ -13,7 +13,7 @@ import time
 import json
 import random # For coordinates
 
-# Import our custom modules using absolute imports (as they are in the same top-level directory)
+# Import our custom modules using absolute imports
 import config
 from google_sheets_db_manager import GoogleSheetsDBManager
 
