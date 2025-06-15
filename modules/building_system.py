@@ -5,12 +5,25 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup # For bu
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes # For setup_building_system
 from telegram.helpers import escape_markdown # For MarkdownV2 escaping
 from datetime import datetime, timedelta
+from collections import defaultdict
+import logging
 
 from modules.sheets_helper import (
     get_player_data, update_player_data, get_player_buildings,
     add_pending_upgrade, get_due_upgrades, remove_pending_upgrade,
     apply_building_level, get_pending_upgrades
 )
+from modules.building_system import (
+    BUILDING_CONFIG, 
+    _BUILDING_KEY_TO_FIELD, 
+    get_building_info,
+    calculate_production_rates
+)
+from modules.research_system import get_active_research, RESEARCH_CATALOG, complete_research
+from modules.utils import escape_markdown_v2
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 def format_building_menu(player_data: dict) -> str:
     """
@@ -68,7 +81,8 @@ __all__ = [
     "cancel_build",
     "show_building_info",
     "start_upgrade_worker",
-    "view_queue"
+    "view_queue",
+    "setup_building_system" # Added to __all__ to be importable
 ]
 
 # Mapping from BUILDING_CONFIG keys to sheet field names
@@ -450,26 +464,26 @@ async def build_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     data = get_player_data(user.id)
     if not data:
-        await query.edit_message_text("❌ You aren't registered yet\. Send /start to begin\.")
+        await query.edit_message_text("❌ You aren't registered yet. Send /start to begin.")
         return
 
     # Extract building key from callback data
     building_key = query.data.replace("BUILD_", "")
     config = get_building_config(building_key)
     if not config:
-        await query.edit_message_text("❌ Invalid building selected\.")
+        await query.edit_message_text("❌ Invalid building selected.")
         return
 
     field_name = _BUILDING_KEY_TO_FIELD.get(building_key)
     if not field_name:
-        await query.edit_message_text("❌ Building mapping not found\.")
+        await query.edit_message_text("❌ Building mapping not found.")
         return
 
     current_level = int(data.get(field_name, 1))
     upgrade_info = calculate_upgrade(building_key, current_level)
     
     if not upgrade_info:
-        await query.edit_message_text(f"✅ {escape_markdown(config['name'])} is already at max level \\({escape_markdown(str(config['max_level']))}\\)\.")
+        await query.edit_message_text(f"✅ {escape_markdown(config['name'])} is already at max level ({escape_markdown(str(config['max_level']))}).")
         return
 
     # Format costs with emojis
@@ -488,10 +502,10 @@ async def build_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     # Build the message
     msg_lines = [
         f"{config['emoji']} *{escape_markdown(config['name'])}: Level {current_level} → {upgrade_info['next_level']}*",
-        "\-\-\-",
+        "---",
         f"💰 Cost: {cost_str}",
         f"⏱️ Time: {duration_str}",
-        "\-\-\-",
+        "---",
         "*Next Level Effects:*"
     ]
 
@@ -537,7 +551,7 @@ async def build_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if effects_lines:
         msg_lines.extend([f"• {line}" for line in effects_lines])
     else:
-        msg_lines.append("No specific effects for next level\.")
+        msg_lines.append("No specific effects for next level.")
 
     # Build keyboard
     keyboard = [
@@ -671,7 +685,7 @@ async def confirm_build(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 async def cancel_build(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
-    await query.edit_message_text("❌ Build cancelled\.", parse_mode=constants.ParseMode.MARKDOWN_V2) # Escape .
+    await query.edit_message_text("❌ Build cancelled.", parse_mode=constants.ParseMode.MARKDOWN_V2) # Escape .
 
 def get_player_buildings(user_id: int) -> Dict[str, int]:
     """Fetches all current building levels for a player."""
@@ -872,7 +886,9 @@ def get_upgrade_info(player_data: Dict[str, Any], building_key: str) -> Optional
     }
 
 def get_ongoing_upgrade(user_id: int) -> Optional[Dict[str, Any]]:
-    """Gets information about any ongoing upgrade for a player."""
+    """
+    Gets information about any ongoing upgrade for a player.
+    """
     data = get_player_data(user_id)
     if not data:
         return None
@@ -910,19 +926,24 @@ def get_ongoing_upgrade(user_id: int) -> Optional[Dict[str, Any]]:
     return None
 
 async def show_building_info(update: Update, context: ContextTypes.DEFAULT_TYPE, building_key: str) -> None:
-    """Shows detailed information about a building's levels and effects."""
+    """
+    Shows detailed information about a building's levels and effects.
+    """
     query = update.callback_query
     await query.answer()
     
     config = get_building_config(building_key)
     if not config:
-        await query.edit_message_text("❌ Invalid building selected\.")
+        await query.edit_message_text("❌ Invalid building selected.")
         return
     
     # Build level table
     table_lines = []
     for level in range(1, config["max_level"] + 1):
-        upgrade_info = get_upgrade_info(query.from_user.id, building_key)
+        # For each level, calculate the upgrade info based on that level as current_level
+        temp_player_data = {"user_id": query.from_user.id, _BUILDING_KEY_TO_FIELD[building_key]: level -1} # Simulate current level for info
+        upgrade_info = get_upgrade_info(temp_player_data, building_key) # Use temp_player_data for accurate costs
+        
         if not upgrade_info:
             continue
         
@@ -952,9 +973,9 @@ async def show_building_info(update: Update, context: ContextTypes.DEFAULT_TYPE,
     msg_lines = [
         f"{config['emoji']} *{escape_markdown(config['name'])}*",
         "Building Information:",
-        "\-\-\-",
+        "---",
         *table_lines,
-        "\-\-\-",
+        "---",
         "🏠 Back to Base"
     ]
     
@@ -1007,19 +1028,34 @@ async def view_queue(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             parse_mode=None
         )
 
-def get_building_info(building_key: str) -> Dict[str, Any]:
+def setup_building_system(application: Application):
     """
-    Get information about a building without showing it in the UI.
-    Returns the building configuration and effects.
+    Register all building-system handlers on the Telegram Application.
+    Called from main.py when the bot starts.
     """
-    if building_key not in BUILDING_CONFIG:
-        return {}
+    # 1. Main "build menu" entry point
+    application.add_handler(
+        CallbackQueryHandler(build_menu, pattern="^BUILD_MENU$")
+    )
+
+    # 2. Confirm/cancel handlers
+    application.add_handler(
+        CallbackQueryHandler(confirm_build, pattern="^CONFIRM_BUILD_.+")
+    )
+    application.add_handler(
+        CallbackQueryHandler(cancel_build, pattern="^CANCEL_BUILD$")
+    )
+
+    # 3. Any other building-related handlers...
+    #    e.g. upgrade worker, tick worker, etc.
+    application.add_handler(
+        CallbackQueryHandler(show_building_info, pattern="^INFO_.+") # Added handler for INFO button
+    )
+    application.add_handler(
+        CallbackQueryHandler(view_queue, pattern="^view_queue$")
+    )
     
-    building = BUILDING_CONFIG[building_key]
-    return {
-        "name": building["name"],
-        "emoji": building["emoji"],
-        "max_level": building["max_level"],
-        "effects": building["effects"],
-        "unlock_requirements": building["unlock_requirements"]
-    } 
+    # 4. (Optional) a CommandHandler if you let users type /build
+    application.add_handler(CommandHandler("build", build_menu))
+
+    return application 
