@@ -156,4 +156,80 @@ class QuestSystem:
                 # TODO: Implement proper RRULE parsing and checking
                 # For now, we'll just reset all weekly quests
                 quest.completed = False
-                quest.progress = {req.metric: 0 for req in quest.requirements} 
+                quest.progress = {req.metric: 0 for req in quest.requirements}
+
+    def display_quest(self, quest: Quest) -> str:
+        """Format a single quest for display."""
+        status = "Completed" if quest.completed else "In Progress"
+        progress_str = []
+        for req in quest.requirements:
+            current = quest.progress.get(req.metric, 0)
+            progress_str.append(f"{req.metric}: {current}/{req.target}")
+        
+        reward_str = []
+        if quest.reward.gold:
+            reward_str.append(f"Gold: {quest.reward.gold}")
+        if quest.reward.food:
+            reward_str.append(f"Food: {quest.reward.food}")
+        if quest.reward.wood:
+            reward_str.append(f"Wood: {quest.reward.wood}")
+        if quest.reward.premium:
+            reward_str.append(f"Premium: {quest.reward.premium}")
+        if quest.reward.strategyPoints:
+            reward_str.append(f"Strategy Points: {quest.reward.strategyPoints}")
+
+        return f"""
+Quest: {quest.title} ({quest.id})
+Type: {quest.type.value}
+Status: {status}
+Description: {quest.description}
+Progress: {', '.join(progress_str)}
+Reward: {', '.join(reward_str)}
+"""
+
+    def display_all_quests(self) -> str:
+        """Display all quests in the system."""
+        output = []
+        
+        # Tutorial Quests
+        tutorial_quests = [q for q in self.quests.values() if q.type == QuestType.TUTORIAL]
+        if tutorial_quests:
+            output.append("\n=== Tutorial Quests ===")
+            for quest in tutorial_quests:
+                output.append(self.display_quest(quest))
+
+        # Daily Quests
+        daily_quests = [q for q in self.quests.values() if q.type == QuestType.DAILY]
+        if daily_quests:
+            output.append("\n=== Daily Quests ===")
+            for quest in daily_quests:
+                output.append(self.display_quest(quest))
+
+        # Weekly Quests
+        weekly_quests = [q for q in self.quests.values() if q.type == QuestType.WEEKLY]
+        if weekly_quests:
+            output.append("\n=== Weekly Quests ===")
+            for quest in weekly_quests:
+                output.append(self.display_quest(quest))
+
+        return "\n".join(output)
+
+    def display_active_quests(self) -> str:
+        """Display only active quests."""
+        if not self.active_quests:
+            return "No active quests."
+        
+        output = ["\n=== Active Quests ==="]
+        for quest in self.active_quests.values():
+            output.append(self.display_quest(quest))
+        return "\n".join(output)
+
+    def display_completed_quests(self) -> str:
+        """Display completed quests."""
+        if not self.completed_quests:
+            return "No completed quests."
+        
+        output = ["\n=== Completed Quests ==="]
+        for quest in self.completed_quests.values():
+            output.append(self.display_quest(quest))
+        return "\n".join(output) 
