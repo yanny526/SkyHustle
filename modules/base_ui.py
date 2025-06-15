@@ -20,31 +20,13 @@ from telegram.ext import (
 
 from modules.sheets_helper import (
     get_player_data, update_player_data, list_all_players, 
-    _accrue_player_resources_in_sheet, get_pending_upgrades, get_due_upgrades
+    _accrue_player_resources_in_sheet, get_pending_upgrades
 )
-from modules.building_config import (
-    BUILDING_CONFIG, 
-    _BUILDING_KEY_TO_FIELD
-)
-from modules.building_system import (
-    get_building_config,
-    apply_building_level
-)
-from modules.research_system import get_active_research, RESEARCH_CATALOG, complete_research
-from modules.utils import escape_markdown_v2
+from modules.building_system import BUILDING_CONFIG, _BUILDING_KEY_TO_FIELD
 import logging
 import datetime
 from datetime import timezone
 from telegram.helpers import escape_markdown
-import math
-from collections import defaultdict
-
-# Removed top-level imports that were causing circular dependencies
-# from modules.training_system import train_menu 
-# from modules.research_system import research_command
-# from modules.black_market import blackmarket_menu 
-# from modules.zone_system import zones_main 
-# from modules.building_system import build_menu 
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -56,27 +38,28 @@ def _get_ongoing_activities(user_id: int) -> list[str]:
     upgrades = get_pending_upgrades()
     user_upgrades = [u for u in upgrades if u["user_id"] == user_id]
     for upgrade in user_upgrades:
-        building_name = escape_markdown_v2(BUILDING_CONFIG[upgrade["building_key"]]["name"], version=2)
+        building_name = escape_markdown(BUILDING_CONFIG[upgrade["building_key"]]["name"], version=2)
         end_time = upgrade["finish_at"].strftime("%H:%M UTC")
         activities.append(f"🔨 {building_name} to level {upgrade['new_level']} \\(Completes at {end_time}\\)")
     
     # Check for research projects
-    active_research = get_active_research(user_id)
-    if active_research:
-        remaining_time = active_research.end_timestamp - datetime.datetime.now(timezone.utc)
-        if remaining_time.total_seconds() > 0:
-            hours, remainder = divmod(remaining_time.total_seconds(), 3600)
-            minutes, _ = divmod(remainder, 60)
-            remaining_str = f"{int(hours):02d}:{int(minutes):02d}:{(remaining_time.total_seconds() % 60):02.0f}"
-            activities.append(f"🔬 {escape_markdown_v2(active_research.name, version=2)} \\(Completes in {escape_markdown_v2(remaining_str, version=2)}\\)")
-
-    # Check for troop training
     data = get_player_data(user_id)
+    if data and data.get("research_timer"):
+        try:
+            research_end = datetime.datetime.fromisoformat(data["research_timer"].replace("Z", "+00:00"))
+            if research_end > datetime.datetime.now(timezone.utc):
+                research_name = escape_markdown(data.get("research_name", "Unknown Research"), version=2)
+                end_time = research_end.strftime("%H:%M UTC")
+                activities.append(f"🧪 {research_name} \\(Completes at {end_time}\\)")
+        except (ValueError, TypeError):
+            pass
+    
+    # Check for troop training
     if data and data.get("training_timer"):
         try:
             training_end = datetime.datetime.fromisoformat(data["training_timer"].replace("Z", "+00:00"))
             if training_end > datetime.datetime.now(timezone.utc):
-                unit_name = escape_markdown_v2(data.get("training_unit", "Unknown Unit"), version=2)
+                unit_name = escape_markdown(data.get("training_unit", "Unknown Unit"), version=2)
                 quantity = data.get("training_quantity", 0)
                 end_time = training_end.strftime("%H:%M UTC")
                 activities.append(f"🪖 Training {quantity} {unit_name} \\(Completes at {end_time}\\)")
@@ -137,8 +120,8 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     
     if not player_data:
         await update.message.reply_text(
-            "❌ You need to register first! Use /start to begin.",
-            parse_mode=None
+            "You haven't registered yet! Use /start to begin.",
+            parse_mode=constants.ParseMode.MARKDOWN_V2
         )
         return
     
@@ -194,11 +177,11 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     # Building levels display
     lines_buildings = [
-        f"🪓 {escape_markdown_v2('Lumber House', version=2)}: {lumber_lvl} ⛏️ {escape_markdown_v2('Mine', version=2)}: {mine_lvl}",
-        f"🧺 {escape_markdown_v2('Warehouse', version=2)}: {warehouse_lvl} 🏥 {escape_markdown_v2('Hospital', version=2)}: {hospital_lvl}",
-        f"🧪 {escape_markdown_v2('Research Lab', version=2)}: {research_lvl} 🪖 {escape_markdown_v2('Barracks', version=2)}: {barracks_lvl}",
-        f"🔋 {escape_markdown_v2('Power Plant', version=2)}: {powerplant_lvl} 🔧 {escape_markdown_v2('Workshop', version=2)}: {workshop_lvl}",
-        f"🚔 {escape_markdown_v2('Jail', version=2)}: {jail_lvl}",
+        f"🪓 {escape_markdown('Lumber House', version=2)}: {lumber_lvl} ⛏️ {escape_markdown('Mine', version=2)}: {mine_lvl}",
+        f"🧺 {escape_markdown('Warehouse', version=2)}: {warehouse_lvl} 🏥 {escape_markdown('Hospital', version=2)}: {hospital_lvl}",
+        f"🧪 {escape_markdown('Research Lab', version=2)}: {research_lvl} 🪖 {escape_markdown('Barracks', version=2)}: {barracks_lvl}",
+        f"🔋 {escape_markdown('Power Plant', version=2)}: {powerplant_lvl} 🔧 {escape_markdown('Workshop', version=2)}: {workshop_lvl}",
+        f"🚔 {escape_markdown('Jail', version=2)}: {jail_lvl}",
     ]
 
     # Production rates per hour based on levels (simplified for now)
@@ -210,60 +193,60 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     # Format resource production block with proper escaping
     resource_block = (
-        f"📈 *{escape_markdown_v2('Resource Production', version=2)}*\n\n"
-        f"🌲 Wood: {wood}  \\(\\`{escape_markdown_v2(f'+{wood_per_hour:.1f}/hr', version=2)}\`\\)\n"
-        f"⛰️ Stone: {stone}  \\(\\`{escape_markdown_v2(f'+{stone_per_hour:.1f}/hr', version=2)}\`\\)\n"
-        f"🍖 Food: {food}  \\(\\`{escape_markdown_v2(f'+{food_per_hour:.1f}/hr', version=2)}\`\\)\n"
-        f"💰 Gold: {gold}  \\(\\`{escape_markdown_v2(f'+{gold_per_hour:.1f}/hr', version=2)}\`\\)\n"
-        f"⚡ Energy: {energy_cur}/{energy_max}  \\(\\`{escape_markdown_v2(f'+{energy_per_hour:.1f}/hr', version=2)}\`\\)\n"
+        f"📈 *{escape_markdown('Resource Production', version=2)}*\n\n"
+        f"🌲 Wood: {wood}  \\(\\`{escape_markdown(f'+{wood_per_hour:.1f}/hr', version=2)}\\`\\)\n"
+        f"⛰️ Stone: {stone}  \\(\\`{escape_markdown(f'+{stone_per_hour:.1f}/hr', version=2)}\\`\\)\n"
+        f"🍖 Food: {food}  \\(\\`{escape_markdown(f'+{food_per_hour:.1f}/hr', version=2)}\\`\\)\n"
+        f"💰 Gold: {gold}  \\(\\`{escape_markdown(f'+{gold_per_hour:.1f}/hr', version=2)}\\`\\)\n"
+        f"⚡ Energy: {energy_cur}/{energy_max}  \\(\\`{escape_markdown(f'+{energy_per_hour:.1f}/hr', version=2)}\\`\\)\n"
         f"\-\-\-\-\-\-\-\-\-\-\-\-\-"
     )
 
     # Get ongoing activities
     activities = _get_ongoing_activities(user.id)
-    lines_activities = [escape_markdown_v2(act, version=2) for act in activities]
+    lines_activities = [escape_markdown(act, version=2) for act in activities]
     if not lines_activities:
-        lines_activities = [escape_markdown_v2("None", version=2)]
+        lines_activities = [escape_markdown("None", version=2)]
 
     # Build the message with proper escaping
     msg = "\n".join([
-        f"🏠 *[Commander {escape_markdown_v2(name, version=2)}\'s Base]*",
-        f"📍 Coordinates: X:{escape_markdown_v2(str(x), version=2)}, Y:{escape_markdown_v2(str(y), version=2)}",
+        f"🏠 *[Commander {escape_markdown(name, version=2)}\'s Base]*",
+        f"📍 Coordinates: X:{escape_markdown(str(x), version=2)}, Y:{escape_markdown(str(y), version=2)}",
         f"📈 Power: {power}",
         f"🧬 Prestige Level: {prestige}",
         f"🏗️ Base Level: {base_lvl}",
         "",
-        f"*{escape_markdown_v2('Building Levels:', version=2)}*",
+        f"*{escape_markdown('Building Levels:', version=2)}*",
         *lines_buildings,
         "",
         resource_block,
         "",
-        f"*{escape_markdown_v2('Current Resources:', version=2)}*",
+        f"*{escape_markdown('Current Resources:', version=2)}*",
         f"🪵 {wood}  🪨 {stone}  🥖 {food}  💰 {gold}  💎 {diamonds}",
         f"🔋 Energy: {energy_cur}/{energy_max}",
         "",
-        f"*{escape_markdown_v2('Ongoing Activities:', version=2)}*",
+        f"*{escape_markdown('Ongoing Activities:', version=2)}*",
         *lines_activities,
         "",
-        f"*{escape_markdown_v2('Your Command Options:', version=2)}*"
+        f"*{escape_markdown('Your Command Options:', version=2)}*"
     ])
 
     # Append army overview
-    msg += f"\n\n*{escape_markdown_v2('Army Overview:', version=2)}*\n"
+    msg += f"\n\n*{escape_markdown('Army Overview:', version=2)}*\n"
     msg += "\n".join([
-        f"👣 {escape_markdown_v2('Infantry', version=2)}: {inf}",
-        f"🛡️ {escape_markdown_v2('Tanks', version=2)}: {tnk}",
-        f"🎯 {escape_markdown_v2('Artillery', version=2)}: {art}",
-        f"💥 {escape_markdown_v2('Destroyers', version=2)}: {dst}",
+        f"👣 {escape_markdown('Infantry', version=2)}: {inf}",
+        f"🛡️ {escape_markdown('Tanks', version=2)}: {tnk}",
+        f"🎯 {escape_markdown('Artillery', version=2)}: {art}",
+        f"💥 {escape_markdown('Destroyers', version=2)}: {dst}",
     ])
 
     # Append black market units if any
     if bm_lines:
-        msg += f"\n\n*{escape_markdown_v2('Black Market Units:', version=2)}*\n"
+        msg += f"\n\n*{escape_markdown('Black Market Units:', version=2)}*\n"
         msg += "\n".join([
-            f"🧨 {escape_markdown_v2('BM Barrage', version=2)}: {bm1}"   if bm1 is not None else None,
-            f"🦂 {escape_markdown_v2('Venom Reapers', version=2)}: {bm2}" if bm2 is not None else None,
-            f"🦾 {escape_markdown_v2('Titan Crushers', version=2)}: {bm3}"if bm3 is not None else None,
+            f"🧨 {escape_markdown('BM Barrage', version=2)}: {bm1}"   if bm1 is not None else None,
+            f"🦂 {escape_markdown('Venom Reapers', version=2)}: {bm2}" if bm2 is not None else None,
+            f"🦾 {escape_markdown('Titan Crushers', version=2)}: {bm3}"if bm3 is not None else None,
         ])
         bm_lines = [l for l in bm_lines if l is not None] # Re-filter after escaping
 
@@ -277,14 +260,14 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         [
             InlineKeyboardButton("⚔️ Attack", callback_data="BASE_ATTACK"),
             InlineKeyboardButton("🎖 Quests", callback_data="BASE_QUESTS"),
-            InlineKeyboardButton("📊 Building Info", callback_data="BASE_INFO"),
+            InlineKeyboardButton("📊 Building Info", callback_data="BUILD_MENU"),
         ],
         [
             InlineKeyboardButton("💰 Black Market", callback_data="BM_MENU"),
             InlineKeyboardButton("🤝 Alliance", callback_data="ALLIANCE_MENU"),
             InlineKeyboardButton("🗺 Zones", callback_data="ZONE_MENU"),
         ],
-        [InlineKeyboardButton("🏠 Back to Base", callback_data="BACK_TO_BASE")]
+        [InlineKeyboardButton("🏠 Back to Base", callback_data="base")]
     ]
     
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -303,21 +286,6 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             parse_mode=constants.ParseMode.MARKDOWN_V2
         )
 
-async def attack_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.callback_query.answer()
-    await update.callback_query.edit_message_text("⚔️ *Attack Menu*\n\n(Attack features are under development.)", parse_mode=constants.ParseMode.MARKDOWN_V2)
-
-async def quests_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.callback_query.answer()
-    await update.callback_query.edit_message_text("🎖 *Quests Menu*\n\n(Quests are under development.)", parse_mode=constants.ParseMode.MARKDOWN_V2)
-
-async def building_info_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    # This will display detailed info about all buildings, or allow selection.
-    # For now, a placeholder, but ideally integrates with modules/building_system.py
-    # I'll re-use the show_building_info from building_system.py later
-    await update.callback_query.answer()
-    await update.callback_query.edit_message_text("📊 *Building Information*\n\n(Detailed building info is under development.)", parse_mode=constants.ParseMode.MARKDOWN_V2)
-
 def setup_base_ui(app: Application) -> None:
     """
     Call this in main.py to register the /base command handler.
@@ -325,27 +293,17 @@ def setup_base_ui(app: Application) -> None:
     # Import handlers here to avoid circular imports
     from modules.black_market import setup_black_market
     from modules.alliance_system import setup_alliance_system
-    from modules.training_system import train_menu
-    from modules.research_system import research_command
-    from modules.black_market import blackmarket_menu
-    from modules.alliance_system import alliance_handler
-    from modules.zone_system import zones_main
-    from modules.building_system import build_menu
-
 
     # Register base command and callback handlers
     app.add_handler(CommandHandler("base", base_handler))
-    app.add_handler(CallbackQueryHandler(build_menu, pattern="^BUILD_MENU$"))
-    app.add_handler(CallbackQueryHandler(research_command, pattern="^RESEARCH_MENU$"))
-    app.add_handler(CallbackQueryHandler(train_menu, pattern="^TRAIN_MENU$"))
-    app.add_handler(CallbackQueryHandler(attack_menu_handler, pattern="^BASE_ATTACK$"))
-    app.add_handler(CallbackQueryHandler(quests_menu_handler, pattern="^BASE_QUESTS$"))
-    app.add_handler(CallbackQueryHandler(building_info_handler, pattern="^BASE_INFO$"))
-    app.add_handler(CallbackQueryHandler(blackmarket_menu, pattern="^BM_MENU$"))
-    app.add_handler(CallbackQueryHandler(alliance_handler, pattern="^ALLIANCE_MENU$"))
-    app.add_handler(CallbackQueryHandler(zones_main, pattern="^ZONE_MENU$"))
+    app.add_handler(CallbackQueryHandler(base_handler, pattern="^BUILD_MENU$"))
+    app.add_handler(CallbackQueryHandler(base_handler, pattern="^RESEARCH_MENU$"))
+    app.add_handler(CallbackQueryHandler(base_handler, pattern="^TRAIN_MENU$"))
+    app.add_handler(CallbackQueryHandler(base_handler, pattern="^BASE_ATTACK$"))
+    app.add_handler(CallbackQueryHandler(base_handler, pattern="^BASE_QUESTS$"))
+    app.add_handler(CallbackQueryHandler(base_handler, pattern="^BASE_INFO$"))
     app.add_handler(CallbackQueryHandler(base_handler, pattern="^BACK_TO_BASE$"))
     
-    # Removed: setup_black_market and setup_alliance_system should be called from main.py
-    # setup_black_market(app)
-    # setup_alliance_system(app) 
+    # Register black market and alliance handlers
+    setup_black_market(app)
+    setup_alliance_system(app) 

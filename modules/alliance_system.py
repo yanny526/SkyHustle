@@ -18,6 +18,7 @@ from telegram.ext import (
 )
 from modules.sheets_helper import get_player_data, update_player_data, list_all_players
 from datetime import datetime, timedelta
+from modules.base_ui import base_handler # Import base_handler for 'Back to Base'
 from modules.zone_system import zones_main # Import zones_main for 'Zones' button
 
 
@@ -231,9 +232,7 @@ async def alliance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif action == "ZONES":
         await zones_main(update, context) 
     elif action == "BACK":
-        from modules.base_ui import base_handler
         await base_handler(update, context)
-        return
     elif action == "MENU":  # Handle the ALLIANCE_MENU callback from base_ui
         await alliance_handler(update, context) # Re-route to unified handler
     elif action == "INVITE": # Changed from INVITE_MEMBER

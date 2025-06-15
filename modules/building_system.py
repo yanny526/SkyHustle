@@ -5,24 +5,12 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup # For bu
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes # For setup_building_system
 from telegram.helpers import escape_markdown # For MarkdownV2 escaping
 from datetime import datetime, timedelta
-from collections import defaultdict
-import logging
 
 from modules.sheets_helper import (
     get_player_data, update_player_data, get_player_buildings,
     add_pending_upgrade, get_due_upgrades, remove_pending_upgrade,
     apply_building_level, get_pending_upgrades
 )
-from modules.building_config import (
-    BUILDING_CONFIG, 
-    _BUILDING_KEY_TO_FIELD, 
-    _FIELD_TO_BUILDING_KEY
-)
-from modules.research_system import get_active_research, RESEARCH_CATALOG, complete_research
-from modules.utils import escape_markdown_v2
-
-# Set up logging
-logger = logging.getLogger(__name__)
 
 def format_building_menu(player_data: dict) -> str:
     """
@@ -80,12 +68,214 @@ __all__ = [
     "cancel_build",
     "show_building_info",
     "start_upgrade_worker",
-    "view_queue",
-    "setup_building_system" # Added to __all__ to be importable
+    "view_queue"
 ]
 
+# Mapping from BUILDING_CONFIG keys to sheet field names
+_BUILDING_KEY_TO_FIELD = {
+    "base": "base_level",
+    "lumber_house": "lumber_house_level",
+    "mine": "mine_level", # Stone production
+    "farm": "warehouse_level", # Food production (called Farm in doc, Warehouse in sheet/code)
+    "gold_mine": "mine_level", # Gold production (shares mine_level with stone production currently)
+    "power_plant": "power_plant_level",
+    "barracks": "barracks_level",
+    "research_lab": "research_lab_level",
+    "hospital": "hospital_level",
+    "workshop": "workshop_level",
+    "jail": "jail_level",
+}
+
+# Mapping from sheet field names to BUILDING_CONFIG keys for display in build_menu
+_FIELD_TO_BUILDING_KEY = {v: k for k, v in _BUILDING_KEY_TO_FIELD.items()}
+
+
+BUILDING_CONFIG = {
+    "base": {
+        "key": "base",
+        "name": "Base",
+        "emoji": "🏠",
+        "max_level": 20,
+        "base_costs": {"wood": 100, "stone": 80, "food": 50, "gold": 20, "energy": 10},
+        "base_time": 30, # minutes
+        "cost_multiplier": 1.15,
+        "time_multiplier": 1.2,
+        "effects": {
+            "upgrade_time_reduction_per_level": 0.05, # 5% reduction per level
+            "build_slots_unlock_levels": [5, 10, 15, 20],
+            "power_bonus_per_level": 100
+        },
+        "unlock_requirements": {}
+    },
+    "lumber_house": {
+        "key": "lumber_house",
+        "name": "Lumber House",
+        "emoji": "🪓",
+        "max_level": 20,
+        "base_costs": {"wood": 50, "stone": 30, "food": 10, "gold": 5, "energy": 2},
+        "base_time": 10, # minutes
+        "cost_multiplier": 1.12,
+        "time_multiplier": 1.18,
+        "effects": {
+            "wood_production_per_level": 10,
+            "power_bonus_per_level": 50
+        },
+        "unlock_requirements": {}
+    },
+    "mine": { # This is for Quarry (stone) and Gold Mine (gold) as they share 'mine_level'
+        "key": "mine", # Will be used for both "Quarry" and "Gold Mine" conceptual buildings
+        "name": "Mine",
+        "emoji": "⛏️",
+        "max_level": 20,
+        "base_costs": {"wood": 40, "stone": 60, "food": 10, "gold": 8, "energy": 3},
+        "base_time": 10, # minutes
+        "cost_multiplier": 1.12,
+        "time_multiplier": 1.18,
+        "effects": {
+            "stone_production_per_level": 10,
+            "power_bonus_per_level": 50
+        },
+        "unlock_requirements": {}
+    },
+    "farm": { # This is for Farm (food) as it maps to 'warehouse_level'
+        "key": "farm",
+        "name": "Farm",
+        "emoji": "🧺",
+        "max_level": 20,
+        "base_costs": {"wood": 30, "stone": 20, "food": 50, "gold": 4, "energy": 1},
+        "base_time": 10, # minutes
+        "cost_multiplier": 1.12,
+        "time_multiplier": 1.18,
+        "effects": {
+            "food_production_per_level": 10
+        },
+        "unlock_requirements": {}
+    },
+    "gold_mine": { # Separate conceptual building, but maps to 'mine_level'
+        "key": "gold_mine",
+        "name": "Gold Mine",
+        "emoji": "💰", # using gold emoji for Gold Mine
+        "max_level": 20,
+        "base_costs": {"wood": 60, "stone": 50, "food": 20, "gold": 100, "energy": 5},
+        "base_time": 15, # minutes
+        "cost_multiplier": 1.14,
+        "time_multiplier": 1.2,
+        "effects": {
+            "gold_production_per_level": 5
+        },
+        "unlock_requirements": {}
+    },
+    "power_plant": {
+        "key": "power_plant",
+        "name": "Power Plant",
+        "emoji": "🔋",
+        "max_level": 20,
+        "base_costs": {"wood": 70, "stone": 70, "food": 30, "gold": 30, "energy": 10},
+        "base_time": 20, # minutes
+        "cost_multiplier": 1.13,
+        "time_multiplier": 1.19,
+        "effects": {
+            "energy_production_per_level": 5,
+            "power_bonus_per_level": 100
+        },
+        "unlock_requirements": {}
+    },
+    "barracks": {
+        "key": "barracks",
+        "name": "Barracks",
+        "emoji": "🪖",
+        "max_level": 20,
+        "base_costs": {"wood": 80, "stone": 60, "food": 40, "gold": 25, "energy": 15},
+        "base_time": 20, # minutes
+        "cost_multiplier": 1.18,
+        "time_multiplier": 1.25,
+        "effects": {
+            "infantry_training_time_reduction_per_level": 0.05,
+            "power_bonus_per_level": 75,
+            "unlocks": {
+                "artillery": 5,
+                "tank": 10,
+                "helicopter": 15,
+                "jet": 20
+            }
+        },
+        "unlock_requirements": {}
+    },
+    "research_lab": {
+        "key": "research_lab",
+        "name": "Research Lab",
+        "emoji": "🧪",
+        "max_level": 20,
+        "base_costs": {"wood": 75, "stone": 75, "food": 50, "gold": 40, "energy": 20},
+        "base_time": 25, # minutes
+        "cost_multiplier": 1.17,
+        "time_multiplier": 1.24,
+        "effects": {
+            "research_time_reduction_per_level": 0.05,
+            "power_bonus_per_level": 75,
+            "unlocks": {
+                "tech_tiers": [5, 10, 15, 20]
+            }
+        },
+        "unlock_requirements": {}
+    },
+    "hospital": {
+        "key": "hospital",
+        "name": "Hospital",
+        "emoji": "🏥",
+        "max_level": 20,
+        "base_costs": {"wood": 60, "stone": 50, "food": 30, "gold": 20, "energy": 10},
+        "base_time": 15, # minutes
+        "cost_multiplier": 1.16,
+        "time_multiplier": 1.22,
+        "effects": {
+            "healing_time_reduction_per_level": 0.05,
+            "capacity_increase_per_level": 10,
+            "power_bonus_per_level": 75
+        },
+        "unlock_requirements": {}
+    },
+    "workshop": {
+        "key": "workshop",
+        "name": "Workshop",
+        "emoji": "🔧",
+        "max_level": 20,
+        "base_costs": {"wood": 90, "stone": 80, "food": 50, "gold": 35, "energy": 20},
+        "base_time": 25, # minutes
+        "cost_multiplier": 1.19,
+        "time_multiplier": 1.26,
+        "effects": {
+            "vehicle_training_time_reduction_per_level": 0.05,
+            "power_bonus_per_level": 75,
+            "unlocks": {
+                "destroyer": 8,
+                "cruiser": 12,
+                "battleship": 16,
+                "carrier": 20
+            }
+        },
+        "unlock_requirements": {}
+    },
+    "jail": {
+        "key": "jail",
+        "name": "Jail",
+        "emoji": "🚔",
+        "max_level": 20,
+        "base_costs": {"wood": 70, "stone": 60, "food": 40, "gold": 30, "energy": 15},
+        "base_time": 20, # minutes
+        "cost_multiplier": 1.17,
+        "time_multiplier": 1.23,
+        "effects": {
+            "capacity_increase_per_level": 5,
+            "power_bonus_per_level": 75
+        },
+        "unlock_requirements": {}
+    }
+}
+
+# Helper functions
 def get_building_config(key: str) -> Optional[Dict[str, Any]]:
-    """Get building configuration by key."""
+    """Retrieves the configuration for a specific building."""
     return BUILDING_CONFIG.get(key)
 
 def calculate_upgrade_cost(player_data: Dict[str, Any], building_key: str) -> Dict[str, int]:
@@ -260,26 +450,26 @@ async def build_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     data = get_player_data(user.id)
     if not data:
-        await query.edit_message_text("❌ You aren't registered yet. Send /start to begin.")
+        await query.edit_message_text("❌ You aren't registered yet\. Send /start to begin\.")
         return
 
     # Extract building key from callback data
     building_key = query.data.replace("BUILD_", "")
     config = get_building_config(building_key)
     if not config:
-        await query.edit_message_text("❌ Invalid building selected.")
+        await query.edit_message_text("❌ Invalid building selected\.")
         return
 
     field_name = _BUILDING_KEY_TO_FIELD.get(building_key)
     if not field_name:
-        await query.edit_message_text("❌ Building mapping not found.")
+        await query.edit_message_text("❌ Building mapping not found\.")
         return
 
     current_level = int(data.get(field_name, 1))
     upgrade_info = calculate_upgrade(building_key, current_level)
     
     if not upgrade_info:
-        await query.edit_message_text(f"✅ {escape_markdown(config['name'])} is already at max level ({escape_markdown(str(config['max_level']))}).")
+        await query.edit_message_text(f"✅ {escape_markdown(config['name'])} is already at max level \\({escape_markdown(str(config['max_level']))}\\)\.")
         return
 
     # Format costs with emojis
@@ -298,10 +488,10 @@ async def build_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     # Build the message
     msg_lines = [
         f"{config['emoji']} *{escape_markdown(config['name'])}: Level {current_level} → {upgrade_info['next_level']}*",
-        "---",
+        "\-\-\-",
         f"💰 Cost: {cost_str}",
         f"⏱️ Time: {duration_str}",
-        "---",
+        "\-\-\-",
         "*Next Level Effects:*"
     ]
 
@@ -347,7 +537,7 @@ async def build_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if effects_lines:
         msg_lines.extend([f"• {line}" for line in effects_lines])
     else:
-        msg_lines.append("No specific effects for next level.")
+        msg_lines.append("No specific effects for next level\.")
 
     # Build keyboard
     keyboard = [
@@ -449,21 +639,6 @@ async def confirm_build(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         f"⏲️ Completes at: {end_time}\n\n"
         f"Your resources have been deducted and the upgrade is in progress."
     )
-
-    # Fetch updated player data to show remaining resources
-    updated_player_data = get_player_data(query.from_user.id)
-
-    # Send summary of remaining resources as a separate reply
-    await query.message.reply_text(
-        "**Build confirmed!**\n"
-        "Remaining resources:\n"
-        f"- Wood: `{updated_player_data.get('resources_wood', 0)}`\n"
-        f"- Stone: `{updated_player_data.get('resources_stone', 0)}`\n"
-        f"- Food: `{updated_player_data.get('resources_food', 0)}`\n"
-        f"- Gold: `{updated_player_data.get('resources_gold', 0)}`\n"
-        f"- Energy: `{updated_player_data.get('resources_energy', 0)}`",
-        parse_mode="Markdown"
-    )
     
     keyboard = [
         [
@@ -481,7 +656,7 @@ async def confirm_build(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 async def cancel_build(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
-    await query.edit_message_text("❌ Build cancelled.", parse_mode=constants.ParseMode.MARKDOWN_V2) # Escape .
+    await query.edit_message_text("❌ Build cancelled\.", parse_mode=constants.ParseMode.MARKDOWN_V2) # Escape .
 
 def get_player_buildings(user_id: int) -> Dict[str, int]:
     """Fetches all current building levels for a player."""
@@ -682,9 +857,7 @@ def get_upgrade_info(player_data: Dict[str, Any], building_key: str) -> Optional
     }
 
 def get_ongoing_upgrade(user_id: int) -> Optional[Dict[str, Any]]:
-    """
-    Gets information about any ongoing upgrade for a player.
-    """
+    """Gets information about any ongoing upgrade for a player."""
     data = get_player_data(user_id)
     if not data:
         return None
@@ -722,24 +895,19 @@ def get_ongoing_upgrade(user_id: int) -> Optional[Dict[str, Any]]:
     return None
 
 async def show_building_info(update: Update, context: ContextTypes.DEFAULT_TYPE, building_key: str) -> None:
-    """
-    Shows detailed information about a building's levels and effects.
-    """
+    """Shows detailed information about a building's levels and effects."""
     query = update.callback_query
     await query.answer()
     
     config = get_building_config(building_key)
     if not config:
-        await query.edit_message_text("❌ Invalid building selected.")
+        await query.edit_message_text("❌ Invalid building selected\.")
         return
     
     # Build level table
     table_lines = []
     for level in range(1, config["max_level"] + 1):
-        # For each level, calculate the upgrade info based on that level as current_level
-        temp_player_data = {"user_id": query.from_user.id, _BUILDING_KEY_TO_FIELD[building_key]: level -1} # Simulate current level for info
-        upgrade_info = get_upgrade_info(temp_player_data, building_key) # Use temp_player_data for accurate costs
-        
+        upgrade_info = get_upgrade_info(query.from_user.id, building_key)
         if not upgrade_info:
             continue
         
@@ -769,9 +937,9 @@ async def show_building_info(update: Update, context: ContextTypes.DEFAULT_TYPE,
     msg_lines = [
         f"{config['emoji']} *{escape_markdown(config['name'])}*",
         "Building Information:",
-        "---",
+        "\-\-\-",
         *table_lines,
-        "---",
+        "\-\-\-",
         "🏠 Back to Base"
     ]
     
@@ -822,36 +990,4 @@ async def view_queue(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             message,
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode=None
-        )
-
-def setup_building_system(application: Application):
-    """
-    Register all building-system handlers on the Telegram Application.
-    Called from main.py when the bot starts.
-    """
-    # 1. Main "build menu" entry point
-    application.add_handler(
-        CallbackQueryHandler(build_menu, pattern="^BUILD_MENU$")
-    )
-
-    # 2. Confirm/cancel handlers
-    application.add_handler(
-        CallbackQueryHandler(confirm_build, pattern="^CONFIRM_BUILD_.+")
-    )
-    application.add_handler(
-        CallbackQueryHandler(cancel_build, pattern="^CANCEL_BUILD$")
-    )
-
-    # 3. Any other building-related handlers...
-    #    e.g. upgrade worker, tick worker, etc.
-    application.add_handler(
-        CallbackQueryHandler(show_building_info, pattern="^INFO_.+") # Added handler for INFO button
-    )
-    application.add_handler(
-        CallbackQueryHandler(view_queue, pattern="^view_queue$")
-    )
-    
-    # 4. (Optional) a CommandHandler if you let users type /build
-    application.add_handler(CommandHandler("build", build_menu))
-
-    return application 
+        ) 
