@@ -27,7 +27,7 @@ from modules.building_config import (
     _BUILDING_KEY_TO_FIELD
 )
 from modules.building_system import (
-    get_building_info,
+    get_building_config,
     apply_building_level
 )
 from modules.research_system import get_active_research, RESEARCH_CATALOG, complete_research
