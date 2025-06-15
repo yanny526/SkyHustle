@@ -152,86 +152,92 @@ async def send_base_ui(update: Update, context: ContextTypes.DEFAULT_TYPE, playe
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handles the /start command. Registers new players or shows base to existing ones."""
     user_id = update.effective_user.id
-    commander_name = update.effective_user.username # Use username as initial commander name suggestion, might be None
+    username = update.effective_user.username
+    first_name = update.effective_user.first_name
 
-    # Retrieve player data from DB
+    logger.info(f"User {user_id} (username: {username}, first_name: {first_name}) used /start.")
+
     player_data = db_manager.get_player_data(user_id)
 
-    if player_data is None:
-        # New player registration flow
-        logger.info(f"New user {user_id} ({commander_name}) started the bot. Initiating registration.")
-        keyboard = [[InlineKeyboardButton("Set Commander Name", callback_data="set_commander_name")]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text(
-            "🪐 *WELCOME TO SKYHUSTLE* 🪐\n"
-            "The world is fractured. Factions rise. Resources are scarce.\n"
-            "But YOU… you're no ordinary commander.\n"
-            "👤 Set your *Commander Name*\n"
-            "🔨 Build your base\n"
-            "️ Train your army\n"
-            "⚔️ Dominate the zones\n"
-            "💎 Rule the Black Market\n"
-            "This is not just a game.\n"
-            "It's your *empire*. Your *legacy*.\n"
-            "🎖 Ready to lead?",
-            reply_markup=reply_markup,
-            parse_mode='Markdown'
+    if player_data:
+        # Existing user
+        context.user_data['state'] = 'main_menu' # Or 'base_view' if they go straight to base
+        # Calculate offline time and update last_login_timestamp
+        last_login_timestamp = player_data.get('last_login_timestamp', 0)
+        current_timestamp = int(time.time())
+        offline_duration = current_timestamp - last_login_timestamp
+        
+        # Update player's last login
+        player_data['last_login_timestamp'] = current_timestamp
+        db_manager.update_player_data(user_id, player_data)
+        logger.info(f"Player {player_data['commander_name']} was offline for {offline_duration} seconds.")
+
+        # Apply escaping to dynamic parts of the message
+        welcome_message = (
+            f"Welcome back, Commander {escape_markdown_v2(player_data['commander_name'])}! "
+            f"You were offline for {escape_markdown_v2(str(offline_duration))} seconds\\. "
+            f"What's your next move?"
         )
-        player_states[user_id] = "awaiting_initial_name_action"
+        
+        await update.message.reply_text(
+            text=welcome_message,
+            parse_mode=ParseMode.MARKDOWN_V2,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🏠 Enter Your Base", callback_data='enter_your_base')]
+            ])
+        )
     else:
-        # Existing player, show base UI
-        logger.info(f"Existing user {user_id} ({player_data.get('commander_name', 'N/A')}) started the bot.")
-        await send_base_ui(update, context, player_data)
+        # New user registration
+        context.user_data['state'] = 'awaiting_initial_name_action'
+        welcome_message = (
+            "Welcome, brave Commander! Your journey in SkyHustle begins now\\.\n\n"
+            "To get started, first you need to set your Commander name\\."
+        )
+        await update.message.reply_text(
+            text=welcome_message,
+            parse_mode=ParseMode.MARKDOWN_V2,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("Set Commander Name", callback_data='set_commander_name')]
+            ])
+        )
+        logger.info(f"New user {user_id} ({first_name}) started the bot. Initiating registration.")
 
 
 async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handles callback queries from inline keyboard buttons."""
     query = update.callback_query
-    await query.answer() # Acknowledge the callback query to remove loading animation
+    await query.answer() # Always answer the callback query
 
-    user_id = query.from_user.id
-    current_state = player_states.get(user_id)
+    user_id = update.effective_user.id
+    user_state = context.user_data.get('state')
     callback_data = query.data
 
-    logger.info(f"User {user_id} current state: {current_state}, Callback Data: {callback_data}")
+    logger.info(f"User {user_id} current state: {user_state}, Callback Data: {callback_data}")
 
-    if callback_data == "set_commander_name" and current_state == "awaiting_initial_name_action":
-        await query.edit_message_text(
-            "Please type your desired Commander Name:\n"
-            "(Min 3, Max 15 characters. Alpha-numeric only. Case-sensitive.)"
-        )
-        player_states[user_id] = "awaiting_commander_name_input"
-    elif callback_data == "enter_your_base" and current_state == "registration_complete":
+    # Handle 'set_commander_name' (Existing logic remains)
+    if callback_data == 'set_commander_name' and user_state == 'awaiting_initial_name_action':
+        # ... (your existing code for handling set_commander_name) ...
+        context.user_data['state'] = 'awaiting_commander_name_input'
+        await query.edit_message_text(text="Alright, Commander! What name shall history remember you by?\n\n"
+                                          "*(Min 3 characters, Max 15, alphanumeric only)*")
+        return
+
+    # --- NEW / MODIFIED LOGIC FOR 'enter_your_base' ---
+    if callback_data == 'enter_your_base':
         player_data = db_manager.get_player_data(user_id)
         if player_data:
+            # Player is registered, so show them their base
             await send_base_ui(update, context, player_data)
+            context.user_data['state'] = 'base_view' # Set state after entering base
         else:
-            await query.edit_message_text("Error: Player data not found. Please try /start again.")
-            player_states.pop(user_id, None) # Clear state
-    # --- Placeholder for other menu callback_data ---
-    elif callback_data == "build_menu":
-        await query.edit_message_text("⚒️ You are in the Build Menu! (Coming soon...)")
-        # In later phases, this will call a dedicated function like send_build_menu_ui()
-        player_states[user_id] = "build_view"
-        # Add a back button for easier navigation
-        await query.message.reply_markup(InlineKeyboardMarkup([[InlineKeyboardButton("🏠 Back to Base", callback_data="back_to_base")]]))
-    elif callback_data == "train_menu":
-        await query.edit_message_text("🪖 You are in the Train Menu! (Coming soon...)")
-        player_states[user_id] = "train_view"
-        await query.message.reply_markup(InlineKeyboardMarkup([[InlineKeyboardButton("🏠 Back to Base", callback_data="back_to_base")]]))
-    elif callback_data == "back_to_base":
-        player_data = db_manager.get_player_data(user_id)
-        if player_data:
-            await send_base_ui(update, context, player_data)
-        else:
-            await query.edit_message_text("Error: Player data not found. Please try /start again.")
-            player_states.pop(user_id, None)
+            # Player somehow clicked 'enter_your_base' but isn't registered.
+            # Redirect them to the start command.
+            await query.edit_message_text(text="It seems you're not registered yet! Please use /start to begin your journey.")
+            context.user_data['state'] = None # Reset state
+        return
 
-    else:
-        # Fallback for unhandled callbacks or incorrect state transitions
-        logger.warning(f"Unhandled callback '{callback_data}' in state '{current_state}' for user {user_id}")
-        await query.edit_message_text("Sorry, I don't understand that action right now. Please use the available buttons or type /start.")
-        player_states.pop(user_id, None) # Clear state if something goes wrong
+    # If you have other callbacks, ensure they are handled with appropriate state checks.
+    logger.warning(f"Unhandled callback '{callback_data}' in state '{user_state}' for user {user_id}")
 
 
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
