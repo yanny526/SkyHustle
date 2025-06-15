@@ -10,8 +10,9 @@ from modules.registration import setup_registration, ENTER_BASE
 from modules.base_ui import setup_base_ui, tick_resources, base_handler
 from modules.building_system import (
     build_menu, build_choice, confirm_build, cancel_build,
-    show_building_info, start_upgrade_worker, view_queue
+    show_building_info, start_upgrade_worker, view_queue, setup_building_system
 )
+from modules.troop_system import setup_troop_system
 from modules.training_system import setup_training_system
 from modules.research_system import setup_research_system
 from modules.black_market import setup_black_market
@@ -77,6 +78,8 @@ def main() -> None:
     setup_inventory_system(app)
     setup_alliance_system(app)
     setup_zone_system(app)
+    setup_building_system(app)
+    setup_troop_system(app)
 
     # Register the 'Enter Your Base' callback separately to ensure it always works
     app.add_handler(CallbackQueryHandler(base_handler, pattern=f"^{ENTER_BASE}$", block=False))

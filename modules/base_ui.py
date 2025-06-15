@@ -66,7 +66,7 @@ def _get_ongoing_activities(user_id: int) -> list[str]:
             hours, remainder = divmod(remaining_time.total_seconds(), 3600)
             minutes, _ = divmod(remainder, 60)
             remaining_str = f"{int(hours):02d}:{int(minutes):02d}:{(remaining_time.total_seconds() % 60):02.0f}"
-            activities.append(f"�� {escape_markdown_v2(active_research.name, version=2)} \\(Completes in {escape_markdown_v2(remaining_str, version=2)}\\)")
+            activities.append(f"🔬 {escape_markdown_v2(active_research.name, version=2)} \\(Completes in {escape_markdown_v2(remaining_str, version=2)}\\)")
 
     # Check for troop training
     data = get_player_data(user_id)
@@ -135,8 +135,8 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     
     if not player_data:
         await update.message.reply_text(
-            "You haven't registered yet! Use /start to begin.",
-            parse_mode=constants.ParseMode.MARKDOWN_V2
+            "❌ You need to register first! Use /start to begin.",
+            parse_mode=None
         )
         return
     
@@ -193,7 +193,7 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     # Building levels display
     lines_buildings = [
         f"🪓 {escape_markdown_v2('Lumber House', version=2)}: {lumber_lvl} ⛏️ {escape_markdown_v2('Mine', version=2)}: {mine_lvl}",
-        f"🧺 {escape_markdown_v2('Warehouse', version=2)}: {warehouse_lvl} �� {escape_markdown_v2('Hospital', version=2)}: {hospital_lvl}",
+        f"🧺 {escape_markdown_v2('Warehouse', version=2)}: {warehouse_lvl} 🏥 {escape_markdown_v2('Hospital', version=2)}: {hospital_lvl}",
         f"🧪 {escape_markdown_v2('Research Lab', version=2)}: {research_lvl} 🪖 {escape_markdown_v2('Barracks', version=2)}: {barracks_lvl}",
         f"🔋 {escape_markdown_v2('Power Plant', version=2)}: {powerplant_lvl} 🔧 {escape_markdown_v2('Workshop', version=2)}: {workshop_lvl}",
         f"🚔 {escape_markdown_v2('Jail', version=2)}: {jail_lvl}",
@@ -260,7 +260,7 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         msg += f"\n\n*{escape_markdown_v2('Black Market Units:', version=2)}*\n"
         msg += "\n".join([
             f"🧨 {escape_markdown_v2('BM Barrage', version=2)}: {bm1}"   if bm1 is not None else None,
-            f"�� {escape_markdown_v2('Venom Reapers', version=2)}: {bm2}" if bm2 is not None else None,
+            f"🦂 {escape_markdown_v2('Venom Reapers', version=2)}: {bm2}" if bm2 is not None else None,
             f"🦾 {escape_markdown_v2('Titan Crushers', version=2)}: {bm3}"if bm3 is not None else None,
         ])
         bm_lines = [l for l in bm_lines if l is not None] # Re-filter after escaping
