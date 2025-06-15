@@ -644,7 +644,7 @@ async def confirm_build(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     updated_player_data = get_player_data(query.from_user.id)
 
     # Send summary of remaining resources as a separate reply
-    await update.message.reply_text(
+    await query.message.reply_text(
         "**Build confirmed!**\n"
         "Remaining resources:\n"
         f"- Wood: `{updated_player_data.get('resources_wood', 0)}`\n"
