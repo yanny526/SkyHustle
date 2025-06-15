@@ -9,9 +9,11 @@ from telegram.ext import (
     CallbackQueryHandler,
     ContextTypes
 )
+from telegram.constants import ParseMode
 import time
 import json
 import random # For coordinates
+import re
 
 # Import our custom modules using absolute imports (as they are in the same top-level directory)
 import config
@@ -23,6 +25,14 @@ logging.basicConfig(
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
+
+def escape_markdown_v2(text: str) -> str:
+    """Helper function to escape characters that have special meaning in MarkdownV2."""
+    text = text.replace('\\', '\\\\') # Escape backslashes first
+    special_chars = r'_*[]()~`>#+-=|{}.!'
+    for char in special_chars:
+        text = text.replace(char, f'\\{char}')
+    return text
 
 # Initialize the database manager (singleton pattern)
 db_manager = GoogleSheetsDBManager()
@@ -75,7 +85,6 @@ async def send_base_ui(update: Update, context: ContextTypes.DEFAULT_TYPE, playe
     # Also update the in-memory player_data dict
     player_data.update(updates_to_db)
 
-
     # Prepare resource string for UI
     resources_display = []
     # Loop through resources defined in config, ensuring all are displayed
@@ -83,21 +92,21 @@ async def send_base_ui(update: Update, context: ContextTypes.DEFAULT_TYPE, playe
         current_amount = player_data['current_resources'].get(res_type, 0)
         cap_amount = player_data['resource_caps'].get(res_type, 0)
         if res_type == 'diamonds': # Diamonds usually don't have a cap
-            resources_display.append(f"💎 Diamonds: {current_amount}")
+            resources_display.append(f"💎 Diamonds: {escape_markdown_v2(str(current_amount))}")
         else:
-            resources_display.append(f"{res_type.capitalize()}: {current_amount}/{cap_amount}")
+            resources_display.append(f"{res_type.capitalize()}: {escape_markdown_v2(str(current_amount))}/{escape_markdown_v2(str(cap_amount))}")
     resources_str = "\n".join(resources_display)
 
     # Prepare building levels string for UI
     building_levels_str = "\n".join([
-        f"{b.replace('_', ' ').title()}: Lv {player_data['building_levels'].get(b, 0)}"
+        f"{b.replace('_', ' ').title()}: Lv {escape_markdown_v2(str(player_data['building_levels'].get(b, 0)))}"
         for b in config.INITIAL_BUILDING_LEVELS.keys()
     ])
 
     message_text = (
-        f"🏠 *{player_data['commander_name']}'s Base*\n"
-        f"🏅 Power: {player_data['player_power']}\n"
-        f"📍 Coords: X:{player_data['coordinates_x']}, Y:{player_data['coordinates_y']}\n"
+        f"🏠 *{escape_markdown_v2(player_data['commander_name'])}'s Base*\n"
+        f"🏅 Power: {escape_markdown_v2(str(player_data['player_power']))}\n"
+        f"📍 Coords: X:{escape_markdown_v2(str(player_data['coordinates_x']))}, Y:{escape_markdown_v2(str(player_data['coordinates_y']))}\n"
         f"___\n"
         f"💰 *Resources:*\n{resources_str}\n"
         f"___\n"
@@ -127,13 +136,13 @@ async def send_base_ui(update: Update, context: ContextTypes.DEFAULT_TYPE, playe
         await update.callback_query.edit_message_text(
             message_text,
             reply_markup=reply_markup,
-            parse_mode='Markdown'
+            parse_mode=ParseMode.MARKDOWN_V2
         )
     else:
         await update.effective_chat.send_message(
             message_text,
             reply_markup=reply_markup,
-            parse_mode='Markdown'
+            parse_mode=ParseMode.MARKDOWN_V2
         )
     player_states[player_data['user_id']] = "base_view"
 
