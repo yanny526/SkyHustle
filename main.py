@@ -20,6 +20,7 @@ from modules.alliance_system import setup_alliance_system
 from modules.zone_system import setup_zone_system
 from telegram import Update
 import logging
+from modules.quest_system import QuestSystem
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -29,6 +30,16 @@ def signal_handler(signum, frame):
     """Handle shutdown signals gracefully."""
     print("\nShutting down bot gracefully...")
     sys.exit(0)
+
+def setup_quest_system(app: Application) -> None:
+    """Set up quest system commands."""
+    async def quest_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Handle the /quest command to show available quests."""
+        quest_system = QuestSystem()
+        quest_text = quest_system.display_all_quests()
+        await update.message.reply_text(quest_text)
+    
+    app.add_handler(CommandHandler("quest", quest_command))
 
 def main() -> None:
     logger.info("Bot main function starting...")
@@ -63,6 +74,7 @@ def main() -> None:
     # Register handlers
     setup_registration(app)
     setup_base_ui(app)
+    setup_quest_system(app)  # Add quest system handlers
     # Building system handlers
     app.add_handler(CommandHandler("build", build_menu))
     app.add_handler(CallbackQueryHandler(build_menu, pattern="^BUILD_MENU$"))
@@ -109,6 +121,27 @@ def main() -> None:
     except Exception as e:
         logger.error(f"An error occurred: {e}")
         sys.exit(1)
+
+def show_quests():
+    """Display all quests to the player."""
+    quest_system = QuestSystem()
+    print("\n=== Your Quests ===")
+    print(quest_system.display_all_quests())
+
+def main_menu():
+    while True:
+        print("\n=== Main Menu ===")
+        print("1. View Quests")
+        print("2. Exit")
+        choice = input("Enter your choice (1-2): ")
+        
+        if choice == "1":
+            show_quests()
+        elif choice == "2":
+            print("Goodbye!")
+            break
+        else:
+            print("Invalid choice. Please try again.")
 
 if __name__ == "__main__":
     main() 
