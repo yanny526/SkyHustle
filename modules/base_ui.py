@@ -22,7 +22,12 @@ from modules.sheets_helper import (
     get_player_data, update_player_data, list_all_players, 
     _accrue_player_resources_in_sheet, get_pending_upgrades, get_due_upgrades
 )
-from modules.building_system import BUILDING_CONFIG, _BUILDING_KEY_TO_FIELD, get_building_info
+from modules.building_system import (
+    BUILDING_CONFIG, 
+    _BUILDING_KEY_TO_FIELD, 
+    get_building_info,
+    apply_building_level
+)
 from modules.research_system import get_active_research, RESEARCH_CATALOG, complete_research
 from modules.utils import escape_markdown_v2
 import logging
