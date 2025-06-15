@@ -172,15 +172,11 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         db_manager.update_player_data(user_id, player_data)
         logger.info(f"Player {player_data['commander_name']} was offline for {offline_duration} seconds.")
 
-        # Apply escaping to dynamic parts of the message
-        welcome_message = (
-            f"Welcome back, Commander {escape_markdown_v2(player_data['commander_name'])}! "
-            f"You were offline for {escape_markdown_v2(str(offline_duration))} seconds\\. "
-            f"What's your next move?"
-        )
+        # Ensure commander_name is also escaped if it's part of a MarkdownV2 message
+        welcome_message = f"Welcome back, Commander *{escape_markdown_v2(player_data['commander_name'])}*! You were offline for {offline_duration} seconds. What's your next move?"
         
         await update.message.reply_text(
-            text=welcome_message,
+            text=escape_markdown_v2(welcome_message), # Apply escaping to the entire message
             parse_mode=ParseMode.MARKDOWN_V2,
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🏠 Enter Your Base", callback_data='enter_your_base')]
@@ -189,16 +185,19 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     else:
         # New user registration
         context.user_data['state'] = 'awaiting_initial_name_action'
-        welcome_message = (
-            "Welcome, brave Commander! Your journey in SkyHustle begins now\\.\n\n"
-            "To get started, first you need to set your Commander name\\."
+        
+        # Apply escape_markdown_v2 to the entire static welcome message
+        welcome_message = escape_markdown_v2(
+            "Welcome, brave Commander! Your journey in SkyHustle begins now.\n\n"
+            "To get started, first you need to set your Commander name."
         )
+        
         await update.message.reply_text(
-            text=welcome_message,
-            parse_mode=ParseMode.MARKDOWN_V2,
+            text=welcome_message, # Use the escaped message
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("Set Commander Name", callback_data='set_commander_name')]
-            ])
+            ]),
+            parse_mode=ParseMode.MARKDOWN_V2 # Ensure this is also set for new user messages
         )
         logger.info(f"New user {user_id} ({first_name}) started the bot. Initiating registration.")
 
