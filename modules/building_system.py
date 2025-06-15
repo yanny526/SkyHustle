@@ -639,6 +639,21 @@ async def confirm_build(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         f"⏲️ Completes at: {end_time}\n\n"
         f"Your resources have been deducted and the upgrade is in progress."
     )
+
+    # Fetch updated player data to show remaining resources
+    updated_player_data = get_player_data(query.from_user.id)
+
+    # Send summary of remaining resources as a separate reply
+    await update.message.reply_text(
+        "**Build confirmed!**\n"
+        "Remaining resources:\n"
+        f"- Wood: `{updated_player_data.get("resources_wood", 0)}`\n"
+        f"- Stone: `{updated_player_data.get("resources_stone", 0)}`\n"
+        f"- Food: `{updated_player_data.get("resources_food", 0)}`\n"
+        f"- Gold: `{updated_player_data.get("resources_gold", 0)}`\n"
+        f"- Energy: `{updated_player_data.get("resources_energy", 0)}`",
+        parse_mode="Markdown"
+    )
     
     keyboard = [
         [

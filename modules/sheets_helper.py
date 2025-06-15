@@ -316,63 +316,25 @@ def get_player_data(user_id: int) -> Dict[str, Any]:
     print(f"DEBUG: Final player data: {data}") # Debug print
     return data
 
-def update_player_data(user_id: int, player_data: Dict[str, Any]) -> None:
+def update_player_data(user_id: int, field: str, value: Any) -> None:
     """
-    Updates multiple fields for a player in a single batch operation.
-    Ensures that column headers are present before updating.
+    Update a single player field in Google Sheets.
     """
     if _players_ws is None:
         raise RuntimeError("Sheets not initialized. Call initialize_sheets() first.")
-
-    # This should be called to ensure headers are up-to-date and in the correct order
-    ensure_headers(_players_ws, needed_headers)
 
     player_row_idx = get_player_row(user_id)
     if player_row_idx is None:
         raise ValueError(f"Player with user_id {user_id} not found for update.")
 
-    # Get the current header row to map fields to columns
     headers = _players_ws.row_values(1)
-    
-    # Prepare updates in a list of lists format for batch update
-    # Only include values for the headers that actually exist in player_data
-    # and are part of the `needed_headers` list (to maintain order and consistency)
-    updates = []
-    for header in needed_headers: # Iterate through `needed_headers` to preserve order
-        if header in player_data:
-            updates.append(player_data[header])
-        else:
-            # If a field is not in player_data, we assume it's not being updated
-            # or should retain its current value if it exists.
-            # For simplicity, we are passing the full updated player_data dictionary.
-            # If a key is missing from player_data, it means we don't want to change it.
-            # However, `update_cells` expects a full row, so we need to fetch the existing
-            # row and merge. A simpler approach for `update_player_data` when provided
-            # with a full dict is to overwrite the entire row based on `needed_headers`.
-            # Let's adjust this to fetch the existing row, merge, then update.
+    HEADER_TO_COL = {header: i + 1 for i, header in enumerate(headers)}
 
-            # Re-fetch player data to get current values for fields not being updated
-            # This is inefficient if called frequently.
-            # A better pattern is to pass only the fields to update, or always a full dict.
-            # Given the current usage of `update_player_data` in `building_system.py`,
-            # it expects a full player_data dictionary.
-            pass # No action needed, the logic below handles the full row update
+    if field not in HEADER_TO_COL:
+        raise ValueError(f"Field '{field}' not found in sheet headers.")
 
-
-    # Fetch the existing row to merge with the new data
-    existing_row_values = _players_ws.row_values(player_row_idx)
-    existing_player_data = dict(zip(headers, existing_row_values))
-    
-    # Merge new player_data into existing_player_data
-    # This ensures that fields not explicitly passed in player_data retain their values
-    merged_player_data = {**existing_player_data, **player_data}
-
-    # Construct the row to update based on needed_headers order
-    row_to_update = [str(merged_player_data.get(header, '')) for header in headers] # Use 'headers' here because it's the actual order in the sheet.
-                                                                                # Make sure to convert to string as gspread stores everything as string.
-    
-    # Perform the update
-    _players_ws.update(f'A{player_row_idx}', [row_to_update])
+    col_idx = HEADER_TO_COL[field]
+    _players_ws.update_cell(player_row_idx, col_idx, value)
 
 def list_all_players() -> List[Dict[str, Any]]:
     """Lists all players in the 'Players' worksheet, returning their data as a list of dictionaries."""
@@ -493,15 +455,13 @@ def _accrue_player_resources_in_sheet(player_id: int) -> None:
     accrued_energy = min(current_energy + (energy_rate_per_sec * time_since_last_collection), energy_capacity)
 
     # Update sheet
-    update_player_data(player_id, {
-        "resources_wood": int(accrued_wood),
-        "resources_stone": int(accrued_stone),
-        "resources_food": int(accrued_food),
-        "resources_gold": int(accrued_gold),
-        "research_balance": int(accrued_research),
-        "resources_energy": int(accrued_energy),
-        "last_collection": now_utc.isoformat() + "Z"
-    })
+    update_player_data(player_id, "resources_wood", int(accrued_wood))
+    update_player_data(player_id, "resources_stone", int(accrued_stone))
+    update_player_data(player_id, "resources_food", int(accrued_food))
+    update_player_data(player_id, "resources_gold", int(accrued_gold))
+    update_player_data(player_id, "research_balance", int(accrued_research))
+    update_player_data(player_id, "resources_energy", int(accrued_energy))
+    update_player_data(player_id, "last_collection", now_utc.isoformat() + "Z")
 
 def accrue(balance_key, rate_per_sec, cap_key):
     # This function seems to be unused or a placeholder. 
@@ -592,7 +552,7 @@ def apply_building_level(user_id: int, building_key: str, new_level: int) -> boo
             return False
         
         # Update the building level
-        update_player_data(user_id, {field_name: new_level})
+        update_player_data(user_id, field_name, new_level)
         
         # Recalculate and update player stats
         data = get_player_data(user_id)
@@ -600,7 +560,7 @@ def apply_building_level(user_id: int, building_key: str, new_level: int) -> boo
             updated_data = apply_building_effects(data)
             for key, value in updated_data.items():
                 if key.startswith("resources_") or key.endswith("_level"):
-                    update_player_data(user_id, {key: value})
+                    update_player_data(user_id, key, value)
         
         return True
     except Exception as e:
