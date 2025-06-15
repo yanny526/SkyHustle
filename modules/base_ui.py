@@ -37,6 +37,13 @@ from telegram.helpers import escape_markdown
 import math
 from collections import defaultdict
 
+from modules.training_system import train_menu # Import train_menu for the Train button
+from modules.research_system import research_command # Import research_command for the Research button
+from modules.black_market import blackmarket_menu # Import blackmarket_menu for the Black Market button
+from modules.alliance_system import alliance_handler # Import alliance_handler for the Alliance button
+from modules.zone_system import zones_main # Import zones_main for the Zones button
+from modules.building_system import build_menu # Import build_menu for the Build button
+
 # Set up logging
 logger = logging.getLogger(__name__)
 
@@ -268,14 +275,14 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         [
             InlineKeyboardButton("⚔️ Attack", callback_data="BASE_ATTACK"),
             InlineKeyboardButton("🎖 Quests", callback_data="BASE_QUESTS"),
-            InlineKeyboardButton("📊 Building Info", callback_data="BUILD_MENU"),
+            InlineKeyboardButton("📊 Building Info", callback_data="BASE_INFO"),
         ],
         [
             InlineKeyboardButton("💰 Black Market", callback_data="BM_MENU"),
             InlineKeyboardButton("🤝 Alliance", callback_data="ALLIANCE_MENU"),
             InlineKeyboardButton("🗺 Zones", callback_data="ZONE_MENU"),
         ],
-        [InlineKeyboardButton("🏠 Back to Base", callback_data="base")]
+        [InlineKeyboardButton("🏠 Back to Base", callback_data="BACK_TO_BASE")]
     ]
     
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -294,6 +301,21 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             parse_mode=constants.ParseMode.MARKDOWN_V2
         )
 
+async def attack_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await update.callback_query.answer()
+    await update.callback_query.edit_message_text("⚔️ *Attack Menu*\n\n(Attack features are under development.)", parse_mode=constants.ParseMode.MARKDOWN_V2)
+
+async def quests_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await update.callback_query.answer()
+    await update.callback_query.edit_message_text("🎖 *Quests Menu*\n\n(Quests are under development.)", parse_mode=constants.ParseMode.MARKDOWN_V2)
+
+async def building_info_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # This will display detailed info about all buildings, or allow selection.
+    # For now, a placeholder, but ideally integrates with modules/building_system.py
+    # I'll re-use the show_building_info from building_system.py later
+    await update.callback_query.answer()
+    await update.callback_query.edit_message_text("📊 *Building Information*\n\n(Detailed building info is under development.)", parse_mode=constants.ParseMode.MARKDOWN_V2)
+
 def setup_base_ui(app: Application) -> None:
     """
     Call this in main.py to register the /base command handler.
@@ -304,12 +326,15 @@ def setup_base_ui(app: Application) -> None:
 
     # Register base command and callback handlers
     app.add_handler(CommandHandler("base", base_handler))
-    app.add_handler(CallbackQueryHandler(base_handler, pattern="^BUILD_MENU$"))
-    app.add_handler(CallbackQueryHandler(base_handler, pattern="^RESEARCH_MENU$"))
-    app.add_handler(CallbackQueryHandler(base_handler, pattern="^TRAIN_MENU$"))
-    app.add_handler(CallbackQueryHandler(base_handler, pattern="^BASE_ATTACK$"))
-    app.add_handler(CallbackQueryHandler(base_handler, pattern="^BASE_QUESTS$"))
-    app.add_handler(CallbackQueryHandler(base_handler, pattern="^BASE_INFO$"))
+    app.add_handler(CallbackQueryHandler(build_menu, pattern="^BUILD_MENU$"))
+    app.add_handler(CallbackQueryHandler(research_command, pattern="^RESEARCH_MENU$"))
+    app.add_handler(CallbackQueryHandler(train_menu, pattern="^TRAIN_MENU$"))
+    app.add_handler(CallbackQueryHandler(attack_menu_handler, pattern="^BASE_ATTACK$"))
+    app.add_handler(CallbackQueryHandler(quests_menu_handler, pattern="^BASE_QUESTS$"))
+    app.add_handler(CallbackQueryHandler(building_info_handler, pattern="^BASE_INFO$"))
+    app.add_handler(CallbackQueryHandler(blackmarket_menu, pattern="^BM_MENU$"))
+    app.add_handler(CallbackQueryHandler(alliance_handler, pattern="^ALLIANCE_MENU$"))
+    app.add_handler(CallbackQueryHandler(zones_main, pattern="^ZONE_MENU$"))
     app.add_handler(CallbackQueryHandler(base_handler, pattern="^BACK_TO_BASE$"))
     
     # Register black market and alliance handlers
