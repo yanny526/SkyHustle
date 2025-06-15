@@ -3,16 +3,16 @@ import json
 
 # --- Telegram Bot API Token ---
 # Loaded directly from Render environment variable. Must be set.
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 # --- Google Sheets API Configuration ---
 # The *content* of your service account credentials JSON file, loaded directly from an environment variable.
-# This variable (GOOGLE_CREDENTIALS_JSON) should contain the entire JSON string. Must be set.
-GOOGLE_CREDENTIALS_JSON_CONTENT = os.getenv("GOOGLE_CREDENTIALS_JSON")
+# This variable (BASE64_CREDS) should contain the entire JSON string. Must be set.
+GOOGLE_CREDENTIALS_JSON_CONTENT = os.getenv("BASE64_CREDS")
 
 # The ID of your Google Spreadsheet where game data will be stored.
 # Loaded directly from Render environment variable. Must be set.
-GOOGLE_SHEET_ID = os.getenv("GOOGLE_SHEET_ID")
+GOOGLE_SHEET_ID = os.getenv("SHEET_ID")
 
 # --- Game Constants ---
 # Initial resources for new players
