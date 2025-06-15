@@ -3,6 +3,8 @@ from oauth2client.service_account import ServiceAccountCredentials
 import logging
 import json
 import time
+import os
+import base64
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -32,14 +34,25 @@ class GoogleSheetsDBManager:
         """Initializes the gspread client using service account credentials from JSON string."""
         if self.__class__._client is None:
             try:
-                # Load credentials from the JSON string provided via environment variable (via config)
-                if config.GOOGLE_CREDENTIALS_JSON_CONTENT:
-                    creds_dict = json.loads(config.GOOGLE_CREDENTIALS_JSON_CONTENT)
-                    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, SCOPE)
-                    self.__class__._client = gspread.authorize(creds)
-                    logging.info("gspread client authorized successfully from JSON string.")
-                else:
+                if not config.GOOGLE_CREDENTIALS_JSON_CONTENT:
                     raise ValueError("GOOGLE_CREDENTIALS_JSON_CONTENT not found in config. Make sure it's set in environment variables.")
+                
+                # Decode the Base64 content before loading it as JSON
+                try:
+                    decoded_creds_json = base64.b64decode(config.GOOGLE_CREDENTIALS_JSON_CONTENT).decode('utf-8')
+                    creds_dict = json.loads(decoded_creds_json)
+                except (base64.binascii.Error, json.JSONDecodeError) as e:
+                    logging.error(f"Error decoding or parsing GOOGLE_CREDENTIALS_JSON_CONTENT: {e}")
+                    raise ValueError("Invalid Base64 or JSON content for GOOGLE_CREDENTIALS_JSON_CONTENT. "
+                                     "Ensure it's a valid Base64 encoded JSON string.")
+
+                scope = [
+                    "https://spreadsheets.google.com/feeds",
+                    "https://www.googleapis.com/auth/drive"
+                ]
+                creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+                self.__class__._client = gspread.authorize(creds)
+                logging.info("gspread client authorized successfully from JSON string.")
             except Exception as e:
                 logging.error(f"Error authorizing gspread client: {e}")
                 raise
@@ -239,4 +252,33 @@ class GoogleSheetsDBManager:
             return player_list
         except Exception as e:
             logging.error(f"Error getting all players: {e}")
-            return [] 
+            return []
+
+# Example usage (for local testing, remove or guard in production)
+if __name__ == "__main__":
+    try:
+        # For local testing, ensure these are set in your environment or a .env file
+        # export BOT_TOKEN="YOUR_TELEGRAM_BOT_TOKEN"
+        # export SHEET_ID="YOUR_GOOGLE_SHEET_ID"
+        # export BASE64_CREDS="YOUR_BASE64_ENCODED_JSON_CREDS"
+
+        # Simulate getting environment variables if not truly set
+        if not os.getenv("BOT_TOKEN"):
+             os.environ["BOT_TOKEN"] = "TEST_BOT_TOKEN"
+        if not os.getenv("SHEET_ID"):
+             os.environ["SHEET_ID"] = "TEST_SHEET_ID"
+        if not os.getenv("BASE64_CREDS"):
+             # A minimal valid base64 encoded JSON (replace with your actual one)
+             sample_json = '{"type": "service_account", "project_id": "test-project", "private_key_id": "123", "private_key": "-----BEGIN PRIVATE KEY-----\\nFAKE_KEY\\n-----END PRIVATE KEY-----\\n", "client_email": "test@test-project.iam.gserviceaccount.com", "client_id": "123", "auth_uri": "https://accounts.google.com/o/oauth2/auth", "token_uri": "https://oauth2.googleapis.com/token", "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs", "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/test%40test-project.iam.gserviceaccount.com", "universe_domain": "googleapis.com"}'
+             os.environ["BASE64_CREDS"] = base64.b64encode(sample_json.encode('utf-8')).decode('utf-8')
+
+
+        # Re-import config after setting test env vars if needed
+        from config import GOOGLE_CREDENTIALS_JSON_CONTENT, GOOGLE_SHEET_ID, TELEGRAM_BOT_TOKEN
+
+        db_manager = GoogleSheetsDBManager()
+        print("DB Manager initialized (check logs for success/failure).")
+        # You can now call db_manager methods
+        # For example: player_data = db_manager.get_player_data("some_id")
+    except Exception as e:
+        print(f"Application failed to start: {e}") 
