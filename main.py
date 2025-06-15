@@ -100,6 +100,9 @@ async def send_base_ui(update: Update, context: ContextTypes.DEFAULT_TYPE, playe
         for b in config.INITIAL_BUILDING_LEVELS.keys()
     ])
 
+    # Define separator line with escaped underscores
+    separator = escape_markdown_v2("___")
+
     # Construct main message text with careful MarkdownV2 and escaping
     # Emojis directly inserted. Bolding done with literal *.
     # Punctuation like ':', ',', '.', '!' are escaped if they are literal.
@@ -108,11 +111,11 @@ async def send_base_ui(update: Update, context: ContextTypes.DEFAULT_TYPE, playe
         f"🏅 Power{escape_markdown_v2(':')} {escape_markdown_v2(str(player_data['player_power']))}\n"
         f"📍 Coords{escape_markdown_v2(':')} X{escape_markdown_v2(':')}*{escape_markdown_v2(str(player_data['coordinates_x']))}*{escape_markdown_v2(',')} "
         f"Y{escape_markdown_v2(':')}*{escape_markdown_v2(str(player_data['coordinates_y']))}*\n"
-        f"\\_\\_\\_\n" # Escaping underscores to show them literally, not as italic
+        f"{separator}\n"
         f"💰 *Resources{escape_markdown_v2(':')}*\n{resources_str}\n"
-        f"\\_\\_\\_\n"
+        f"{separator}\n"
         f"🧱 *Buildings{escape_markdown_v2(':')}*\n{building_levels_str}\n"
-        f"\\_\\_\\_\n"
+        f"{separator}\n"
         f"🎯 *Main Actions{escape_markdown_v2(':')}*\n"
     )
 
