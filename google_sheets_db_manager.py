@@ -135,26 +135,50 @@ class GoogleSheetsDBManager:
 
         return data_dict
 
-    def get_player_data(self, user_id: int) -> dict | None:
+    def get_player_data(self, player_id):
         """
         Retrieves a player's data from the 'Players' sheet.
         Returns a dictionary of player data if found, None otherwise.
         """
         sheet = self._get_sheet("Players")
-        headers = sheet.row_values(1) # Get headers from the first row
-
         try:
             # Find the row where the first column (user_id) matches
-            cell = sheet.find(str(user_id), in_column=1)
+            cell = sheet.find(str(player_id), in_column=1)
+            if not cell:
+                logging.info(f"Player with ID {player_id} not found.")
+                return None
+                
             row_index = cell.row
             row_values = sheet.row_values(row_index)
-            player_data = self._row_to_dict(headers, row_values)
-            return self._parse_json_fields(player_data)
+            
+            # Convert row values to dictionary using headers
+            headers = sheet.row_values(1)   # Get headers from first row
+            player_data = {headers[i]: row_values[i] if i < len(row_values) else "" 
+                            for i in range(len(headers))}
+            
+            # Parse JSON fields
+            json_fields = [
+                'current_resources', 'resource_caps', 'building_levels', 'unit_counts',
+                'active_timers', 'active_hero_assignments', 'owned_heroes',
+                'captured_heroes', 'strategy_point_allocations', 'completed_research',
+                'quest_progress'
+            ]
+            
+            for field in json_fields:
+                if field in player_data and player_data[field]:
+                    try:
+                        player_data[field] = json.loads(player_data[field])
+                    except json.JSONDecodeError:
+                        logging.error(f"Failed to decode JSON for field '{field}': {player_data[field]}")
+                        player_data[field] = {} if field not in ['completed_research', 'quest_progress'] else []
+            
+            return player_data
+            
         except gspread.exceptions.CellNotFound:
-            logging.info(f"Player with user_id {user_id} not found.")
+            logging.info(f"Player with ID {player_id} not found in sheet.")
             return None
         except Exception as e:
-            logging.error(f"Error getting player data for {user_id}: {e}")
+            logging.error(f"Error retrieving player data for {player_id}: {e}")
             return None
 
     def create_player(self, player_data: dict) -> bool:
@@ -186,50 +210,56 @@ class GoogleSheetsDBManager:
             logging.error(f"Error creating player {player_data.get('commander_name', 'N/A')}: {e}")
             return False
 
-    def update_player_data(self, user_id: int, updates: dict) -> bool:
+    def update_player_data(self, player_id, updates):
         """
         Updates specific fields for a player in the 'Players' sheet.
         'updates' should be a dictionary of field_name: new_value.
         Returns True on success, False on failure.
         """
         sheet = self._get_sheet("Players")
-        headers = sheet.row_values(1) # Get headers from the first row
-
         try:
-            cell = sheet.find(str(user_id), in_column=1)
+            # Find the player's row
+            cell = sheet.find(str(player_id), in_column=1)
+            if not cell:
+                logging.warning(f"Player with ID {player_id} not found for update.")
+                return False
+                
             row_index = cell.row
-
+            headers = sheet.row_values(1)
+            
+            # Get current row values
+            current_row_values = sheet.row_values(row_index)
+            updated_row_values = list(current_row_values)   # Make it mutable
+            
             # Prepare updates: convert dicts/lists to JSON strings
             updates_for_sheet = updates.copy()
             for key, value in updates_for_sheet.items():
                 if isinstance(value, (dict, list)):
                     updates_for_sheet[key] = json.dumps(value)
             
-            # Get current row values, update, then write back
-            current_row_values = sheet.row_values(row_index)
-            updated_row_values = list(current_row_values) # Make it mutable
-            
+            # Update values in the row
             for key, new_value in updates_for_sheet.items():
                 try:
-                    col_index = headers.index(key) + 1 # +1 because gspread is 1-indexed
+                    col_index = headers.index(key) + 1  # +1 because gspread is 1-indexed
                     # Ensure the list is long enough for the column index
                     while len(updated_row_values) < col_index:
-                        updated_row_values.append("") 
-                    updated_row_values[col_index - 1] = new_value # Update the value in the list
+                        updated_row_values.append("")
+                    updated_row_values[col_index - 1] = new_value
                 except ValueError:
                     logging.warning(f"Attempted to update non-existent column: {key}")
-                    continue # Skip if header not found
-
-            # Update the entire row using A1 notation for the entire row
-            # gspread.utils.rowcol_to_a1 helps generate the correct range
-            sheet.update(f'A{row_index}:{gspread.utils.rowcol_to_a1(row_index, len(headers))}', [updated_row_values])
-            logging.info(f"Player {user_id} data updated successfully.")
+                    continue
+            
+            # Update the entire row
+            range_name = f'A{row_index}:{gspread.utils.rowcol_to_a1(row_index, len(headers))}'
+            sheet.update(range_name, [updated_row_values])
+            logging.info(f"Player {player_id} data updated successfully.")
             return True
+            
         except gspread.exceptions.CellNotFound:
-            logging.warning(f"Player with user_id {user_id} not found for update.")
+            logging.warning(f"Player with ID {player_id} not found in sheet.")
             return False
         except Exception as e:
-            logging.error(f"Error updating player data for {user_id}: {e}")
+            logging.error(f"Error updating player data for {player_id}: {e}")
             return False
 
     def get_all_players(self) -> list[dict]:
