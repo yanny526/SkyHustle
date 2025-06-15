@@ -647,11 +647,11 @@ async def confirm_build(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     await update.message.reply_text(
         "**Build confirmed!**\n"
         "Remaining resources:\n"
-        f"- Wood: `{updated_player_data.get("resources_wood", 0)}`\n"
-        f"- Stone: `{updated_player_data.get("resources_stone", 0)}`\n"
-        f"- Food: `{updated_player_data.get("resources_food", 0)}`\n"
-        f"- Gold: `{updated_player_data.get("resources_gold", 0)}`\n"
-        f"- Energy: `{updated_player_data.get("resources_energy", 0)}`",
+        f"- Wood: `{updated_player_data.get('resources_wood', 0)}`\n"
+        f"- Stone: `{updated_player_data.get('resources_stone', 0)}`\n"
+        f"- Food: `{updated_player_data.get('resources_food', 0)}`\n"
+        f"- Gold: `{updated_player_data.get('resources_gold', 0)}`\n"
+        f"- Energy: `{updated_player_data.get('resources_energy', 0)}`",
         parse_mode="Markdown"
     )
     
