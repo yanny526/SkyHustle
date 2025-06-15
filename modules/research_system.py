@@ -108,7 +108,7 @@ def start_research(player_id: int, research_id: str) -> bool:
 
 def get_active_research(player_id: int) -> Optional[ResearchEntry]:
     """Fetch ongoing research from Sheets; return its name and remaining time."""
-    active_research_data = fetch_active_research_data(player_id)
+    active_research_data = fetch_active_research(player_id)
     if active_research_data:
         research_id = active_research_data["research_id"]
         research_name_display = active_research_data["research_name_display"]
