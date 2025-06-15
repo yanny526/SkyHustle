@@ -103,10 +103,12 @@ async def send_base_ui(update: Update, context: ContextTypes.DEFAULT_TYPE, playe
         for b in config.INITIAL_BUILDING_LEVELS.keys()
     ])
 
+    # Construct message with proper MarkdownV2 formatting and escaping
     message_text = (
-        f"🏠 *{escape_markdown_v2(player_data['commander_name'])}'s Base*\n"
+        f"🏠 Commander *{escape_markdown_v2(player_data['commander_name'])}*{escape_markdown_v2("'s")} Base\n"
         f"🏅 Power: {escape_markdown_v2(str(player_data['player_power']))}\n"
-        f"📍 Coords: X:{escape_markdown_v2(str(player_data['coordinates_x']))}, Y:{escape_markdown_v2(str(player_data['coordinates_y']))}\n"
+        f"📍 Coords: X:*{escape_markdown_v2(str(player_data['coordinates_x']))}*{escape_markdown_v2(',')} "
+        f"Y:*{escape_markdown_v2(str(player_data['coordinates_y']))}*\n"
         f"___\n"
         f"💰 *Resources:*\n{resources_str}\n"
         f"___\n"
@@ -161,22 +163,26 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     if player_data:
         # Existing user
-        context.user_data['state'] = 'main_menu' # Or 'base_view' if they go straight to base
-        # Calculate offline time and update last_login_timestamp
+        context.user_data['state'] = 'main_menu'
         last_login_timestamp = player_data.get('last_login_timestamp', 0)
         current_timestamp = int(time.time())
         offline_duration = current_timestamp - last_login_timestamp
         
-        # Update player's last login
         player_data['last_login_timestamp'] = current_timestamp
         db_manager.update_player_data(user_id, player_data)
         logger.info(f"Player {player_data['commander_name']} was offline for {offline_duration} seconds.")
 
-        # Ensure commander_name is also escaped if it's part of a MarkdownV2 message
-        welcome_message = f"Welcome back, Commander *{escape_markdown_v2(player_data['commander_name'])}*! You were offline for {offline_duration} seconds. What's your next move?"
+        # Escape only the dynamic commander_name and duration value.
+        # Manually add '*' for bolding.
+        # Manually escape static punctuation like '!', '.' for literal display.
+        welcome_message = (
+            f"Welcome back, Commander *{escape_markdown_v2(player_data['commander_name'])}*{escape_markdown_v2('!')}\n"
+            f"You were offline for {escape_markdown_v2(str(offline_duration))} seconds{escape_markdown_v2('.')}"
+            f" What's your next move{escape_markdown_v2('?')}"
+        )
         
         await update.message.reply_text(
-            text=escape_markdown_v2(welcome_message), # Apply escaping to the entire message
+            text=welcome_message, # Use the carefully constructed message
             parse_mode=ParseMode.MARKDOWN_V2,
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🏠 Enter Your Base", callback_data='enter_your_base')]
@@ -186,18 +192,17 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         # New user registration
         context.user_data['state'] = 'awaiting_initial_name_action'
         
-        # Apply escape_markdown_v2 to the entire static welcome message
-        welcome_message = escape_markdown_v2(
+        welcome_message = escape_markdown_v2( # This escapes the static '!' in the new user message
             "Welcome, brave Commander! Your journey in SkyHustle begins now.\n\n"
             "To get started, first you need to set your Commander name."
         )
         
         await update.message.reply_text(
-            text=welcome_message, # Use the escaped message
+            text=welcome_message,
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("Set Commander Name", callback_data='set_commander_name')]
             ]),
-            parse_mode=ParseMode.MARKDOWN_V2 # Ensure this is also set for new user messages
+            parse_mode=ParseMode.MARKDOWN_V2
         )
         logger.info(f"New user {user_id} ({first_name}) started the bot. Initiating registration.")
 
