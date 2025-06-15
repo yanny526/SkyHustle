@@ -37,12 +37,12 @@ from telegram.helpers import escape_markdown
 import math
 from collections import defaultdict
 
-from modules.training_system import train_menu # Import train_menu for the Train button
-from modules.research_system import research_command # Import research_command for the Research button
-from modules.black_market import blackmarket_menu # Import blackmarket_menu for the Black Market button
-from modules.alliance_system import alliance_handler # Import alliance_handler for the Alliance button
-from modules.zone_system import zones_main # Import zones_main for the Zones button
-from modules.building_system import build_menu # Import build_menu for the Build button
+# Removed top-level imports that were causing circular dependencies
+# from modules.training_system import train_menu 
+# from modules.research_system import research_command
+# from modules.black_market import blackmarket_menu 
+# from modules.zone_system import zones_main 
+# from modules.building_system import build_menu 
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -209,11 +209,11 @@ async def base_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     # Format resource production block with proper escaping
     resource_block = (
         f"📈 *{escape_markdown_v2('Resource Production', version=2)}*\n\n"
-        f"🌲 Wood: {wood}  \\(\\`{escape_markdown_v2(f'+{wood_per_hour:.1f}/hr', version=2)}\\`\\)\n"
-        f"⛰️ Stone: {stone}  \\(\\`{escape_markdown_v2(f'+{stone_per_hour:.1f}/hr', version=2)}\\`\\)\n"
-        f"🍖 Food: {food}  \\(\\`{escape_markdown_v2(f'+{food_per_hour:.1f}/hr', version=2)}\\`\\)\n"
-        f"💰 Gold: {gold}  \\(\\`{escape_markdown_v2(f'+{gold_per_hour:.1f}/hr', version=2)}\\`\\)\n"
-        f"⚡ Energy: {energy_cur}/{energy_max}  \\(\\`{escape_markdown_v2(f'+{energy_per_hour:.1f}/hr', version=2)}\\`\\)\n"
+        f"🌲 Wood: {wood}  \\(\\`{escape_markdown_v2(f'+{wood_per_hour:.1f}/hr', version=2)}\`\\)\n"
+        f"⛰️ Stone: {stone}  \\(\\`{escape_markdown_v2(f'+{stone_per_hour:.1f}/hr', version=2)}\`\\)\n"
+        f"🍖 Food: {food}  \\(\\`{escape_markdown_v2(f'+{food_per_hour:.1f}/hr', version=2)}\`\\)\n"
+        f"💰 Gold: {gold}  \\(\\`{escape_markdown_v2(f'+{gold_per_hour:.1f}/hr', version=2)}\`\\)\n"
+        f"⚡ Energy: {energy_cur}/{energy_max}  \\(\\`{escape_markdown_v2(f'+{energy_per_hour:.1f}/hr', version=2)}\`\\)\n"
         f"\-\-\-\-\-\-\-\-\-\-\-\-\-"
     )
 
@@ -323,6 +323,13 @@ def setup_base_ui(app: Application) -> None:
     # Import handlers here to avoid circular imports
     from modules.black_market import setup_black_market
     from modules.alliance_system import setup_alliance_system
+    from modules.training_system import train_menu
+    from modules.research_system import research_command
+    from modules.black_market import blackmarket_menu
+    from modules.alliance_system import alliance_handler
+    from modules.zone_system import zones_main
+    from modules.building_system import build_menu
+
 
     # Register base command and callback handlers
     app.add_handler(CommandHandler("base", base_handler))
@@ -337,6 +344,6 @@ def setup_base_ui(app: Application) -> None:
     app.add_handler(CallbackQueryHandler(zones_main, pattern="^ZONE_MENU$"))
     app.add_handler(CallbackQueryHandler(base_handler, pattern="^BACK_TO_BASE$"))
     
-    # Register black market and alliance handlers
-    setup_black_market(app)
-    setup_alliance_system(app) 
+    # Removed: setup_black_market and setup_alliance_system should be called from main.py
+    # setup_black_market(app)
+    # setup_alliance_system(app) 

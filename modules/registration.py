@@ -15,7 +15,6 @@ from modules.sheets_helper import (
     get_player_data,
     list_all_players,
 )
-from modules.base_ui import base_handler
 
 # Conversation state
 ASK_NAME = 0
@@ -106,6 +105,7 @@ async def received_name_handler(update: Update, context: ContextTypes.DEFAULT_TY
 async def enter_base_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.callback_query.answer()
     # Directly show base UI
+    from modules.base_ui import base_handler
     await base_handler(update, context)
     return ConversationHandler.END
 
@@ -114,6 +114,9 @@ async def cancel_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     return ConversationHandler.END
 
 def setup_registration(app: Application) -> None:
+    """
+    Call this in main.py to register the registration handlers.
+    """
     conv = ConversationHandler(
         entry_points=[CommandHandler("start", start_handler)],
         states={
