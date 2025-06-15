@@ -13,9 +13,9 @@ import time
 import json
 import random # For coordinates
 
-# Import our custom modules (relative imports for package structure)
-from . import config
-from .google_sheets_db_manager import GoogleSheetsDBManager
+# Import our custom modules using absolute imports
+import config
+from google_sheets_db_manager import GoogleSheetsDBManager
 
 # Configure logging
 logging.basicConfig(
@@ -66,7 +66,7 @@ async def send_base_ui(update: Update, context: ContextTypes.DEFAULT_TYPE, playe
         time_offline_seconds = current_timestamp - last_login_ts
         logger.info(f"Player {player_data['commander_name']} was offline for {time_offline_seconds} seconds.")
         # Future: Call a dedicated function to calculate offline resource gains and timer completions
-        # For now, just update the timestamp.
+        # For now, just logging.
     
     updates_to_db["last_login_timestamp"] = str(current_timestamp) # Always update timestamp on base view
 

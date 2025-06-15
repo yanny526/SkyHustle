@@ -1,20 +1,14 @@
-import json
-from typing import Dict, List, Optional, Any
 import gspread
-from google.oauth2.service_account import Credentials
-from config import GOOGLE_CREDENTIALS_JSON_CONTENT, GOOGLE_SHEET_ID
 from oauth2client.service_account import ServiceAccountCredentials
 import logging
+import json
 import time
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# Import config (relative import for package structure)
-# In production environment (like Render), 'skyhustle' is treated as a package.
-# For local testing if you were to run this file directly, 'from . import config' might fail.
-# However, given your Render setup, this is the correct way.
-from . import config
+# Import config (absolute import)
+import config
 
 # Define the scope for Google Sheets API
 SCOPE = [
@@ -60,8 +54,8 @@ class GoogleSheetsDBManager:
                 self.__class__._spreadsheet = self.__class__._client.open_by_key(config.GOOGLE_SHEET_ID)
                 logging.info("Spreadsheet opened successfully.")
             except Exception as e:
-                logging.error(f"Error opening spreadsheet: {e}")
-                raise
+                    logging.error(f"Error opening spreadsheet: {e}")
+                    raise
 
     def _get_sheet(self, sheet_name):
         """Helper to get a worksheet by name, creating it if it doesn't exist.
@@ -245,67 +239,4 @@ class GoogleSheetsDBManager:
             return player_list
         except Exception as e:
             logging.error(f"Error getting all players: {e}")
-            return []
-
-    def delete_player(self, player_id: int) -> bool:
-        """Delete a player from the database."""
-        try:
-            worksheet = self._get_sheet('Players')
-            cell = worksheet.find(str(player_id))
-            
-            if cell:
-                worksheet.delete_rows(cell.row)
-                return True
-            return False
-        except Exception as e:
-            print(f"Error deleting player: {e}")
-            return False
-            
-    def get_game_settings(self) -> Dict[str, Any]:
-        """Retrieve game settings from the Settings sheet."""
-        try:
-            worksheet = self._get_sheet('Settings')
-            data = worksheet.get_all_records()
-            
-            # Convert to dictionary format
-            settings = {}
-            for row in data:
-                key = row['Setting']
-                value = row['Value']
-                
-                # Convert numeric strings to appropriate types
-                if value.isdigit():
-                    value = int(value)
-                elif value.replace('.', '').isdigit():
-                    value = float(value)
-                    
-                settings[key] = value
-                
-            return settings
-        except Exception as e:
-            print(f"Error retrieving game settings: {e}")
-            return {}
-            
-    def update_game_settings(self, settings: Dict[str, Any]) -> bool:
-        """Update game settings in the Settings sheet."""
-        try:
-            worksheet = self._get_sheet('Settings')
-            
-            # Get current settings
-            current_settings = {row['Setting']: row['Value'] for row in worksheet.get_all_records()}
-            
-            # Update each setting
-            for setting, value in settings.items():
-                if setting in current_settings:
-                    # Find and update existing setting
-                    cell = worksheet.find(setting)
-                    if cell:
-                        worksheet.update_cell(cell.row, 2, str(value))
-                else:
-                    # Add new setting
-                    worksheet.append_row([setting, str(value)])
-                    
-            return True
-        except Exception as e:
-            print(f"Error updating game settings: {e}")
-            return False 
+            return [] 
