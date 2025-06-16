@@ -1,3 +1,0 @@
-"""
-SkyHustle test suite package.
-""" 

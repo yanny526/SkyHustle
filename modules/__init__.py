@@ -1,3 +1,0 @@
-"""
-SkyHustle game modules package.
-""" 

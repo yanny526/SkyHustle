@@ -1,3 +1,0 @@
-"""
-SkyHustle command handlers package.
-""" 
