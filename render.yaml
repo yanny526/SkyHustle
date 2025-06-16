@@ -1,11 +1,23 @@
 services:
   - type: web
-    name: skyhustle-bot
+    name: skyhustle
     env: node
-    plan: starter
-    region: frankfurt       # or your preferred region
+    repo: https://github.com/yanny526/SkyHustle
     branch: main
+    plan: starter
+    region: oregon       # or your preferred region
     buildCommand: |
       npm ci
       npm run build
-    startCommand: npm run start 
+    startCommand: npm run start
+    envVars:
+      - key: NODE_ENV
+        value: production
+        sync: false
+      - key: SHEET_ID
+        sync: false
+      - key: BOT_TOKEN
+        sync: false
+      - key: BASE64_CREDS
+        sync: false
+version: "1"
