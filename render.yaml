@@ -2,22 +2,18 @@ services:
   - type: web
     name: skyhustle
     env: node
-    repo: https://github.com/yanny526/SkyHustle
-    branch: main
-    plan: starter
-    region: oregon       # or your preferred region
-    buildCommand: |
-      npm ci
-      npm run build
-    startCommand: npm run start
+    # … rest of your config …
+
     envVars:
+      # A non-secret you’re happy committing
       - key: NODE_ENV
         value: production
-        sync: false
-      - key: SHEET_ID
-        sync: false
+
+      # Secrets managed exclusively via the Render dashboard
       - key: BOT_TOKEN
-        sync: false
+        sync: true
       - key: BASE64_CREDS
-        sync: false
+        sync: true
+      - key: SHEET_ID
+        sync: true
 version: "1"
