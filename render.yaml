@@ -13,10 +13,4 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-      - key: BOT_TOKEN
-        sync: true
-      - key: BASE64_CREDS
-        sync: true
-      - key: SHEET_ID
-        sync: true
 version: "1"
