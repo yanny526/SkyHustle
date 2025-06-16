@@ -1,5 +1,6 @@
 """
 Sheets Helper: Google Sheets integration for SkyHustle.
+Automatically creates required worksheets if they don't exist.
 """
 import os
 import json
@@ -27,11 +28,29 @@ if not SHEET_ID:
 
 spreadsheet = gc.open_by_key(SHEET_ID)
 
-# Worksheet tabs (must already exist with these exact names)
-players_sheet      = spreadsheet.worksheet("Players")
-inventory_sheet    = spreadsheet.worksheet("Inventory")
-production_sheet   = spreadsheet.worksheet("ProductionRates")
-caps_sheet         = spreadsheet.worksheet("StorageCaps")
+def get_or_create_sheet(title: str, headers: list[str], rows: int = 1000, cols: int = 10):
+    """Fetches a worksheet by title or creates it with the given headers."""
+    try:
+        ws = spreadsheet.worksheet(title)
+    except gspread.exceptions.WorksheetNotFound:
+        logging.info(f"Worksheet '{title}' not found – creating it.")
+        ws = spreadsheet.add_worksheet(title=title, rows=str(rows), cols=str(cols))
+        ws.append_row(headers)
+    return ws
+
+# Ensure these tabs exist (and have header rows)
+players_sheet = get_or_create_sheet(
+    "Players", ["player_id", "name", "created_at"], rows=2000, cols=3
+)
+inventory_sheet = get_or_create_sheet(
+    "Inventory", ["player_id", "wood", "stone", "gold", "food", "premium", "last_update"], rows=2000, cols=7
+)
+production_sheet = get_or_create_sheet(
+    "ProductionRates", ["player_id", "wood_rate", "stone_rate", "gold_rate", "food_rate", "premium_rate"], rows=2000, cols=6
+)
+caps_sheet = get_or_create_sheet(
+    "StorageCaps", ["player_id", "wood_cap", "stone_cap", "gold_cap", "food_cap", "premium_cap"], rows=2000, cols=6
+)
 
 
 async def load_player(player_id: str) -> Optional[Dict[str, str]]:
