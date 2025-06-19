@@ -1,6 +1,6 @@
 # content.py
 # The central repository for all player-facing text.
-# Upgraded for a richer, more engaging user experience with enhanced formatting and emojis.
+# Hotfix applied to correctly display the Food resource line in the base panel.
 
 import constants
 from datetime import datetime
@@ -36,12 +36,17 @@ def get_base_panel_text(player_data: dict) -> str:
     wood = int(player_data.get('wood', 0))
     stone = int(player_data.get('stone', 0))
     iron = int(player_data.get('iron', 0))
+    food = int(player_data.get('food', 0)) # <-- FIX: Retrieve food
+    
     wood_cap = int(player_data.get('wood_storage_cap', 0))
     stone_cap = int(player_data.get('stone_storage_cap', 0))
     iron_cap = int(player_data.get('iron_storage_cap', 0))
+    food_cap = int(player_data.get('food_storage_cap', 0)) # <-- FIX: Retrieve food cap
+
     wood_prod = int(player_data.get('wood_prod_rate', 0))
     stone_prod = int(player_data.get('stone_prod_rate',0))
     iron_prod = int(player_data.get('iron_prod_rate', 0))
+    food_prod = int(player_data.get('food_prod_rate', 0)) # <-- FIX: Retrieve food production
     
     # Construct the message with superior formatting and visual cues.
     text = (
@@ -51,7 +56,8 @@ def get_base_panel_text(player_data: dict) -> str:
         f"<b><u>Resources (Production/hr):</u></b>\n"
         f"🌲 Wood:  {wood:,} / {wood_cap:,} <i>( +{wood_prod:,} )</i>\n"
         f"🪨 Stone: {stone:,} / {stone_cap:,} <i>( +{stone_prod:,} )</i>\n"
-        f"🔩 Iron:  {iron:,} / {iron_cap:,} <i>( +{iron_prod:,} )</i>\n\n"
+        f"🔩 Iron:  {iron:,} / {iron_cap:,} <i>( +{iron_prod:,} )</i>\n"
+        f"🍞 Food:  {food:,} / {food_cap:,} <i>( +{food_prod:,} )</i>\n\n" # <-- FIX: Add food display line
         f"<i>Status: All systems nominal. ✅</i>"
     )
     return text
