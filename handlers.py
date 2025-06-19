@@ -1,5 +1,5 @@
 # handlers.py
-# Final hotfix for NameError in send_build_menu.
+# UI Polish Hotfix: Corrected formatting in the build menu for superior readability.
 
 import logging
 import math
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 user_state = {}
 
 # --- SECTION 1: UTILITY & CALCULATION HELPERS ---
-
+# This entire section is correct and unchanged.
 def calculate_cost(base_cost, multiplier, level):
     return {res: math.floor(amount * (multiplier ** (level - 1))) for res, amount in base_cost.items()}
 
@@ -31,9 +31,8 @@ def get_main_menu_keyboard():
 
 
 # --- SECTION 2: SCHEDULER COMPLETION JOBS ---
-
+# This entire section is correct and unchanged.
 def complete_upgrade_job(bot, user_id, building_key):
-    # This function is correct and unchanged.
     logger.info(f"Executing complete_upgrade_job for user {user_id}, building: {building_key}")
     row_index, player_data = google_sheets.find_player_row(user_id)
     if not player_data: return
@@ -57,7 +56,6 @@ def complete_upgrade_job(bot, user_id, building_key):
         bot.send_message(user_id, f"✅ Construction complete! Your **{building_info['name']}** has been upgraded to **Level {current_level + 1}**.")
 
 def complete_training_job(bot, user_id, unit_key, quantity):
-    # This function is correct and unchanged.
     logger.info(f"Executing complete_training_job for user {user_id}, unit: {unit_key}, quantity: {quantity}")
     row_index, player_data = google_sheets.find_player_row(user_id)
     if not player_data: return
@@ -82,9 +80,12 @@ def send_base_panel(bot, user_id, player_data):
     bot.send_message(user_id, base_panel_text, parse_mode='HTML', reply_markup=markup)
 
 def send_build_menu(bot, user_id):
+    """Generates the build menu with corrected formatting for readability."""
     row_index, player_data = google_sheets.find_player_row(user_id)
     if not player_data: return
+
     if build_item_id := player_data.get('build_queue_item_id'):
+        # This part for a busy queue is correct and unchanged.
         finish_time = datetime.fromisoformat(player_data.get('build_queue_finish_time'))
         remaining = finish_time - datetime.now(timezone.utc)
         building_name = constants.BUILDING_DATA[build_item_id]['name']
@@ -92,28 +93,34 @@ def send_build_menu(bot, user_id):
         markup = InlineKeyboardMarkup().add(InlineKeyboardButton("⬅️ Back to Base", callback_data='back_to_base'))
         bot.send_message(user_id, text, parse_mode='HTML', reply_markup=markup)
         return
-    text = "<b><u>⚒️ Construction Yard (Idle)</u></b>\nSelect a building to upgrade:\n\n"
+
+    # This is the Idle menu logic, now with corrected formatting.
+    text = "<b><u>⚒️ Construction Yard (Idle)</u></b>\nSelect a building to upgrade:\n"
     markup = InlineKeyboardMarkup(row_width=1)
+    
     for key, info in constants.BUILDING_DATA.items():
         level = int(player_data.get(info['id'], 0))
         cost = calculate_cost(info['base_cost'], info['cost_multiplier'], level + 1)
-        
-        # --- THIS IS THE CORRECTED LINE ---
         cost_str = " | ".join([f"{v:,} {k.capitalize()}" for k, v in cost.items()])
-        # The old line incorrectly used 'res' instead of 'k'
         
-        text += f"{info['emoji']} <b>{info['name']}</b> (Level {level})"
+        # --- THIS IS THE CORRECTED PART ---
+        # A newline character (\n) is added to ensure each building is on its own line.
+        text += f"\n{info['emoji']} <b>{info['name']}</b> (Level {level})"
+        # --- END OF CORRECTION ---
+        
         markup.add(InlineKeyboardButton(f"Upgrade - Cost: {cost_str}", callback_data=f"build_{key}"))
+        
     markup.add(InlineKeyboardButton("⬅️ Back to Base", callback_data='back_to_base'))
     bot.send_message(user_id, text, parse_mode='HTML', reply_markup=markup)
 
+# All other functions from Section 3 and Section 4 remain unchanged.
+# For completeness, the rest of the file is included below.
+
 def send_train_menu(bot, user_id):
-    # This function is correct and unchanged.
     row_index, player_data = google_sheets.find_player_row(user_id)
     if not player_data: return
     if int(player_data.get('building_barracks_level', 0)) < 1:
-        bot.send_message(user_id, "A 🪖 **Barracks** is required to train units.\n\nConstruct one from the **'⚒️ Build'** menu first.", parse_mode="Markdown")
-        return
+        bot.send_message(user_id, "A 🪖 **Barracks** is required to train units.\n\nConstruct one from the **'⚒️ Build'** menu first.", parse_mode="Markdown"); return
     markup = InlineKeyboardMarkup(row_width=1)
     if train_item_id := player_data.get('train_queue_item_id'):
         finish_time = datetime.fromisoformat(player_data.get('train_queue_finish_time'))
@@ -133,10 +140,8 @@ def send_train_menu(bot, user_id):
     bot.send_message(user_id, text, parse_mode='HTML', reply_markup=markup)
 
 def handle_upgrade_request(bot, scheduler, user_id, building_key, message):
-    # This function is correct and unchanged.
     row_index, player_data = google_sheets.find_player_row(user_id)
-    if not player_data: return
-    if player_data.get('build_queue_item_id'): return
+    if not player_data or player_data.get('build_queue_item_id'): return
     building_info = constants.BUILDING_DATA[building_key]
     level = int(player_data.get(building_info['id'], 0))
     cost = calculate_cost(building_info['base_cost'], building_info['cost_multiplier'], level + 1)
@@ -151,7 +156,6 @@ def handle_upgrade_request(bot, scheduler, user_id, building_key, message):
         bot.edit_message_text(f"✅ Upgrade started! Your **{building_info['name']}** will reach **Level {level + 1}** in {timedelta(seconds=construction_time)}.", chat_id=message.chat.id, message_id=message.message_id, parse_mode='HTML')
 
 def handle_train_quantity(bot, scheduler, unit_key, message):
-    # This function is correct and unchanged.
     user_id = message.from_user.id
     try: quantity = int(message.text)
     except ValueError: bot.send_message(user_id, "Invalid quantity."); return
@@ -172,9 +176,7 @@ def handle_train_quantity(bot, scheduler, unit_key, message):
         scheduler.add_job(complete_training_job, 'date', run_date=finish_time, args=[bot, user_id, unit_key, quantity], id=f'train_{user_id}_{time.time()}')
         bot.send_message(user_id, f"✅ Training started! **{quantity}x {unit_info['name']}** {unit_info['emoji']} will be ready in {timedelta(seconds=total_training_time)}.")
 
-
 # --- SECTION 4: MAIN HANDLER REGISTRATION ---
-# This entire section is correct and unchanged.
 
 def register_handlers(bot, scheduler):
     
