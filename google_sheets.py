@@ -1,4 +1,4 @@
- # google_sheets.py
+# google_sheets.py
 # The robust, fault-tolerant interface to our Google Sheets database.
 # Engineered for efficiency with connection caching and automatic sheet initialization.
 
@@ -72,7 +72,7 @@ def get_worksheet(worksheet_name='Players'):
         current_headers = worksheet.row_values(1)
         if current_headers != constants.SHEET_COLUMN_HEADERS:
             logger.info("Worksheet headers are missing or incorrect. Setting headers...")
-            worksheet.update([constants.SHEET_COLUMN_HEADERS], range_name='A1')
+            worksheet.update(values=[constants.SHEET_COLUMN_HEADERS], range_name='A1')
             logger.info("Successfully set worksheet headers.")
             
         return worksheet
