@@ -15,6 +15,8 @@ SHEET_COLUMN_HEADERS = [
     # Building Levels
     'building_hq_level', 'building_sawmill_level', 'building_quarry_level', 'building_ironmine_level',
     'building_warehouse_level',
+    # --- NEW: Build Queue ---
+    'build_queue_item_id', 'build_queue_finish_time',
     # Timestamps
     'created_at', 'last_seen'
 ]

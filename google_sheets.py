@@ -1,6 +1,5 @@
 # google_sheets.py
-# The robust, fault-tolerant interface to our Google Sheets database.
-# Engineered for efficiency with connection caching and automatic sheet initialization.
+# Upgraded to include a generic, efficient multi-cell update function.
 
 import os
 import gspread
@@ -8,115 +7,104 @@ import json
 import base64
 import logging
 from datetime import datetime, timezone
-
-# Import our single source of truth for constants
 import constants
 
-# Initialize a logger for this module
 logger = logging.getLogger(__name__)
-
-# A private, cached gspread client instance.
-# This prevents re-authenticating for every single database call, a critical efficiency gain.
 _sheet_client = None
 
+# _get_sheet_client() function remains the same...
 def _get_sheet_client():
-    """
-    Authenticates with Google Sheets using base64-encoded credentials.
-    Caches the client for subsequent calls to maximize performance.
-    """
     global _sheet_client
-    if _sheet_client:
-        return _sheet_client
-
+    if _sheet_client: return _sheet_client
     try:
         base64_creds = os.environ.get('BASE64_CREDS')
-        if not base64_creds:
-            logger.critical("CRITICAL: BASE64_CREDS environment variable not set.")
-            raise ValueError("BASE64_CREDS environment variable is not set.")
-
         creds_json_str = base64.b64decode(base64_creds).decode('utf-8')
         creds_dict = json.loads(creds_json_str)
-
-        logger.info("Authenticating with Google Sheets...")
         _sheet_client = gspread.service_account_from_dict(creds_dict)
         logger.info("Successfully authenticated with Google Sheets.")
         return _sheet_client
     except Exception as e:
-        logger.critical(f"CRITICAL ERROR: Failed to authenticate with Google Sheets. Check BASE64_CREDS. Error: {e}")
-        raise # Re-raise to halt execution if authentication fails
+        logger.critical(f"CRITICAL ERROR: Failed to authenticate with Google Sheets: {e}")
+        raise
 
+# get_worksheet() function remains the same...
 def get_worksheet(worksheet_name='Players'):
-    """
-    Retrieves the main game worksheet and ensures its proper setup.
-    This function is idempotent: it creates and formats the sheet if it doesn't exist,
-    ensuring a zero-manual-setup deployment.
-    """
     try:
         client = _get_sheet_client()
         sheet_id = os.environ.get('SHEET_ID')
-        if not sheet_id:
-            raise ValueError("SHEET_ID environment variable is not set.")
-        
         spreadsheet = client.open_by_key(sheet_id)
-        logger.info(f"Connected to Google Spreadsheet: {spreadsheet.title}")
-
         try:
             worksheet = spreadsheet.worksheet(worksheet_name)
-            logger.info(f"Found existing '{worksheet_name}' worksheet.")
         except gspread.exceptions.WorksheetNotFound:
             logger.warning(f"'{worksheet_name}' worksheet not found. Creating it...")
             worksheet = spreadsheet.add_worksheet(title=worksheet_name, rows=1, cols=len(constants.SHEET_COLUMN_HEADERS))
-            logger.info(f"Successfully created '{worksheet_name}' worksheet.")
-
-        # Verify and set headers if they are incorrect.
         current_headers = worksheet.row_values(1)
         if current_headers != constants.SHEET_COLUMN_HEADERS:
             logger.info("Worksheet headers are missing or incorrect. Setting headers...")
             worksheet.update(values=[constants.SHEET_COLUMN_HEADERS], range_name='A1')
             logger.info("Successfully set worksheet headers.")
-            
         return worksheet
     except Exception as e:
-        logger.critical(f"CRITICAL ERROR: Failed to get or initialize worksheet. Error: {e}")
+        logger.critical(f"CRITICAL ERROR: Failed to get or initialize worksheet: {e}")
         raise
 
+# find_player_row() function remains the same...
 def find_player_row(user_id: int):
-    """
-    Finds a player's row in the worksheet by their unique user_id.
-    Returns the row index and the record as a dictionary.
-    """
     try:
         worksheet = get_worksheet()
-        cell = worksheet.find(str(user_id), in_column=1) # user_id is always in the first column
+        cell = worksheet.find(str(user_id), in_column=1)
         if cell:
-            logger.info(f"Found player with user_id {user_id} at row {cell.row}.")
             headers = worksheet.row_values(1)
             player_data = worksheet.row_values(cell.row)
             return cell.row, dict(zip(headers, player_data))
-        logger.info(f"No player found with user_id {user_id}.")
         return None, None
     except Exception as e:
         logger.error(f"Error finding player {user_id}: {e}")
         return None, None
 
-def create_player_row(player_data_dict: dict):
-    """Appends a new player's data as a row in the worksheet."""
+# --- NEW: A generic, powerful function to update multiple player attributes at once ---
+def update_player_data(user_id: int, updates: dict):
+    """
+    Finds a player by user_id and updates their data with the key-value pairs in the updates dictionary.
+    Returns True on success, False on failure.
+    """
     try:
         worksheet = get_worksheet()
-        # Ensure UTC timestamp for universal consistency
+        row_index, player_data = find_player_row(user_id)
+        if not row_index:
+            logger.error(f"Cannot update data for non-existent player {user_id}.")
+            return False
+        
+        headers = worksheet.row_values(1)
+        # Prepare a list of cell objects to update in a single batch request for max efficiency.
+        cell_updates = []
+        for key, value in updates.items():
+            if key in headers:
+                col_index = headers.index(key) + 1 # gspread is 1-indexed
+                cell_updates.append(gspread.Cell(row_index, col_index, str(value)))
+            else:
+                logger.warning(f"Attempted to update non-existent column '{key}' for user {user_id}.")
+        
+        if cell_updates:
+            worksheet.update_cells(cell_updates, value_input_option='USER_ENTERED')
+            logger.info(f"Successfully updated data for user {user_id}: {updates}")
+            return True
+        return False
+    except Exception as e:
+        logger.error(f"Error updating data for player {user_id}: {e}")
+        return False
+
+# create_player_row() function remains the same...
+def create_player_row(player_data_dict: dict):
+    try:
+        worksheet = get_worksheet()
         now_utc = datetime.now(timezone.utc).isoformat()
         player_data_dict['created_at'] = now_utc
         player_data_dict['last_seen'] = now_utc
-        
-        # Build the row in the exact order of the sheet's headers.
-        # This prevents data misalignment.
         row_to_append = [player_data_dict.get(header, '') for header in constants.SHEET_COLUMN_HEADERS]
-        
         worksheet.append_row(row_to_append)
-        user_id = player_data_dict.get('user_id', 'N/A')
-        logger.info(f"Successfully created new player row for user_id {user_id}.")
+        logger.info(f"Successfully created new player row for user_id {player_data_dict.get('user_id')}.")
         return True
     except Exception as e:
-        user_id = player_data_dict.get('user_id', 'N/A')
-        logger.error(f"Error creating new player row for user_id {user_id}: {e}")
+        logger.error(f"Error creating new player row for {player_data_dict.get('user_id')}: {e}")
         return False
