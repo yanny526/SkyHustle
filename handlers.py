@@ -1,5 +1,5 @@
 # handlers.py
-# System 2 Finalization: Implements the complete construction logic.
+# Hotfix applied to correct a NameError during new player creation.
 
 import logging
 import math
@@ -23,7 +23,6 @@ def calculate_time(base_time, multiplier, level):
 
 # --- COMPLETION JOB ---
 def complete_upgrade_job(bot, user_id, building_key):
-    """The function that APScheduler will execute when a construction timer finishes."""
     logger.info(f"Executing complete_upgrade_job for user {user_id}, building: {building_key}")
     row_index, player_data = google_sheets.find_player_row(user_id)
     if not player_data:
@@ -40,7 +39,6 @@ def complete_upgrade_job(bot, user_id, building_key):
         'build_queue_finish_time': ''
     }
     
-    # Apply effects of the upgrade
     effect = building_info.get('effects', {})
     if effect.get('type') == 'production':
         rate_field = effect['resource']
@@ -61,7 +59,6 @@ def complete_upgrade_job(bot, user_id, building_key):
 # --- MAIN HANDLER REGISTRATION ---
 def register_handlers(bot, scheduler):
     
-    # --- START & ONBOARDING (Unchanged) ---
     @bot.message_handler(commands=['start'])
     def start_command_handler(message: Message):
         user_id = message.from_user.id
@@ -78,7 +75,15 @@ def register_handlers(bot, scheduler):
         if not (3 <= len(commander_name) <= 20):
             bot.send_message(user_id, "A commander's name must be between 3 and 20 characters.")
             return
-        new_player_data = { **constants.INITIAL_PLAYER_STATS, FIELD_USER_ID: user_id, FIELD_COMMANDER_NAME: commander_name }
+            
+        # --- THIS IS THE CORRECTED BLOCK ---
+        new_player_data = {
+            **constants.INITIAL_PLAYER_STATS,
+            constants.FIELD_USER_ID: user_id,
+            constants.FIELD_COMMANDER_NAME: commander_name
+        }
+        # --- END OF CORRECTION ---
+
         if google_sheets.create_player_row(new_player_data):
             welcome_message = content.get_new_player_welcome_success_text(commander_name)
             bot.send_message(user_id, welcome_message, parse_mode='HTML')
@@ -86,7 +91,6 @@ def register_handlers(bot, scheduler):
             if user_id in user_state: del user_state[user_id]
         else: bot.send_message(user_id, "A critical error occurred. Please try /start again later.")
 
-    # --- CALLBACK HANDLER (FOR BUTTONS) ---
     @bot.callback_query_handler(func=lambda call: True)
     def handle_callback_query(call):
         user_id = call.from_user.id
@@ -104,7 +108,6 @@ def register_handlers(bot, scheduler):
         
         bot.answer_callback_query(call.id)
 
-    # --- MENU & MESSAGE HANDLERS ---
     @bot.message_handler(func=lambda message: True)
     def default_message_handler(message: Message):
         if message.from_user.id in user_state:
@@ -122,14 +125,16 @@ def register_handlers(bot, scheduler):
             markup = InlineKeyboardMarkup().add(InlineKeyboardButton("⬅️ Back to Base", callback_data='back_to_base'))
             bot.send_message(message.chat.id, f"The **{message.text}** system is not yet online.", reply_markup=markup, parse_mode='Markdown')
 
-# --- BUILD LOGIC ---
+# --- BUILD LOGIC & UI FUNCTIONS ---
+# The rest of the file (handle_upgrade_request, send_base_panel, send_build_menu, get_main_menu_keyboard) remains unchanged.
+# I am including it here for completeness.
+
 def handle_upgrade_request(bot, scheduler, user_id, building_key):
     row_index, player_data = google_sheets.find_player_row(user_id)
     if not player_data:
         bot.send_message(user_id, "Error: Player data not found.")
         return
 
-    # 1. Check if builder is busy
     if player_data.get('build_queue_item_id'):
         bot.send_message(user_id, "⚠️ Your construction yard is busy. Please wait for the current upgrade to complete.")
         return
@@ -138,7 +143,6 @@ def handle_upgrade_request(bot, scheduler, user_id, building_key):
     current_level = int(player_data.get(building_info['id'], 0))
     next_level = current_level + 1
 
-    # 2. Calculate cost and check resources
     cost = calculate_cost(building_info['base_cost'], building_info['cost_multiplier'], next_level)
     has_enough_resources = True
     missing_res_str = ""
@@ -151,7 +155,6 @@ def handle_upgrade_request(bot, scheduler, user_id, building_key):
         bot.send_message(user_id, f"⚠️ Insufficient resources. You need: {missing_res_str.strip(', ')}.")
         return
 
-    # 3. All checks passed. Start the upgrade.
     construction_time_seconds = calculate_time(building_info['base_time_seconds'], building_info['time_multiplier'], next_level)
     finish_time = datetime.now(timezone.utc) + timedelta(seconds=construction_time_seconds)
     
@@ -164,19 +167,17 @@ def handle_upgrade_request(bot, scheduler, user_id, building_key):
     }
 
     if google_sheets.update_player_data(user_id, db_updates):
-        # 4. Schedule the completion job
         scheduler.add_job(
             complete_upgrade_job,
             trigger='date',
             run_date=finish_time,
             args=[bot, user_id, building_key],
-            id=f'upgrade_{user_id}_{building_key}_{time.time()}' # Unique job ID
+            id=f'upgrade_{user_id}_{building_key}_{time.time()}'
         )
         bot.send_message(user_id, f"✅ Upgrade started! Your **{building_info['name']}** will reach **Level {next_level}** in {timedelta(seconds=construction_time_seconds)}.")
     else:
         bot.send_message(user_id, "⚠️ An error occurred while starting the upgrade. Please try again.")
 
-# --- UI SENDING FUNCTIONS ---
 def send_base_panel(bot, user_id, player_data):
     base_panel_text = content.get_base_panel_text(player_data)
     markup = get_main_menu_keyboard()
@@ -186,7 +187,6 @@ def send_build_menu(bot, user_id):
     row_index, player_data = google_sheets.find_player_row(user_id)
     if not player_data: return
 
-    # Check if a build is in progress to show a status
     if build_item_id := player_data.get('build_queue_item_id'):
         finish_time_str = player_data.get('build_queue_finish_time')
         finish_time = datetime.fromisoformat(finish_time_str)
@@ -204,7 +204,7 @@ def send_build_menu(bot, user_id):
         level = int(player_data.get(info['id'], 0))
         cost = calculate_cost(info['base_cost'], info['cost_multiplier'], level + 1)
         cost_str = " | ".join([f"{v:,} {k.capitalize()}" for k, v in cost.items()])
-        markup.add(InlineKeyboardButton(f"{info['emoji']} {info['name']} (Lv. {level})", callback_data=f"info_{key}")) # Placeholder for info
+        markup.add(InlineKeyboardButton(f"{info['emoji']} {info['name']} (Lv. {level})", callback_data=f"info_{key}"))
         markup.add(InlineKeyboardButton(f"Upgrade - Cost: {cost_str}", callback_data=f"build_{key}"))
 
     markup.add(InlineKeyboardButton("⬅️ Back to Base", callback_data='back_to_base'))
