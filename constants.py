@@ -1,31 +1,48 @@
 # constants.py
-# Hotfix: Corrects the data type for the new player shield.
+# Definitive Version for All Core Systems (1-5)
 
 from datetime import datetime, timedelta, timezone
 
-# === PLAYER SCHEMA (Unchanged) ===
+# --- PLAYER SCHEMA ---
 SHEET_COLUMN_HEADERS = [
-    'user_id', 'commander_name', 'alliance_id', 'base_level', 'xp', 'power', 'diamonds',
-    'wood', 'stone', 'iron', 'food', 'energy', 'wood_storage_cap', 'stone_storage_cap',
-    'iron_storage_cap', 'food_storage_cap', 'wood_prod_rate', 'stone_prod_rate',
-    'iron_prod_rate', 'food_prod_rate', 'army_strategy_points', 'prod_strategy_points',
-    'vip_tier', 'vip_expiry', 'building_hq_level', 'building_sawmill_level', 'building_quarry_level',
-    'building_ironmine_level', 'building_warehouse_level', 'building_barracks_level',
-    'building_research_lab_level', 'unit_infantry_count', 'train_queue_item_id',
-    'train_queue_quantity', 'train_queue_finish_time', 'build_queue_item_id',
-    'build_queue_finish_time', 'research_queue_item_id', 'research_queue_finish_time',
-    'research_logistics_unlocked', 'research_weaponry_unlocked', 'shield_finish_time',
-    'attack_queue_target_id', 'attack_queue_finish_time', 'return_queue_army_data',
-    'return_queue_finish_time', 'created_at', 'last_seen'
+    'user_id', 'commander_name', 'alliance_id',
+    'base_level', 'xp', 'power', 'diamonds',
+    'wood', 'stone', 'iron', 'food', 'energy',
+    'wood_storage_cap', 'stone_storage_cap', 'iron_storage_cap', 'food_storage_cap',
+    'wood_prod_rate', 'stone_prod_rate', 'iron_prod_rate', 'food_prod_rate',
+    'army_strategy_points', 'prod_strategy_points', 'vip_tier', 'vip_expiry',
+    'building_hq_level', 'building_sawmill_level', 'building_quarry_level', 'building_ironmine_level',
+    'building_warehouse_level', 'building_barracks_level', 'building_research_lab_level',
+    'unit_infantry_count',
+    'train_queue_item_id', 'train_queue_quantity', 'train_queue_finish_time',
+    'build_queue_item_id', 'build_queue_finish_time',
+    'research_queue_item_id', 'research_queue_finish_time',
+    'research_logistics_unlocked', 'research_weaponry_unlocked',
+    'shield_finish_time',
+    'attack_queue_target_id', 'attack_queue_finish_time',
+    'return_queue_army_data', 'return_queue_finish_time',
+    'created_at', 'last_seen'
 ]
 FIELD_USER_ID = 'user_id'
 FIELD_COMMANDER_NAME = 'commander_name'
 
-
-# === NEW PLAYER CONFIG ===
+# --- PLAYER & ALLIANCE CONFIGURATION ---
 NEW_PLAYER_SHIELD_HOURS = 24
+ALLIANCE_CONFIG = {
+    'max_members': 30,
+    'name_max_length': 25,
+    'tag_max_length': 5,
+    'description_max_length': 200,
+    'create_cost': {'diamonds': 100}
+}
 
+# --- ALLIANCE SCHEMA ---
+ALLIANCES_SHEET_COLUMN_HEADERS = [
+    'alliance_id', 'alliance_name', 'alliance_tag',
+    'leader_id', 'member_ids', 'description', 'created_at'
+]
 
+# --- INITIAL PLAYER STATS ---
 INITIAL_PLAYER_STATS = {
     'alliance_id': '', 'base_level': 1, 'xp': 0, 'power': 50, 'diamonds': 5,
     'wood': 500, 'stone': 500, 'iron': 250, 'food': 1000, 'energy': 100,
@@ -40,7 +57,6 @@ INITIAL_PLAYER_STATS = {
     'build_queue_item_id': '', 'build_queue_finish_time': '',
     'research_queue_item_id': '', 'research_queue_finish_time': '',
     'research_logistics_unlocked': 'FALSE', 'research_weaponry_unlocked': 'FALSE',
-    # 'shield_finish_time' is now calculated dynamically and removed from here.
     'attack_queue_target_id': '', 'attack_queue_finish_time': '',
     'return_queue_army_data': '', 'return_queue_finish_time': ''
 }
