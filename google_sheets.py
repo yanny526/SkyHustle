@@ -1,12 +1,12 @@
 # google_sheets.py
-# System 9 Upgrade: Now a powerful, multi-sheet engine capable of managing both Players and Alliances.
+# Definitive Version: Permanently corrects the gspread.update() TypeError.
 
 import os
 import gspread
 import json
 import base64
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta # Added timedelta here
 import constants
 
 logger = logging.getLogger(__name__)
@@ -32,15 +32,16 @@ def _get_spreadsheet():
 
     try:
         sheet_id = os.environ.get('SHEET_ID')
+        if not sheet_id: raise ValueError("SHEET_ID is not set.")
         _spreadsheet = _sheet_client.open_by_key(sheet_id)
         logger.info(f"Connected to Google Spreadsheet: {_spreadsheet.title}")
         return _spreadsheet
     except Exception as e:
-        logger.critical(f"CRITICAL ERROR: Failed to open spreadsheet with ID. Check SHEET_ID. Error: {e}")
+        logger.critical(f"CRITICAL ERROR: Failed to open spreadsheet. Check SHEET_ID. Error: {e}")
         raise
 
 def _get_or_create_worksheet(name: str, headers: list):
-    """Internal helper to get a worksheet by name or create it with headers if it doesn't exist."""
+    """Internal helper to get a worksheet or create it with headers if it doesn't exist."""
     spreadsheet = _get_spreadsheet()
     try:
         worksheet = spreadsheet.worksheet(name)
@@ -50,11 +51,12 @@ def _get_or_create_worksheet(name: str, headers: list):
         worksheet = spreadsheet.add_worksheet(title=name, rows=1, cols=len(headers))
         logger.info(f"Successfully created '{name}' worksheet.")
 
-    # Verify and set headers if they are incorrect.
     current_headers = worksheet.row_values(1)
     if current_headers != headers:
         logger.info(f"'{name}' worksheet headers are missing or incorrect. Setting headers...")
-        worksheet.update([headers], range_name='A1')
+        # --- THIS IS THE CORRECTED LINE ---
+        # Using explicit keyword arguments to remove ambiguity.
+        worksheet.update(range_name='A1', values=[headers])
         logger.info(f"Successfully set '{name}' worksheet headers.")
     return worksheet
 
@@ -116,11 +118,20 @@ def update_player_data(user_id: int, updates: dict):
 def create_player_row(player_data_dict: dict):
     try:
         worksheet = get_players_worksheet()
-        now_utc, shield_finish_time = datetime.now(timezone.utc), (datetime.now(timezone.utc) + constants.INITIAL_PLAYER_STATS['shield_finish_time'])
-        player_data_dict['shield_finish_time'] = shield_finish_time.isoformat()
-        player_data_dict['created_at'] = now_utc.isoformat()
-        player_data_dict['last_seen'] = now_utc.isoformat()
-        row_to_append = [player_data_dict.get(header, '') for header in constants.SHEET_COLUMN_HEADERS]
+        now_utc = datetime.now(timezone.utc)
+        # We now get the timedelta object from the constants file.
+        shield_finish_time = now_utc + constants.INITIAL_PLAYER_STATS['shield_finish_time']
+        
+        # We need to re-create the full dict here to ensure all defaults are present.
+        full_player_data = {
+            **constants.INITIAL_PLAYER_STATS,
+            **player_data_dict, # User-provided data (id, name) overwrites defaults
+            'shield_finish_time': shield_finish_time.isoformat(),
+            'created_at': now_utc.isoformat(),
+            'last_seen': now_utc.isoformat(),
+        }
+
+        row_to_append = [full_player_data.get(header, '') for header in constants.SHEET_COLUMN_HEADERS]
         worksheet.append_row(row_to_append)
         logger.info(f"Successfully created new player row for user_id {player_data_dict.get('user_id')}.")
         return True
@@ -128,14 +139,10 @@ def create_player_row(player_data_dict: dict):
         logger.error(f"Error creating new player row for {player_data_dict.get('user_id')}: {e}")
         return False
 
-# --- NEW: Alliance Management Functions ---
-
 def create_alliance(alliance_data: dict):
-    """Appends a new alliance's data to the Alliances worksheet."""
     try:
         worksheet = get_alliances_worksheet()
         alliance_data['created_at'] = datetime.now(timezone.utc).isoformat()
-        
         row_to_append = [alliance_data.get(header, '') for header in constants.ALLIANCES_SHEET_COLUMN_HEADERS]
         worksheet.append_row(row_to_append)
         logger.info(f"Successfully created new alliance: {alliance_data.get('alliance_name')}")
