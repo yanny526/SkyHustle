@@ -1,5 +1,5 @@
 # handlers.py
-# System 5 Upgrade: Implements the interactive research menu and prerequisite checks.
+# Definitive Version: Includes all UI functions in the correct order to resolve all NameErrors.
 
 import logging
 import math
@@ -149,6 +149,36 @@ def send_train_menu(bot, user_id):
                 markup.add(InlineKeyboardButton(f"Train - {cost_str} / unit", callback_data=f"train_{key}"))
         markup.add(InlineKeyboardButton("⬅️ Back to Base", callback_data='back_to_base'))
     bot.send_message(user_id, text, parse_mode='HTML', reply_markup=markup)
+
+def send_research_menu(bot, user_id):
+    """Displays the interactive research menu, with prerequisites and completion status."""
+    _, player_data = google_sheets.find_player_row(user_id)
+    if not player_data: return
+    lab_level = int(player_data.get('building_research_lab_level', 0))
+    if lab_level < 1:
+        bot.send_message(user_id, "A 🔬 **Research Lab** is required to develop new technologies.\n\nConstruct one from the **'⚒️ Build'** menu first.", parse_mode="Markdown")
+        return
+    markup = InlineKeyboardMarkup(row_width=1)
+    if research_item_id := player_data.get('research_queue_item_id'):
+        finish_time = datetime.fromisoformat(player_data.get('research_queue_finish_time'))
+        remaining = finish_time - datetime.now(timezone.utc)
+        research_name = constants.RESEARCH_DATA[research_item_id]['name']
+        text = f"<b><u>🔬 Research Lab (In Progress)</u></b>\n\nCurrently researching **{research_name}**. Time remaining: {str(timedelta(seconds=int(remaining.total_seconds())))}."
+        markup.add(InlineKeyboardButton("⬅️ Back to Base", callback_data='back_to_base'))
+    else:
+        text = f"<b><u>🔬 Research Lab (Idle)</u></b>\nSelect a technology to begin research:\n"
+        for key, info in constants.RESEARCH_DATA.items():
+            text += f"\n{info['emoji']} <b>{info['name']}</b>\n<i>{info['description']}</i>\n"
+            if player_data.get(info['id']) == 'TRUE':
+                text += "<b>Status:</b> ✅ Researched\n"
+            elif lab_level < info['required_lab_level']:
+                text += f"<b>Status:</b> 🔒 Locked (Requires Lab Lv. {info['required_lab_level']})\n"
+            else:
+                cost_str = " | ".join([f"{v:,} {k.capitalize()}" for k, v in info['cost'].items()])
+                research_time = timedelta(seconds=info['research_time_seconds'])
+                markup.add(InlineKeyboardButton(f"Begin Research ({cost_str} | {research_time})", callback_data=f"research_{key}"))
+        markup.add(InlineKeyboardButton("⬅️ Back to Base", callback_data='back_to_base'))
+    bot.send_message(user_id, text, parse_mode='HTML', reply_markup=markup)
     
 def send_attack_confirmation_menu(bot, user_id, attacker_data, defender_data):
     target_name, target_id = defender_data[constants.FIELD_COMMANDER_NAME], defender_data[constants.FIELD_USER_ID]
@@ -164,7 +194,8 @@ def send_attack_confirmation_menu(bot, user_id, attacker_data, defender_data):
 def handle_upgrade_request(bot, scheduler, user_id, building_key, message):
     _, player_data = google_sheets.find_player_row(user_id)
     if not player_data or player_data.get('build_queue_item_id'): return
-    building_info, level = constants.BUILDING_DATA[building_key], int(player_data.get(building_info['id'], 0))
+    building_info = constants.BUILDING_DATA[building_key]
+    level = int(player_data.get(building_info['id'], 0))
     cost = calculate_cost(building_info['base_cost'], building_info['cost_multiplier'], level + 1)
     for res, amount in cost.items():
         if int(player_data.get(res, 0)) < amount: bot.send_message(user_id, f"⚠️ Insufficient resources."); return
@@ -210,7 +241,7 @@ def handle_attack_launch(bot, scheduler, attacker_id, defender_id, message):
         bot.edit_message_text(f"✅ Attack launched! Marching... Battle in {timedelta(seconds=travel_time)}.", chat_id=message.chat.id, message_id=message.message_id)
 
 
-# --- SECTION 4: MAIN HANDLER REGISTRATION (The "Brain") ---
+# --- SECTION 4: MAIN HANDLER REGISTRATION ---
 
 def register_handlers(bot, scheduler):
     
@@ -260,7 +291,6 @@ def register_handlers(bot, scheduler):
             bot.edit_message_text("How many units to train?", chat_id=call.message.chat.id, message_id=call.message.message_id)
             user_state[user_id] = partial(handle_train_quantity, bot, scheduler, action.split('_')[1])
         elif action.startswith('confirm_attack_'): handle_attack_launch(bot, scheduler, user_id, int(action.split('_')[2]), call.message)
-        # --- NEW: Handle Research Button Clicks ---
         elif action.startswith('research_'):
             research_key = action.split('_')[1]
             research_name = constants.RESEARCH_DATA[research_key]['name']
@@ -272,7 +302,6 @@ def register_handlers(bot, scheduler):
         else: handle_menu_buttons(bot, message)
 
     def handle_menu_buttons(bot, message: Message):
-        # Update this function to include the new research menu
         if message.text == constants.MENU_BASE: _, pd = google_sheets.find_player_row(message.from_user.id); send_base_panel(bot, message.from_user.id, pd) if pd else None
         elif message.text == constants.MENU_BUILD: send_build_menu(bot, message.from_user.id)
         elif message.text == constants.MENU_TRAIN: send_train_menu(bot, message.from_user.id)
