@@ -1,20 +1,18 @@
 # google_sheets.py
-# System 4 Upgrade: Now includes the ability to find players by commander_name.
+# Hotfix: Correctly imports the 'timedelta' class.
 
 import os
 import gspread
 import json
 import base64
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta # <-- THIS IS THE CORRECTED LINE
+
 import constants
 
 logger = logging.getLogger(__name__)
 _sheet_client = None
 
-# _get_sheet_client, get_worksheet, find_player_row are unchanged.
-# For brevity, their code is omitted here but should remain in your file.
-# The full code is provided below for a complete copy-paste.
 
 def _get_sheet_client():
     global _sheet_client
@@ -63,35 +61,22 @@ def find_player_row(user_id: int):
         logger.error(f"Error finding player {user_id}: {e}")
         return None, None
 
-# --- NEW: Function to find a player by their name ---
 def find_player_by_name(commander_name: str):
-    """
-    Finds a player's row and data in the worksheet by their commander_name.
-    """
     try:
         worksheet = get_worksheet()
-        # Find the column for commander_name
         headers = worksheet.row_values(1)
-        if constants.FIELD_COMMANDER_NAME not in headers:
-            logger.error("Could not find commander_name column in sheet.")
-            return None, None
+        if constants.FIELD_COMMANDER_NAME not in headers: return None, None
         name_col_index = headers.index(constants.FIELD_COMMANDER_NAME) + 1
-        
-        # Find cell containing the name in the correct column
         cell = worksheet.find(commander_name, in_column=name_col_index)
         if cell:
-            logger.info(f"Found player '{commander_name}' at row {cell.row}.")
             player_data = worksheet.row_values(cell.row)
             return cell.row, dict(zip(headers, player_data))
-        logger.info(f"No player found with name '{commander_name}'.")
         return None, None
     except Exception as e:
         logger.error(f"Error finding player by name '{commander_name}': {e}")
         return None, None
 
-
 def update_player_data(user_id: int, updates: dict):
-    # This function is correct and unchanged.
     try:
         worksheet = get_worksheet()
         row_index, player_data = find_player_row(user_id)
@@ -112,15 +97,17 @@ def update_player_data(user_id: int, updates: dict):
         return False
 
 def create_player_row(player_data_dict: dict):
-    # This function is correct and unchanged.
     try:
         worksheet = get_worksheet()
         now_utc = datetime.now(timezone.utc)
-        # Add a shield to new players as defined in constants
+        
+        # This line now works because timedelta is imported.
         shield_finish_time = now_utc + timedelta(hours=24)
+        
         player_data_dict['shield_finish_time'] = shield_finish_time.isoformat()
         player_data_dict['created_at'] = now_utc.isoformat()
         player_data_dict['last_seen'] = now_utc.isoformat()
+        
         row_to_append = [player_data_dict.get(header, '') for header in constants.SHEET_COLUMN_HEADERS]
         worksheet.append_row(row_to_append)
         logger.info(f"Successfully created new player row for user_id {player_data_dict.get('user_id')}.")
