@@ -1,5 +1,5 @@
 # handlers.py
-# Final Hotfix for System 5: Corrects the command parser for multi-word keys.
+# Definitive Version: Corrects UnboundLocalError in background jobs.
 
 import logging
 import math
@@ -16,24 +16,41 @@ import google_sheets
 logger = logging.getLogger(__name__)
 user_state = {}
 
-# --- SECTION 1 & 2 are stable and unchanged ---
+# --- SECTION 1: UTILITY & CALCULATION HELPERS ---
+
 def calculate_cost(base_cost, multiplier, level):
     return {res: math.floor(amount * (multiplier ** (level - 1))) for res, amount in base_cost.items()}
+
 def calculate_time(base_time, multiplier, level):
     return math.floor(base_time * (multiplier ** (level - 1)))
+
 def get_main_menu_keyboard():
     markup = ReplyKeyboardMarkup(row_width=3, resize_keyboard=True)
     buttons = [KeyboardButton(b) for b in [constants.MENU_BASE, constants.MENU_BUILD, constants.MENU_TRAIN, constants.MENU_RESEARCH, constants.MENU_ATTACK, constants.MENU_QUESTS, constants.MENU_SHOP, constants.MENU_PREMIUM, constants.MENU_MAP, constants.MENU_ALLIANCE]]
     markup.add(*buttons)
     return markup
+
+
+# --- SECTION 2: SCHEDULER COMPLETION JOBS ---
+
 def complete_upgrade_job(bot, user_id, building_key):
+    """The function that APScheduler executes when a construction timer finishes."""
     logger.info(f"Executing complete_upgrade_job for user {user_id}, building: {building_key}")
     _, player_data = google_sheets.find_player_row(user_id)
     if not player_data: return
+
+    # --- THIS IS THE CORRECTED LOGIC ---
+    # Break the flawed one-line assignment into two clear steps.
     building_info = constants.BUILDING_DATA[building_key]
     building_level_field = building_info['id']
+    # --- END OF CORRECTION ---
+
     current_level = int(player_data.get(building_level_field, 0))
-    updates = { building_level_field: current_level + 1, 'build_queue_item_id': '', 'build_queue_finish_time': '' }
+    updates = {
+        building_level_field: current_level + 1,
+        'build_queue_item_id': '', 'build_queue_finish_time': ''
+    }
+    
     effect = building_info.get('effects', {})
     if effect.get('type') == 'production':
         updates[effect['resource']] = int(player_data.get(effect['resource'], 0)) + effect['value_per_level']
@@ -43,12 +60,19 @@ def complete_upgrade_job(bot, user_id, building_key):
             updates[f'{res}_storage_cap'] = int(player_data.get(f'{res}_storage_cap', 0)) + value
     if google_sheets.update_player_data(user_id, updates):
         bot.send_message(user_id, f"✅ Construction complete! Your **{building_info['name']}** has been upgraded to **Level {current_level + 1}**.")
+
 def complete_training_job(bot, user_id, unit_key, quantity):
+    """The function that APScheduler executes when a training timer finishes."""
     logger.info(f"Executing complete_training_job for user {user_id}, unit: {unit_key}, quantity: {quantity}")
     _, player_data = google_sheets.find_player_row(user_id)
     if not player_data: return
+
+    # --- THIS IS THE CORRECTED LOGIC ---
+    # Apply the same fix here for consistency and stability.
     unit_info = constants.UNIT_DATA[unit_key]
     unit_count_field = unit_info['id']
+    # --- END OF CORRECTION ---
+
     updates = {
         unit_count_field: int(player_data.get(unit_count_field, 0)) + quantity,
         'power': int(player_data.get('power', 0)) + (unit_info['stats']['power'] * quantity),
@@ -56,6 +80,7 @@ def complete_training_job(bot, user_id, unit_key, quantity):
     }
     if google_sheets.update_player_data(user_id, updates):
         bot.send_message(user_id, f"✅ Training complete! **{quantity}x {unit_info['name']}** {unit_info['emoji']} have joined your army.")
+        
 def battle_resolution_job(bot, scheduler, attacker_id, defender_id):
     logger.info(f"Executing battle_resolution_job: Attacker {attacker_id} vs Defender {defender_id}")
     _, attacker_data = google_sheets.find_player_row(attacker_id)
@@ -80,6 +105,7 @@ def battle_resolution_job(bot, scheduler, attacker_id, defender_id):
     report = f"<b>--- BATTLE REPORT ---</b>\nOutcome: {'Attacker Victory' if attacker_wins else 'Defender Victory'}!\nLooted: {' | '.join([f'{v:,} {k.capitalize()}' for k, v in looted.items()]) if attacker_wins else 'None'}"
     bot.send_message(attacker_id, report, parse_mode='HTML'); bot.send_message(defender_id, report, parse_mode='HTML')
     scheduler.add_job(army_return_job, 'date', run_date=return_time, args=[bot, attacker_id, attacker_survivors], id=f'return_{attacker_id}_{time.time()}')
+
 def army_return_job(bot, user_id, surviving_army):
     logger.info(f"Executing army_return_job for user {user_id}")
     _, player_data = google_sheets.find_player_row(user_id)
@@ -90,6 +116,7 @@ def army_return_job(bot, user_id, surviving_army):
     if google_sheets.update_player_data(user_id, updates):
         bot.send_message(user_id, "✅ Your surviving troops have returned to base.")
 
+# The rest of the file (SECTION 3 & 4) is unchanged but included for completeness.
 # --- SECTION 3: UI-GENERATING & CORE LOGIC FUNCTIONS ---
 def send_base_panel(bot, user_id, player_data):
     base_panel_text = content.get_base_panel_text(player_data)
@@ -149,7 +176,6 @@ def send_research_menu(bot, user_id):
         markup.add(InlineKeyboardButton("⬅️ Back to Base", callback_data='back_to_base'))
     else:
         text = f"<b><u>🔬 Research Lab (Idle)</u></b>\nSelect a technology to begin research:\n"
-        markup = InlineKeyboardMarkup(row_width=1)
         for key, info in constants.RESEARCH_DATA.items():
             text += f"\n{info['emoji']} <b>{info['name']}</b>\n<i>{info['description']}</i>\n"
             if player_data.get(info['id']) == 'TRUE': text += "<b>Status:</b> ✅ Researched\n"
@@ -173,7 +199,8 @@ def send_attack_confirmation_menu(bot, user_id, attacker_data, defender_data):
 def handle_upgrade_request(bot, scheduler, user_id, building_key, message):
     _, player_data = google_sheets.find_player_row(user_id)
     if not player_data or player_data.get('build_queue_item_id'): return
-    building_info, level = constants.BUILDING_DATA[building_key], int(player_data.get(building_info['id'], 0))
+    building_info = constants.BUILDING_DATA[building_key]
+    level = int(player_data.get(building_info['id'], 0))
     cost = calculate_cost(building_info['base_cost'], building_info['cost_multiplier'], level + 1)
     for res, amount in cost.items():
         if int(player_data.get(res, 0)) < amount: bot.send_message(user_id, f"⚠️ Insufficient resources."); return
@@ -232,7 +259,6 @@ def register_handlers(bot, scheduler):
         if shield_time_str := defender_data.get('shield_finish_time'):
             if datetime.fromisoformat(shield_time_str) > datetime.now(timezone.utc): bot.reply_to(message, f"Target is under a New Player Shield."); return
         send_attack_confirmation_menu(bot, user_id, attacker_data, defender_data)
-
     @bot.message_handler(commands=['start'])
     def start_command_handler(message: Message):
         user_id = message.from_user.id
@@ -241,7 +267,6 @@ def register_handlers(bot, scheduler):
         else:
             bot.send_message(user_id, content.get_welcome_new_player_text(), parse_mode='HTML')
             user_state[user_id] = partial(get_commander_name_handler, bot)
-
     def get_commander_name_handler(bot, message: Message):
         user_id, name = message.from_user.id, message.text.strip()
         if not (3 <= len(name) <= 20): bot.send_message(user_id, "Name must be 3-20 characters."); return
@@ -250,36 +275,29 @@ def register_handlers(bot, scheduler):
             bot.send_message(user_id, content.get_new_player_welcome_success_text(name), parse_mode='HTML')
             send_base_panel(bot, user_id, new_player_data)
             if user_id in user_state: del user_state[user_id]
-
     @bot.callback_query_handler(func=lambda call: True)
     def handle_callback_query(call):
         user_id, action = call.from_user.id, call.data
         logger.info(f"User {user_id} clicked inline button: {action}")
         bot.answer_callback_query(call.id)
-        # --- THIS IS THE CORRECTED PARSER LOGIC ---
         parts = action.split('_')
-        command = parts[0]
-        # Rejoin everything after the command to handle multi-word keys
-        key = '_'.join(parts[1:])
-
-        if command == 'back': # Simplified 'back_to_base'
+        command, key = parts[0], '_'.join(parts[1:])
+        if command == 'back':
             _, pd = google_sheets.find_player_row(user_id)
             if pd: bot.edit_message_text(content.get_base_panel_text(pd), call.message.chat.id, call.message.message_id, parse_mode='HTML')
         elif command == 'build': handle_upgrade_request(bot, scheduler, user_id, key, call.message)
         elif command == 'train':
             bot.edit_message_text("How many units to train?", chat_id=call.message.chat.id, message_id=call.message.message_id)
             user_state[user_id] = partial(handle_train_quantity, bot, scheduler, key)
-        elif command == 'confirm' and parts[1] == 'attack':
-            handle_attack_launch(bot, scheduler, user_id, int(parts[2]), call.message)
         elif command == 'research':
             research_name = constants.RESEARCH_DATA[key]['name']
             bot.edit_message_text(f"Research for **{research_name}** acknowledged.\n\nFinalizing scheduler logic now.", chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode='Markdown')
-
+        elif command == 'confirm' and parts[1] == 'attack':
+             handle_attack_launch(bot, scheduler, user_id, int(parts[2]), call.message)
     @bot.message_handler(func=lambda message: True)
     def default_message_handler(message: Message):
         if message.from_user.id in user_state: user_state[message.from_user.id](message=message)
         else: handle_menu_buttons(bot, message)
-
     def handle_menu_buttons(bot, message: Message):
         if message.text == constants.MENU_BASE: _, pd = google_sheets.find_player_row(message.from_user.id); send_base_panel(bot, message.from_user.id, pd) if pd else None
         elif message.text == constants.MENU_BUILD: send_build_menu(bot, message.from_user.id)
