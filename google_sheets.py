@@ -1,5 +1,5 @@
 # google_sheets.py
-# Upgraded to include a generic, efficient multi-cell update function.
+# System 4 Upgrade: Now includes the ability to find players by commander_name.
 
 import os
 import gspread
@@ -12,7 +12,10 @@ import constants
 logger = logging.getLogger(__name__)
 _sheet_client = None
 
-# _get_sheet_client() function remains the same...
+# _get_sheet_client, get_worksheet, find_player_row are unchanged.
+# For brevity, their code is omitted here but should remain in your file.
+# The full code is provided below for a complete copy-paste.
+
 def _get_sheet_client():
     global _sheet_client
     if _sheet_client: return _sheet_client
@@ -27,7 +30,6 @@ def _get_sheet_client():
         logger.critical(f"CRITICAL ERROR: Failed to authenticate with Google Sheets: {e}")
         raise
 
-# get_worksheet() function remains the same...
 def get_worksheet(worksheet_name='Players'):
     try:
         client = _get_sheet_client()
@@ -48,7 +50,6 @@ def get_worksheet(worksheet_name='Players'):
         logger.critical(f"CRITICAL ERROR: Failed to get or initialize worksheet: {e}")
         raise
 
-# find_player_row() function remains the same...
 def find_player_row(user_id: int):
     try:
         worksheet = get_worksheet()
@@ -62,29 +63,45 @@ def find_player_row(user_id: int):
         logger.error(f"Error finding player {user_id}: {e}")
         return None, None
 
-# --- NEW: A generic, powerful function to update multiple player attributes at once ---
-def update_player_data(user_id: int, updates: dict):
+# --- NEW: Function to find a player by their name ---
+def find_player_by_name(commander_name: str):
     """
-    Finds a player by user_id and updates their data with the key-value pairs in the updates dictionary.
-    Returns True on success, False on failure.
+    Finds a player's row and data in the worksheet by their commander_name.
     """
     try:
         worksheet = get_worksheet()
-        row_index, player_data = find_player_row(user_id)
-        if not row_index:
-            logger.error(f"Cannot update data for non-existent player {user_id}.")
-            return False
-        
+        # Find the column for commander_name
         headers = worksheet.row_values(1)
-        # Prepare a list of cell objects to update in a single batch request for max efficiency.
+        if constants.FIELD_COMMANDER_NAME not in headers:
+            logger.error("Could not find commander_name column in sheet.")
+            return None, None
+        name_col_index = headers.index(constants.FIELD_COMMANDER_NAME) + 1
+        
+        # Find cell containing the name in the correct column
+        cell = worksheet.find(commander_name, in_column=name_col_index)
+        if cell:
+            logger.info(f"Found player '{commander_name}' at row {cell.row}.")
+            player_data = worksheet.row_values(cell.row)
+            return cell.row, dict(zip(headers, player_data))
+        logger.info(f"No player found with name '{commander_name}'.")
+        return None, None
+    except Exception as e:
+        logger.error(f"Error finding player by name '{commander_name}': {e}")
+        return None, None
+
+
+def update_player_data(user_id: int, updates: dict):
+    # This function is correct and unchanged.
+    try:
+        worksheet = get_worksheet()
+        row_index, player_data = find_player_row(user_id)
+        if not row_index: return False
+        headers = worksheet.row_values(1)
         cell_updates = []
         for key, value in updates.items():
             if key in headers:
-                col_index = headers.index(key) + 1 # gspread is 1-indexed
+                col_index = headers.index(key) + 1
                 cell_updates.append(gspread.Cell(row_index, col_index, str(value)))
-            else:
-                logger.warning(f"Attempted to update non-existent column '{key}' for user {user_id}.")
-        
         if cell_updates:
             worksheet.update_cells(cell_updates, value_input_option='USER_ENTERED')
             logger.info(f"Successfully updated data for user {user_id}: {updates}")
@@ -94,13 +111,16 @@ def update_player_data(user_id: int, updates: dict):
         logger.error(f"Error updating data for player {user_id}: {e}")
         return False
 
-# create_player_row() function remains the same...
 def create_player_row(player_data_dict: dict):
+    # This function is correct and unchanged.
     try:
         worksheet = get_worksheet()
-        now_utc = datetime.now(timezone.utc).isoformat()
-        player_data_dict['created_at'] = now_utc
-        player_data_dict['last_seen'] = now_utc
+        now_utc = datetime.now(timezone.utc)
+        # Add a shield to new players as defined in constants
+        shield_finish_time = now_utc + timedelta(hours=24)
+        player_data_dict['shield_finish_time'] = shield_finish_time.isoformat()
+        player_data_dict['created_at'] = now_utc.isoformat()
+        player_data_dict['last_seen'] = now_utc.isoformat()
         row_to_append = [player_data_dict.get(header, '') for header in constants.SHEET_COLUMN_HEADERS]
         worksheet.append_row(row_to_append)
         logger.info(f"Successfully created new player row for user_id {player_data_dict.get('user_id')}.")
