@@ -1,5 +1,5 @@
 # handlers.py
-# Definitive Version: Includes all UI functions in the correct order to resolve all NameErrors.
+# Final Hotfix for System 5: Corrects the command parser for multi-word keys.
 
 import logging
 import math
@@ -16,23 +16,16 @@ import google_sheets
 logger = logging.getLogger(__name__)
 user_state = {}
 
-# --- SECTION 1: UTILITY & CALCULATION HELPERS ---
-
+# --- SECTION 1 & 2 are stable and unchanged ---
 def calculate_cost(base_cost, multiplier, level):
     return {res: math.floor(amount * (multiplier ** (level - 1))) for res, amount in base_cost.items()}
-
 def calculate_time(base_time, multiplier, level):
     return math.floor(base_time * (multiplier ** (level - 1)))
-
 def get_main_menu_keyboard():
     markup = ReplyKeyboardMarkup(row_width=3, resize_keyboard=True)
     buttons = [KeyboardButton(b) for b in [constants.MENU_BASE, constants.MENU_BUILD, constants.MENU_TRAIN, constants.MENU_RESEARCH, constants.MENU_ATTACK, constants.MENU_QUESTS, constants.MENU_SHOP, constants.MENU_PREMIUM, constants.MENU_MAP, constants.MENU_ALLIANCE]]
     markup.add(*buttons)
     return markup
-
-
-# --- SECTION 2: SCHEDULER COMPLETION JOBS ---
-
 def complete_upgrade_job(bot, user_id, building_key):
     logger.info(f"Executing complete_upgrade_job for user {user_id}, building: {building_key}")
     _, player_data = google_sheets.find_player_row(user_id)
@@ -50,7 +43,6 @@ def complete_upgrade_job(bot, user_id, building_key):
             updates[f'{res}_storage_cap'] = int(player_data.get(f'{res}_storage_cap', 0)) + value
     if google_sheets.update_player_data(user_id, updates):
         bot.send_message(user_id, f"✅ Construction complete! Your **{building_info['name']}** has been upgraded to **Level {current_level + 1}**.")
-
 def complete_training_job(bot, user_id, unit_key, quantity):
     logger.info(f"Executing complete_training_job for user {user_id}, unit: {unit_key}, quantity: {quantity}")
     _, player_data = google_sheets.find_player_row(user_id)
@@ -64,7 +56,6 @@ def complete_training_job(bot, user_id, unit_key, quantity):
     }
     if google_sheets.update_player_data(user_id, updates):
         bot.send_message(user_id, f"✅ Training complete! **{quantity}x {unit_info['name']}** {unit_info['emoji']} have joined your army.")
-        
 def battle_resolution_job(bot, scheduler, attacker_id, defender_id):
     logger.info(f"Executing battle_resolution_job: Attacker {attacker_id} vs Defender {defender_id}")
     _, attacker_data = google_sheets.find_player_row(attacker_id)
@@ -89,7 +80,6 @@ def battle_resolution_job(bot, scheduler, attacker_id, defender_id):
     report = f"<b>--- BATTLE REPORT ---</b>\nOutcome: {'Attacker Victory' if attacker_wins else 'Defender Victory'}!\nLooted: {' | '.join([f'{v:,} {k.capitalize()}' for k, v in looted.items()]) if attacker_wins else 'None'}"
     bot.send_message(attacker_id, report, parse_mode='HTML'); bot.send_message(defender_id, report, parse_mode='HTML')
     scheduler.add_job(army_return_job, 'date', run_date=return_time, args=[bot, attacker_id, attacker_survivors], id=f'return_{attacker_id}_{time.time()}')
-
 def army_return_job(bot, user_id, surviving_army):
     logger.info(f"Executing army_return_job for user {user_id}")
     _, player_data = google_sheets.find_player_row(user_id)
@@ -100,14 +90,11 @@ def army_return_job(bot, user_id, surviving_army):
     if google_sheets.update_player_data(user_id, updates):
         bot.send_message(user_id, "✅ Your surviving troops have returned to base.")
 
-
 # --- SECTION 3: UI-GENERATING & CORE LOGIC FUNCTIONS ---
-
 def send_base_panel(bot, user_id, player_data):
     base_panel_text = content.get_base_panel_text(player_data)
     markup = get_main_menu_keyboard()
     bot.send_message(user_id, base_panel_text, parse_mode='HTML', reply_markup=markup)
-
 def send_build_menu(bot, user_id):
     _, player_data = google_sheets.find_player_row(user_id)
     if not player_data: return
@@ -128,7 +115,6 @@ def send_build_menu(bot, user_id):
             markup.add(InlineKeyboardButton(f"Upgrade - Cost: {cost_str}", callback_data=f"build_{key}"))
         markup.add(InlineKeyboardButton("⬅️ Back to Base", callback_data='back_to_base'))
     bot.send_message(user_id, text, parse_mode='HTML', reply_markup=markup)
-
 def send_train_menu(bot, user_id):
     _, player_data = google_sheets.find_player_row(user_id)
     if not player_data: return
@@ -149,37 +135,31 @@ def send_train_menu(bot, user_id):
                 markup.add(InlineKeyboardButton(f"Train - {cost_str} / unit", callback_data=f"train_{key}"))
         markup.add(InlineKeyboardButton("⬅️ Back to Base", callback_data='back_to_base'))
     bot.send_message(user_id, text, parse_mode='HTML', reply_markup=markup)
-
 def send_research_menu(bot, user_id):
-    """Displays the interactive research menu, with prerequisites and completion status."""
     _, player_data = google_sheets.find_player_row(user_id)
     if not player_data: return
     lab_level = int(player_data.get('building_research_lab_level', 0))
     if lab_level < 1:
-        bot.send_message(user_id, "A 🔬 **Research Lab** is required to develop new technologies.\n\nConstruct one from the **'⚒️ Build'** menu first.", parse_mode="Markdown")
-        return
+        bot.send_message(user_id, "A 🔬 **Research Lab** is required to develop new technologies.\n\nConstruct one from the **'⚒️ Build'** menu first.", parse_mode="Markdown"); return
     markup = InlineKeyboardMarkup(row_width=1)
     if research_item_id := player_data.get('research_queue_item_id'):
-        finish_time = datetime.fromisoformat(player_data.get('research_queue_finish_time'))
+        finish_time, research_name = datetime.fromisoformat(player_data.get('research_queue_finish_time')), constants.RESEARCH_DATA[research_item_id]['name']
         remaining = finish_time - datetime.now(timezone.utc)
-        research_name = constants.RESEARCH_DATA[research_item_id]['name']
         text = f"<b><u>🔬 Research Lab (In Progress)</u></b>\n\nCurrently researching **{research_name}**. Time remaining: {str(timedelta(seconds=int(remaining.total_seconds())))}."
         markup.add(InlineKeyboardButton("⬅️ Back to Base", callback_data='back_to_base'))
     else:
         text = f"<b><u>🔬 Research Lab (Idle)</u></b>\nSelect a technology to begin research:\n"
+        markup = InlineKeyboardMarkup(row_width=1)
         for key, info in constants.RESEARCH_DATA.items():
             text += f"\n{info['emoji']} <b>{info['name']}</b>\n<i>{info['description']}</i>\n"
-            if player_data.get(info['id']) == 'TRUE':
-                text += "<b>Status:</b> ✅ Researched\n"
-            elif lab_level < info['required_lab_level']:
-                text += f"<b>Status:</b> 🔒 Locked (Requires Lab Lv. {info['required_lab_level']})\n"
+            if player_data.get(info['id']) == 'TRUE': text += "<b>Status:</b> ✅ Researched\n"
+            elif lab_level < info['required_lab_level']: text += f"<b>Status:</b> 🔒 Locked (Requires Lab Lv. {info['required_lab_level']})\n"
             else:
                 cost_str = " | ".join([f"{v:,} {k.capitalize()}" for k, v in info['cost'].items()])
                 research_time = timedelta(seconds=info['research_time_seconds'])
                 markup.add(InlineKeyboardButton(f"Begin Research ({cost_str} | {research_time})", callback_data=f"research_{key}"))
         markup.add(InlineKeyboardButton("⬅️ Back to Base", callback_data='back_to_base'))
     bot.send_message(user_id, text, parse_mode='HTML', reply_markup=markup)
-    
 def send_attack_confirmation_menu(bot, user_id, attacker_data, defender_data):
     target_name, target_id = defender_data[constants.FIELD_COMMANDER_NAME], defender_data[constants.FIELD_USER_ID]
     army_comp, total_units = "", 0
@@ -190,12 +170,10 @@ def send_attack_confirmation_menu(bot, user_id, attacker_data, defender_data):
     text = f"<b><u>⚔️ Attack Confirmation</u></b>\n\n<b>Target:</b> {target_name}\n<b>Your Army:</b> {army_comp.strip(', ')}\n<b>Energy Cost:</b> {energy_cost} ⚡️\n<b>Travel Time:</b> {travel_time}\n\nLaunch attack?"
     markup = InlineKeyboardMarkup(row_width=2).add(InlineKeyboardButton("✅ Launch", callback_data=f"confirm_attack_{target_id}"), InlineKeyboardButton("❌ Abort", callback_data='back_to_base'))
     bot.send_message(user_id, text, parse_mode='HTML', reply_markup=markup)
-
 def handle_upgrade_request(bot, scheduler, user_id, building_key, message):
     _, player_data = google_sheets.find_player_row(user_id)
     if not player_data or player_data.get('build_queue_item_id'): return
-    building_info = constants.BUILDING_DATA[building_key]
-    level = int(player_data.get(building_info['id'], 0))
+    building_info, level = constants.BUILDING_DATA[building_key], int(player_data.get(building_info['id'], 0))
     cost = calculate_cost(building_info['base_cost'], building_info['cost_multiplier'], level + 1)
     for res, amount in cost.items():
         if int(player_data.get(res, 0)) < amount: bot.send_message(user_id, f"⚠️ Insufficient resources."); return
@@ -206,7 +184,6 @@ def handle_upgrade_request(bot, scheduler, user_id, building_key, message):
     if google_sheets.update_player_data(user_id, updates):
         scheduler.add_job(complete_upgrade_job, 'date', run_date=finish_time, args=[bot, user_id, building_key], id=f'upgrade_{user_id}_{time.time()}')
         bot.edit_message_text(f"✅ Upgrade started! Your **{building_info['name']}** will reach **Level {level + 1}** in {timedelta(seconds=construction_time)}.", chat_id=message.chat.id, message_id=message.message_id, parse_mode='HTML')
-
 def handle_train_quantity(bot, scheduler, unit_key, message):
     user_id = message.from_user.id
     try: quantity = int(message.text)
@@ -227,7 +204,6 @@ def handle_train_quantity(bot, scheduler, unit_key, message):
     if google_sheets.update_player_data(user_id, updates):
         scheduler.add_job(complete_training_job, 'date', run_date=finish_time, args=[bot, user_id, unit_key, quantity], id=f'train_{user_id}_{time.time()}')
         bot.send_message(user_id, f"✅ Training started! **{quantity}x {unit_info['name']}** {unit_info['emoji']} will be ready in {timedelta(seconds=total_time)}.")
-
 def handle_attack_launch(bot, scheduler, attacker_id, defender_id, message):
     _, attacker_data = google_sheets.find_player_row(attacker_id)
     if not attacker_data or attacker_data.get('attack_queue_target_id'): return
@@ -240,11 +216,8 @@ def handle_attack_launch(bot, scheduler, attacker_id, defender_id, message):
         scheduler.add_job(battle_resolution_job, 'date', run_date=finish_time, args=[bot, scheduler, attacker_id, defender_id], id=f'battle_{attacker_id}_{time.time()}')
         bot.edit_message_text(f"✅ Attack launched! Marching... Battle in {timedelta(seconds=travel_time)}.", chat_id=message.chat.id, message_id=message.message_id)
 
-
 # --- SECTION 4: MAIN HANDLER REGISTRATION ---
-
 def register_handlers(bot, scheduler):
-    
     @bot.message_handler(commands=['attack'])
     def attack_command_handler(message: Message):
         user_id = message.from_user.id
@@ -283,18 +256,24 @@ def register_handlers(bot, scheduler):
         user_id, action = call.from_user.id, call.data
         logger.info(f"User {user_id} clicked inline button: {action}")
         bot.answer_callback_query(call.id)
-        if action == 'back_to_base':
+        # --- THIS IS THE CORRECTED PARSER LOGIC ---
+        parts = action.split('_')
+        command = parts[0]
+        # Rejoin everything after the command to handle multi-word keys
+        key = '_'.join(parts[1:])
+
+        if command == 'back': # Simplified 'back_to_base'
             _, pd = google_sheets.find_player_row(user_id)
             if pd: bot.edit_message_text(content.get_base_panel_text(pd), call.message.chat.id, call.message.message_id, parse_mode='HTML')
-        elif action.startswith('build_'): handle_upgrade_request(bot, scheduler, user_id, action.split('_')[1], call.message)
-        elif action.startswith('train_'):
+        elif command == 'build': handle_upgrade_request(bot, scheduler, user_id, key, call.message)
+        elif command == 'train':
             bot.edit_message_text("How many units to train?", chat_id=call.message.chat.id, message_id=call.message.message_id)
-            user_state[user_id] = partial(handle_train_quantity, bot, scheduler, action.split('_')[1])
-        elif action.startswith('confirm_attack_'): handle_attack_launch(bot, scheduler, user_id, int(action.split('_')[2]), call.message)
-        elif action.startswith('research_'):
-            research_key = action.split('_')[1]
-            research_name = constants.RESEARCH_DATA[research_key]['name']
-            bot.edit_message_text(f"Research for **{research_name}** acknowledged.\n\nThe final step is to engineer the research scheduler.", chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode='Markdown')
+            user_state[user_id] = partial(handle_train_quantity, bot, scheduler, key)
+        elif command == 'confirm' and parts[1] == 'attack':
+            handle_attack_launch(bot, scheduler, user_id, int(parts[2]), call.message)
+        elif command == 'research':
+            research_name = constants.RESEARCH_DATA[key]['name']
+            bot.edit_message_text(f"Research for **{research_name}** acknowledged.\n\nFinalizing scheduler logic now.", chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode='Markdown')
 
     @bot.message_handler(func=lambda message: True)
     def default_message_handler(message: Message):
