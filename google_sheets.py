@@ -1,12 +1,12 @@
 # google_sheets.py
-# Definitive Version: Permanently corrects the gspread.update() TypeError.
+# Hotfix: Corrects the shield calculation logic in create_player_row.
 
 import os
 import gspread
 import json
 import base64
 import logging
-from datetime import datetime, timezone, timedelta # Added timedelta here
+from datetime import datetime, timezone, timedelta
 import constants
 
 logger = logging.getLogger(__name__)
@@ -14,11 +14,8 @@ _sheet_client = None
 _spreadsheet = None
 
 def _get_spreadsheet():
-    """Establishes connection to the Google Sheet and caches it."""
     global _sheet_client, _spreadsheet
-    if _spreadsheet:
-        return _spreadsheet
-
+    if _spreadsheet: return _spreadsheet
     if not _sheet_client:
         try:
             base64_creds = os.environ.get('BASE64_CREDS')
@@ -29,7 +26,6 @@ def _get_spreadsheet():
         except Exception as e:
             logger.critical(f"CRITICAL ERROR: Failed to authenticate with Google Sheets: {e}")
             raise
-
     try:
         sheet_id = os.environ.get('SHEET_ID')
         if not sheet_id: raise ValueError("SHEET_ID is not set.")
@@ -41,7 +37,6 @@ def _get_spreadsheet():
         raise
 
 def _get_or_create_worksheet(name: str, headers: list):
-    """Internal helper to get a worksheet or create it with headers if it doesn't exist."""
     spreadsheet = _get_spreadsheet()
     try:
         worksheet = spreadsheet.worksheet(name)
@@ -50,24 +45,16 @@ def _get_or_create_worksheet(name: str, headers: list):
         logger.warning(f"'{name}' worksheet not found. Creating it...")
         worksheet = spreadsheet.add_worksheet(title=name, rows=1, cols=len(headers))
         logger.info(f"Successfully created '{name}' worksheet.")
-
     current_headers = worksheet.row_values(1)
     if current_headers != headers:
         logger.info(f"'{name}' worksheet headers are missing or incorrect. Setting headers...")
-        # --- THIS IS THE CORRECTED LINE ---
-        # Using explicit keyword arguments to remove ambiguity.
         worksheet.update(range_name='A1', values=[headers])
         logger.info(f"Successfully set '{name}' worksheet headers.")
     return worksheet
 
-# --- PUBLIC FUNCTIONS ---
-
 def get_players_worksheet():
-    """Public-facing function to get the Players worksheet."""
     return _get_or_create_worksheet('Players', constants.SHEET_COLUMN_HEADERS)
-
 def get_alliances_worksheet():
-    """Public-facing function to get the Alliances worksheet."""
     return _get_or_create_worksheet('Alliances', constants.ALLIANCES_SHEET_COLUMN_HEADERS)
 
 def find_player_row(user_id: int):
@@ -75,13 +62,11 @@ def find_player_row(user_id: int):
         worksheet = get_players_worksheet()
         cell = worksheet.find(str(user_id), in_column=1)
         if cell:
-            headers = worksheet.row_values(1)
-            player_data = worksheet.row_values(cell.row)
+            headers = worksheet.row_values(1); player_data = worksheet.row_values(cell.row)
             return cell.row, dict(zip(headers, player_data))
         return None, None
     except Exception as e:
-        logger.error(f"Error finding player {user_id}: {e}")
-        return None, None
+        logger.error(f"Error finding player {user_id}: {e}"); return None, None
 
 def find_player_by_name(commander_name: str):
     try:
@@ -94,8 +79,7 @@ def find_player_by_name(commander_name: str):
             return cell.row, dict(zip(headers, player_data))
         return None, None
     except Exception as e:
-        logger.error(f"Error finding player by name '{commander_name}': {e}")
-        return None, None
+        logger.error(f"Error finding player by name '{commander_name}': {e}"); return None, None
 
 def update_player_data(user_id: int, updates: dict):
     try:
@@ -112,20 +96,21 @@ def update_player_data(user_id: int, updates: dict):
         logger.info(f"Successfully updated player data for user {user_id}: {updates}")
         return True
     except Exception as e:
-        logger.error(f"Error updating data for player {user_id}: {e}")
-        return False
+        logger.error(f"Error updating data for player {user_id}: {e}"); return False
 
 def create_player_row(player_data_dict: dict):
     try:
         worksheet = get_players_worksheet()
         now_utc = datetime.now(timezone.utc)
-        # We now get the timedelta object from the constants file.
-        shield_finish_time = now_utc + constants.INITIAL_PLAYER_STATS['shield_finish_time']
         
-        # We need to re-create the full dict here to ensure all defaults are present.
+        # --- THIS IS THE CORRECTED LOGIC ---
+        # Calculate the shield time dynamically using the duration from constants.
+        shield_duration_hours = constants.NEW_PLAYER_SHIELD_HOURS
+        shield_finish_time = now_utc + timedelta(hours=shield_duration_hours)
+        
         full_player_data = {
             **constants.INITIAL_PLAYER_STATS,
-            **player_data_dict, # User-provided data (id, name) overwrites defaults
+            **player_data_dict,
             'shield_finish_time': shield_finish_time.isoformat(),
             'created_at': now_utc.isoformat(),
             'last_seen': now_utc.isoformat(),
@@ -148,5 +133,4 @@ def create_alliance(alliance_data: dict):
         logger.info(f"Successfully created new alliance: {alliance_data.get('alliance_name')}")
         return True
     except Exception as e:
-        logger.error(f"Error creating new alliance: {e}")
-        return False
+        logger.error(f"Error creating new alliance: {e}"); return False
